@@ -1,0 +1,1462 @@
+====================================================
+ WISP-FLOW INVENTORY — FULL CLEANED SPECIMEN LIST
+====================================================
+Total DB rows fetched : 3402
+Unique specimens      : 1447
+Total units in stock  : 39,433
+----------------------------------------------------
+Out of Stock (0)      : 749
+Low Stock    (1-19)   : 308
+Medium Stock (20-49)  : 176
+High Stock   (50+)    : 214
+====================================================
+
+#    | Scientific Name                              | Qty   | Condition    | Family
+-----|---------------------------------------------|-------|--------------|--------------------
+   1 | Abisara talanthus                            |     0 | Out of Stock | -
+   2 | Acanthosturria aurantiaca                    |    73 | High         | Theraphosidae
+   3 | Acanthosturria avicularia                    |    22 | Medium       | Theraphosidae
+   4 | Acanthosturria jurvenicola                   |    60 | High         | Theraphosidae
+   5 | Acanthosturria purpurea                      |     0 | Out of Stock | Theraphosidae
+   6 | Acanthosturria sp                            |    18 | Medium       | Theraphosidae
+   7 | Acanthosturria versicolor                    |     0 | Out of Stock | Theraphosidae
+   8 | Aceraius grandis                             |   420 | High         | Passalidae
+   9 | Aceraius rectendens                          |     0 | Out of Stock | Passalidae
+  10 | Acherontia atropos                           |    85 | High         | -
+  11 | Acherontia styx female                       |     0 | Out of Stock | -
+  12 | Achiphasma annulipes female                  |    10 | Medium       | -
+  13 | Achiphasma annulipes male                    |    10 | Medium       | -
+  14 | Acrea igati                                  |     0 | Out of Stock | -
+  15 | Acridoxena sp.                               |     0 | Out of Stock | -
+  16 | Acrocinus longimanus                         |    36 | Medium       | Cerambycidae
+  17 | Acrophylla sp.                               |     0 | Out of Stock | -
+  18 | Actenodes obscuripennis                      |    15 | Medium       | Buprestidae
+  19 | Actias dubernardi                            |    55 | High         | -
+  20 | Actias maenas                                |     0 | Out of Stock | -
+  21 | Actias selene                                |    86 | High         | -
+  22 | Actias selene    MALE                        |    70 | High         | -
+  23 | Actias selene   FEMALE                       |     0 | Out of Stock | -
+  24 | Adelpha lara                                 |     2 | Out of Stock | -
+  25 | Adoretus grandis                             |     0 | Out of Stock | Cetonidae
+  26 | Adscita statices                             |     0 | Out of Stock | -
+  27 | Aenea argynussa                              |     0 | Out of Stock | -
+  28 | Aenea cyanea                                 |    50 | Medium       | -
+  29 | Aenea glaucone                               |     0 | Out of Stock | -
+  30 | Aenea itys                                   |     0 | Out of Stock | -
+  31 | Aenea nessus                                 |     7 | Medium       | -
+  32 | Aenea philumena                              |     0 | Out of Stock | -
+  33 | Aenea ryphea                                 |     0 | Out of Stock | -
+  34 | Aenea xenocles                               |     8 | Medium       | -
+  35 | Agestrata belitungana                        |    38 | Medium       | Cetonidae
+  36 | Agestrata orichalca                          |   100 | High         | Cetonidae
+  37 | Agestrata samson                             |     0 | Out of Stock | Cetonidae
+  38 | Agrias beata x prepona                       |    20 | Out of Stock | -
+  39 | Agrias claudina lugens                       |     0 | Out of Stock | -
+  40 | Agrias sp.                                   |    22 | Medium       | -
+  41 | Agrias tryphon                               |     0 | Out of Stock | -
+  42 | Alcidis agathyrsus                           |     0 | Out of Stock | Danaidae
+  43 | Alcidis metaurus                             |    20 | Medium       | -
+  44 | Alcidis orontes                              |    40 | Medium       | -
+  45 | Alcidis zodiaka                              |     0 | Out of Stock | -
+  46 | Allotopus moellenkampi                       |     4 | Low          | Lucanidae
+  47 | Allotopus rosenbergi                         |     2 | Low          | Lucanidae
+  48 | Amathusia phidipus                           |     0 | Out of Stock | -
+  49 | Amathuxidia amythaon                         |     0 | Out of Stock | -
+  50 | Amblypygi sp                                 |     0 | Out of Stock | Phrynidae
+  51 | Amblysterna natalensis                       |    10 | Medium       | Cetonidae
+  52 | Ambragaena ambra                             |     0 | Out of Stock | -
+  53 | Ambragaena anubra                            |     0 | Out of Stock | -
+  54 | Anax junius                                  |     0 | Out of Stock | -
+  55 | Ancyluris endaemon                           |     0 | Out of Stock | -
+  56 | Ancyluris formisissima                       |    10 | Medium       | -
+  57 | Ancyluris meliboeus                          |    15 | Medium       | -
+  58 | Ancyluris mix                                |     0 | Out of Stock | -
+  59 | Angamiana floridula                          |     2 | Low          | -
+  60 | Anomala grandis                              |     0 | Out of Stock | Ruteline
+  61 | Anoplognathus aeneus                         |     7 | Out of Stock | Cetonidae
+  62 | Anoplognathus boisduvali                     |     6 | Medium       | Cetonidae
+  63 | Anoplognathus daemeli                        |    11 | Medium       | Cetonidae
+  64 | Anoplognathus punctulatus                    |    20 | Out of Stock | Cetonidae
+  65 | Anoplognathus smaragdinus                    |     2 | Low          | Cetonidae
+  66 | Anplophora elegans                           |    10 | Medium       | Cerambycidae
+  67 | Anplophora longchirsuta                      |     0 | Out of Stock | Cerambycidae
+  68 | Anplophora medemsachi                        |     0 | Out of Stock | Cerambycidae
+  69 | Anplophora tonkinesis                        |     0 | Out of Stock | Cerambycidae
+  70 | Anplophora zonatrix                          |     0 | Out of Stock | Cerambycidae
+  71 | Ant lion palpares                            |    24 | Medium       | -
+  72 | Antanartia delius                            |     0 | Out of Stock | Danaidae
+  73 | Anteos clorinde                              |    15 | Medium       | -
+  74 | Anteos maerula                               |     0 | Out of Stock | -
+  75 | Anteos menippe                               |   210 | High         | Danaidae
+  76 | Antheraea sp.                                |     0 | Out of Stock | -
+  77 | Antherea frithi                              |     0 | Out of Stock | -
+  78 | Antherina suraka comorana                    |     0 | Out of Stock | Danaidae
+  79 | Anthrea sp.                                  |     0 | Out of Stock | -
+  80 | Antinous sp                                  |    44 | Medium       | Theraphosidae
+  81 | Apatura chevana                              |     0 | Out of Stock | -
+  82 | Apatura parisatis                            |     0 | Out of Stock | -
+  83 | Apaturina erminea                            |     0 | Out of Stock | -
+  84 | Aphaena aurentia                             |     0 | Out of Stock | -
+  85 | Aphaena s. burmanica                         |     0 | Out of Stock | -
+  86 | Aphaena submaculata                          |     0 | Out of Stock | -
+  87 | Aphonopelma insubtilis                       |     7 | Medium       | Theraphosidae
+  88 | Apidae sp                                    |     6 | Medium       | -
+  89 | Aplopelma laoticus                           |     0 | Out of Stock | Theraphosidae
+  90 | Aplosonyx smaragdippenis                     |     0 | Out of Stock | Chrysomelidae
+  91 | Appias albina                                |   118 | High         | -
+  92 | Appias celestina                             |     0 | Out of Stock | -
+  93 | Appias epaphia                               |     0 | Out of Stock | -
+  94 | Appias indra                                 |     0 | Out of Stock | -
+  95 | Appias ithome                                |     0 | Out of Stock | Danaidae
+  96 | Appias lyncida                               |     0 | Out of Stock | Danaidae
+  97 | Appias nero                                  |    10 | Medium       | -
+  98 | Appias nero zarinda                          |     0 | Out of Stock | -
+  99 | Appias pandione                              |     0 | Out of Stock | -
+ 100 | Appias paulina                               |     0 | Out of Stock | -
+ 101 | Appias phoebe                                |     0 | Out of Stock | -
+ 102 | Appias sabina                                |     0 | Out of Stock | Danaidae
+ 103 | Appias sylvia                                |     0 | Out of Stock | Danaidae
+ 104 | Appias wardii                                |     0 | Out of Stock | -
+ 105 | Arcas imperialis                             |    20 | Medium       | -
+ 106 | Argema mittrei    FEMALE                     |     0 | Out of Stock | -
+ 107 | Argema mittrei    MALE                       |     0 | Out of Stock | -
+ 108 | Argynius paphia                              |    70 | High         | -
+ 109 | Argynnis paphia                              |    70 | High         | -
+ 110 | Argyreus hyperbius                           |     0 | Out of Stock | -
+ 111 | Arhopala eridamus                            |    16 | Medium       | -
+ 112 | Arhopala eumolphus                           |     0 | Out of Stock | -
+ 113 | Arhopala hercules                            |     0 | Out of Stock | -
+ 114 | Aristobia freneyi                            |     0 | Out of Stock | Cerambycidae
+ 115 | Aristobia horridula                          |     0 | Out of Stock | Cerambycidae
+ 116 | Aristobia voeti                              |     0 | Out of Stock | Cerambycidae
+ 117 | Ascalapidae                                  |    10 | Medium       | -
+ 118 | Ascia bunaea                                 |   100 | High         | -
+ 119 | Asterope markii                              |     0 | Out of Stock | -
+ 120 | Asterope puchelli                            |   350 | High         | -
+ 121 | Athyma reta                                  |     0 | Out of Stock | Heliconiidae
+ 122 | Atrophaneura dixoni                          |     0 | Out of Stock | -
+ 123 | Atrophaneura luchti female                   |    13 | Medium       | -
+ 124 | Atrophaneura luchti Male                     |    10 | Medium       | -
+ 125 | Atrophaneura polyeuctes                      |    42 | Medium       | -
+ 126 | Atrophaneura priapus Female                  |    12 | Medium       | -
+ 127 | Atrophaneura priapus Male                    |    12 | Medium       | -
+ 128 | Atrophaneura semperi female                  |     0 | Out of Stock | -
+ 129 | Atrophaneura semperi male                    |     0 | Out of Stock | -
+ 130 | Attacus ceasar                               |     0 | Out of Stock | -
+ 131 | Attlas attacus  female                       |   110 | High         | -
+ 132 | Attlas attacus male                          |    40 | Medium       | -
+ 133 | Atyriodes janeira                            |    30 | Medium       | -
+ 134 | Aulraches miliaris                           |    18 | Medium       | -
+ 135 | Autocrates waldenfelsi                       |     0 | Out of Stock | Lucanidae
+ 136 | Avicularia antinous                          |     0 | Out of Stock | Theraphosidae
+ 137 | Avicularia cavimanus                         |     0 | Out of Stock | Theraphosidae
+ 138 | Avicularia chaocana                          |     0 | Out of Stock | Theraphosidae
+ 139 | Avicularia lividum                           |     0 | Out of Stock | Theraphosidae
+ 140 | Avicularia minax  sm                         |     0 | Out of Stock | Theraphosidae
+ 141 | Avicularia purpurea                          |     0 | Out of Stock | Theraphosidae
+ 142 | Avicularia seemanni                          |     0 | Out of Stock | Theraphosidae
+ 143 | Avicularia sp                                |     0 | Out of Stock | Theraphosidae
+ 144 | Ayuthia spectabile                           |    34 | Medium       | -
+ 145 | Baeotus japetus                              |    15 | Medium       | -
+ 146 | Balinta tenebriscosa                         |     0 | Out of Stock | Cetonidae
+ 147 | Bassarona patala taoona                      |     0 | Out of Stock | -
+ 148 | Batesia hypochlora                           |    30 | Out of Stock | -
+ 149 | Batocera brunyi                              |     0 | Out of Stock | Cerambycidae
+ 150 | Batocera davidis                             |     0 | Out of Stock | Cerambycidae
+ 151 | Batocera facsiata                            |     0 | Out of Stock | Cerambycidae
+ 152 | Batocera hercules                            |     0 | Out of Stock | Cerambycidae
+ 153 | Batocera laena                               |     0 | Out of Stock | Cerambycidae
+ 154 | Batocera lineolata                           |     0 | Out of Stock | Cerambycidae
+ 155 | Batocera nemophas                            |     0 | Out of Stock | Cerambycidae
+ 156 | Batocera numitor                             |     0 | Out of Stock | Cerambycidae
+ 157 | Batocera parryi                              |     0 | Out of Stock | Cerambycidae
+ 158 | Batocera robus                               |     0 | Out of Stock | Cerambycidae
+ 159 | Batocera roylei                              |     0 | Out of Stock | Cerambycidae
+ 160 | Batocera wallacei                            |     0 | Out of Stock | Cerambycidae
+ 161 | Batocera weiskei                             |     0 | Out of Stock | Cerambycidae
+ 162 | Battus madyes                                |    20 | Medium       | -
+ 163 | Becquartina versicolor                       |     0 | Out of Stock | -
+ 164 | Belenios calypso                             |   236 | High         | Morphidae
+ 165 | Belenios theora                              |     0 | Out of Stock | Morphidae
+ 166 | Belenios theuzi                              |   130 | High         | -
+ 167 | Belionota metastica                          |     1 | Low          | Buprestidae
+ 168 | Belostomidae sp                              |     0 | Out of Stock | Belostomidae
+ 169 | Bothorrhina ruteri                           |     0 | Out of Stock | Cetonidae
+ 170 | Bunaea aslauga                               |     0 | Out of Stock | -
+ 171 | C. jordani                                   |     4 | Out of Stock | -
+ 172 | Caligo eurilochus                            |   120 | High         | -
+ 173 | Caliris elegans   female                     |    15 | Medium       | -
+ 174 | Callicore aegina                             |    15 | Out of Stock | Morphidae
+ 175 | Callicore cajetani                           |     0 | Out of Stock | Nemeobiidae
+ 176 | Callicore clymena                            |     0 | Out of Stock | -
+ 177 | Callicore cyllene                            |     0 | Out of Stock | -
+ 178 | Callicore cynosura                           |   120 | High         | Nymphalidae
+ 179 | Callicore eucale                             |     0 | Out of Stock | Nymphalidae
+ 180 | Callicore eunomia                            |    55 | High         | Nymphalidae
+ 181 | Callicore hesperis                           |     0 | Out of Stock | -
+ 182 | Callicore hesperus                           |    58 | High         | -
+ 183 | Callicore hystaspes                          |     0 | Out of Stock | -
+ 184 | Callicore maimuna                            |     0 | Out of Stock | -
+ 185 | Callicore maximillia                         |     0 | Out of Stock | -
+ 186 | Callicore mengeli                            |     0 | Out of Stock | -
+ 187 | Callicore peristera                          |     0 | Out of Stock | Nymphalidae
+ 188 | Callicore pseudoastarte                      |     0 | Out of Stock | Nymphalidae
+ 189 | Callicore sp.                                |   160 | High         | -
+ 190 | Callinara pereute                            |   350 | High         | -
+ 191 | Callipara caesar                             |    45 | Medium       | -
+ 192 | Calliphara caesar                            |    48 | Medium       | -
+ 193 | Callipogon armillatus                        |    11 | Medium       | Cerambycidae
+ 194 | Callipogon cinnamoneus                       |     0 | Out of Stock | Cerambycidae
+ 195 | Callithea cynosura                           |     0 | Out of Stock | -
+ 196 | Callithea davisi                             |    30 | Medium       | -
+ 197 | Callithea leprieuri                          |    25 | Medium       | Nymphalidae
+ 198 | Callithea markii                             |     0 | Out of Stock | -
+ 199 | Callithea optima                             |    10 | Medium       | -
+ 200 | Callithea philotima                          |     0 | Out of Stock | Nymphalidae
+ 201 | Callodes rayneri                             |     4 | Low          | Cetonidae
+ 202 | Callopistus castelnaudi                      |     0 | Out of Stock | Buprestidae
+ 203 | Callopistus castelnaudii                     |     0 | Out of Stock | Cetonidae
+ 204 | Calloplophora spllii                         |     0 | Out of Stock | Cerambycidae
+ 205 | Calodema plebeuim                            |     2 | Low          | Buprestidae
+ 206 | Calopterygidae                               |     0 | Out of Stock | -
+ 207 | Calopteryx sp.                               |   182 | High         | -
+ 208 | Calopteryx virgo                             |    32 | Medium       | -
+ 209 | Calopteryx virgo blue color                  |     0 | Out of Stock | -
+ 210 | Camacina gigantea                            |     0 | Out of Stock | -
+ 211 | Campsosternus sp.                            |     0 | Out of Stock | Elateridae
+ 212 | Castiarina erabescent                        |     5 | Out of Stock | Buprestidae
+ 213 | Castiarina ronei                             |     5 | Out of Stock | Buprestidae
+ 214 | Catacanthus incarnathus                      |    30 | Medium       | -
+ 215 | catacanthus incarnatus                       |     0 | Out of Stock | -
+ 216 | catacanthus nigrepis                         |    28 | Medium       | Pentatomidae
+ 217 | Catacanthus nigripes                         |    28 | Out of Stock | -
+ 218 | Catacore kolyma                              |    25 | Medium       | -
+ 219 | Cathedra serrata                             |   130 | Out of Stock | -
+ 220 | Catocala fraxini                             |     5 | Out of Stock | -
+ 221 | Catonephele acontius                         |     0 | Out of Stock | -
+ 222 | Catonephele chromius                         |    12 | Medium       | -
+ 223 | Catonephele numilia                          |    30 | Medium       | -
+ 224 | Catonephele nyctimus                         |     4 | Out of Stock | -
+ 225 | Catonephele sp.                              |    59 | Out of Stock | -
+ 226 | Catopsilia argante                           |     0 | Out of Stock | -
+ 227 | Catopsilia ascia                             |     0 | Out of Stock | Nymphalidae
+ 228 | Catopsilia crocale                           |     0 | Out of Stock | Nymphalidae
+ 229 | Catopsilia dark                              |     4 | Low          | -
+ 230 | Catopsilia florella                          |    12 | Medium       | -
+ 231 | Catopsilia luditta                           |     0 | Out of Stock | -
+ 232 | Catopsilia pomona                            |     0 | Out of Stock | -
+ 233 | Catopsilia pyrante                           |   100 | High         | -
+ 234 | Catopsilia rurina                            |     0 | Out of Stock | -
+ 235 | Catopsilia scylla                            |     0 | Out of Stock | -
+ 236 | Catopsilia statira                           |     0 | Out of Stock | -
+ 237 | Catoxantha opulenta                          |     6 | Out of Stock | Buprestidae
+ 238 | Celidota splendens                           |     0 | Out of Stock | Cetonidae
+ 239 | Celosterna pollinasa                         |    25 | Medium       | Cerambycidae
+ 240 | Centipede sp                                 |     0 | Out of Stock | -
+ 241 | Cephonodes hyles                             |     0 | Out of Stock | -
+ 242 | Cepora boisdiwaliana                         |    30 | Medium       | -
+ 243 | Cepora nadina                                |     0 | Out of Stock | -
+ 244 | Cepora nerissa                               |     9 | Medium       | -
+ 245 | Cerpona imperialis                           |     0 | Out of Stock | -
+ 246 | Cethosia biblis                              |   200 | High         | -
+ 247 | Cethosia chrysippe                           |     0 | Out of Stock | -
+ 248 | Cethosia hypsea                              |     5 | Medium       | Nymphalidae
+ 249 | Cethosia lamarki                             |     0 | Out of Stock | -
+ 250 | Chalcolepidius lacordairei                   |     0 | Out of Stock | Elateridae
+ 251 | Chalcophoropsis quadrifoveolata              |     0 | Out of Stock | Cetonidae
+ 252 | Chalcoprotaetia franzi                       |     0 | Out of Stock | Cetonidae
+ 253 | Chalcosia phalaenaria                        |     0 | Out of Stock | -
+ 254 | Chalcosoma atlas                             |    50 | Out of Stock | Dynastinae
+ 255 | Chalcosoma attacus                           |     9 | Medium       | Dynastinae
+ 256 | Chalcosoma bettles                           |    50 | Out of Stock | Dynastinae
+ 257 | Chalcosoma caucasus                          |     0 | Out of Stock | Dynastinae
+ 258 | Chalcothea affinis                           |     0 | Out of Stock | Buprestidae
+ 259 | Chalcothea neglecta                          |    45 | Medium       | Cetonidae
+ 260 | Chalcothea resplendens                       |    28 | Medium       | Cetonidae
+ 261 | Charaxes amanda                              |    10 | Medium       | -
+ 262 | Charaxes ameliae                             |     0 | Out of Stock | -
+ 263 | Charaxes bernadus                            |     0 | Out of Stock | -
+ 264 | Charaxes bipunctatus                         |     2 | Low          | -
+ 265 | Charaxes brutus                              |   131 | High         | -
+ 266 | Charaxes cacuthis                            |     2 | Low          | -
+ 267 | Charaxes candiope                            |    10 | Medium       | -
+ 268 | Charaxes cynthia                             |   180 | High         | -
+ 269 | Charaxes etesipe                             |   140 | High         | -
+ 270 | Charaxes etheocles                           |    11 | Medium       | -
+ 271 | Charaxes eupale                              |   728 | High         | -
+ 272 | Charaxes kahldeni                            |     0 | Out of Stock | -
+ 273 | Charaxes latona                              |     0 | Out of Stock | Nymphalidae
+ 274 | Charaxes lucretius                           |    68 | High         | -
+ 275 | Charaxes mars                                |    20 | Medium       | -
+ 276 | Charaxes nitebis                             |     0 | Out of Stock | -
+ 277 | Charaxes noblis                              |     2 | Low          | -
+ 278 | Charaxes numenes                             |     3 | Low          | -
+ 279 | Charaxes paphianus                           |    20 | Medium       | -
+ 280 | Charaxes pleione                             |     0 | Out of Stock | -
+ 281 | Charaxes pollux                              |     3 | Out of Stock | -
+ 282 | Charaxes protoclea                           |    21 | Medium       | -
+ 283 | Charaxes smaragdalis                         |    11 | Medium       | -
+ 284 | Charaxes subornatus                          |    67 | High         | -
+ 285 | Charaxes tiridates                           |   145 | High         | -
+ 286 | Charaxes zelica                              |     0 | Out of Stock | -
+ 287 | Charaxes zingha                              |     4 | Out of Stock | -
+ 288 | Charon grayi                                 |     0 | Out of Stock | Phrynidae
+ 289 | Cheirotonus gastroi                          |     0 | Out of Stock | Cerambycidae
+ 290 | Cheirotonus macleayi                         |     0 | Out of Stock | Cerambycidae
+ 291 | Chernesonesometrus fulvipes                  |     0 | Out of Stock | Scorpiones
+ 292 | Chersonesia intermedia                       |    12 | Medium       | -
+ 293 | Chilasa clytia                               |     0 | Out of Stock | -
+ 294 | Chilasa veiovis                              |    18 | Medium       | -
+ 295 | Chilobrachys maculata                        |     0 | Out of Stock | Theraphosidae
+ 296 | Chloridolum itoi                             |     0 | Out of Stock | Cerambycidae
+ 297 | Chondracris rosea                            |    24 | Out of Stock | -
+ 298 | Chroninea sylphina                           |   120 | Out of Stock | -
+ 299 | Chrysina aurigans                            |     5 | Medium       | Cetonidae
+ 300 | Chrysina aurora                              |     2 | Low          | Cetonidae
+ 301 | Chrysina chrysarginea                        |     3 | Low          | Cetonidae
+ 302 | Chrysina erubescens                          |     5 | Medium       | Cetonidae
+ 303 | Chrysiridia ripheria                         |  2115 | Out of Stock | -
+ 304 | Chrysochlora chrysochlora                    |    30 | Medium       | Scarabeidae
+ 305 | Chrysochlora chrysochlora (F)                |    35 | Medium       | Scarabeidae
+ 306 | Chrysochlora chrysochlora (M)                |    75 | High         | Scarabeidae
+ 307 | Chrysochlora Chrysochlora fem                |    26 | Medium       | Buprestidae
+ 308 | Chrysochlora Chrysochlora male               |    45 | Out of Stock | Buprestidae
+ 309 | Chrysochroa aurora                           |   160 | Out of Stock | Buprestidae
+ 310 | Chrysochroa b. rugicollis                    |    72 | High         | Buprestidae
+ 311 | Chrysochroa baudoni                          |     0 | Out of Stock | Buprestidae
+ 312 | Chrysochroa blue                             |    60 | Out of Stock | Buprestidae
+ 313 | Chrysochroa buqueti                          |    45 | Medium       | Buprestidae
+ 314 | Chrysochroa castelnaudi                      |   125 | High         | Buprestidae
+ 315 | Chrysochroa chinensis                        |     0 | Out of Stock | Buprestidae
+ 316 | Chrysochroa corbetti                         |     0 | Out of Stock | Buprestidae
+ 317 | Chrysochroa edwardsii                        |     0 | Out of Stock | Buprestidae
+ 318 | Chrysochroa ephippegera                      |     0 | Out of Stock | Buprestidae
+ 319 | Chrysochroa fulgens                          |     0 | Out of Stock | Buprestidae
+ 320 | Chrysochroa fulminans                        |   120 | High         | Buprestidae
+ 321 | Chrysochroa fulminans  (blue)                |    92 | Out of Stock | Buprestidae
+ 322 | Chrysochroa kawamurai                        |     0 | Out of Stock | Buprestidae
+ 323 | Chrysochroa mnizenshi                        |     5 | Medium       | Buprestidae
+ 324 | Chrysochroa ocellata                         |     0 | Out of Stock | Buprestidae
+ 325 | Chrysochroa P.maronae                        |     0 | Out of Stock | Buprestidae
+ 326 | Chrysochroa purpureiventris                  |    45 | Medium       | Buprestidae
+ 327 | Chrysochroa rajah                            |    45 | Medium       | Buprestidae
+ 328 | Chrysochroa rugicollis                       |     0 | Out of Stock | Buprestidae
+ 329 | Chrysochroa saundersii                       |    24 | Medium       | Buprestidae
+ 330 | Chrysochroa vittata                          |     0 | Out of Stock | Buprestidae
+ 331 | Chrysochroa wallacei                         |    34 | Medium       | Buprestidae
+ 332 | Chrysodema foraminifera                      |    50 | Out of Stock | Buprestidae
+ 333 | Chrysodema impressicollis                    |   100 | High         | Buprestidae
+ 334 | Chrysodema radians                           |    45 | Out of Stock | Buprestidae
+ 335 | Chrysodema smaragdula                        |    15 | Out of Stock | Buprestidae
+ 336 | Chrysodema sp                                |    99 | High         | Buprestidae
+ 337 | Chrysodema sp.                               |   130 | High         | Cetonidae
+ 338 | Chrysolina coerulans                         |    22 | Medium       | Chrysomelidae
+ 339 | Chrysophora chrychlora                       |     0 | Out of Stock | Buprestidae
+ 340 | Chrysophora chrysochlora                     |    40 | Medium       | Scarabeidae
+ 341 | Chrysophora toulgeti                         |    10 | Medium       | Buprestidae
+ 342 | Cicada sp.                                   |    95 | High         | -
+ 343 | Cicadas speciosa                             |     0 | Out of Stock | -
+ 344 | Cirrochroa emalea                            |     0 | Out of Stock | -
+ 345 | Cithaerias aurorina                          |   140 | High         | Nymphalidae
+ 346 | Citharognathus                               |     0 | Out of Stock | Theraphosidae
+ 347 | Citharognathus tongmianesis                  |    12 | Out of Stock | Theraphosidae
+ 348 | Cladognathus confucius                       |     0 | Out of Stock | Lucanidae
+ 349 | Cladognathus giraffa                         |     0 | Out of Stock | Lucanidae
+ 350 | Clavata mizunumai                            |     0 | Out of Stock | -
+ 351 | Clerota rigifica                             |     0 | Out of Stock | Cetonidae
+ 352 | Coelorhina babauti female                    |    11 | Medium       | Cetonidae
+ 353 | Coelorhina babauti male                      |    12 | Medium       | Cetonidae
+ 354 | Coelorhina hornimani                         |    16 | Medium       | Cetonidae
+ 355 | Colias nastes                                |     0 | Out of Stock | -
+ 356 | Colobogaster resplendens                     |    10 | Medium       | Buprestidae
+ 357 | Colobura dirce                               |     0 | Out of Stock | Nymphalidae
+ 358 | Colotis danae annae (F)                      |     2 | Out of Stock | -
+ 359 | Colotis euippe                               |    15 | Medium       | -
+ 360 | Colotis ione                                 |    60 | High         | -
+ 361 | Colotis regina                               |     9 | Medium       | -
+ 362 | Colotis zoe                                  |   120 | High         | -
+ 363 | Coremiocnemis antipodiana                    |    15 | Out of Stock | Theraphosidae
+ 364 | Coremiocnemis sp                             |     0 | Out of Stock | Theraphosidae
+ 365 | Coremiocnemis sp.                            |     0 | Out of Stock | Theraphosidae
+ 366 | Crenis pechueli                              |     0 | Out of Stock | -
+ 367 | Creobroter gemmatus                          |    20 | Medium       | -
+ 368 | Creobroter urbanus    female                 |     5 | Medium       | -
+ 369 | Cressida cressida                            |     7 | Medium       | -
+ 370 | Cressida insularis                           |     0 | Out of Stock | -
+ 371 | Cryptotympana acuta                          |     5 | Medium       | -
+ 372 | Cryptotympana aquila                         |    36 | Medium       | -
+ 373 | ctenoscelis ater                             |     0 | Out of Stock | Cerambycidae
+ 374 | Cupha maeonides                              |     0 | Out of Stock | -
+ 375 | Curetis thelis                               |     0 | Out of Stock | -
+ 376 | Cyclomnatus imperator                        |    30 | Medium       | Lucanidae
+ 377 | Cyclomnatus lunifer                          |     0 | Out of Stock | Lucanidae
+ 378 | Cyclomnatus metalifer                        |    22 | Medium       | Lucanidae
+ 379 | Cyclomnatus pulchellus                       |     0 | Out of Stock | Lucanidae
+ 380 | Cyclomnatus zuberi                           |     0 | Out of Stock | Lucanidae
+ 381 | Cymothoe beckerie                            |     9 | Medium       | Nymphalidae
+ 382 | Cymothoe coccinata                           |    60 | High         | -
+ 383 | Cymothoe crocea                              |   200 | High         | -
+ 384 | Cymothoe divers                              |   270 | High         | -
+ 385 | Cymothoe exelsa                              |   442 | High         | -
+ 386 | Cymothoe haynae                              |    40 | Medium       | -
+ 387 | Cymothoe haynae diphyia                      |    80 | High         | -
+ 388 | Cymothoe herminia                            |    35 | Medium       | -
+ 389 | Cymothoe hypatha                             |   145 | Out of Stock | -
+ 390 | Cymothoe indamora                            |     0 | Out of Stock | -
+ 391 | Cymothoe reinholdi                           |   100 | High         | -
+ 392 | Cymothoe sangaris                            |   175 | High         | -
+ 393 | Cymothoe theobene                            |     0 | Out of Stock | -
+ 394 | Cyphogastra albertisi                        |   100 | High         | Buprestidae
+ 395 | Cyphogastra calepyga                         |     0 | Out of Stock | Buprestidae
+ 396 | Cyphogastra javanica                         |    78 | High         | Buprestidae
+ 397 | Cyphogastra spp                              |    78 | High         | Buprestidae
+ 398 | Cyphogastra wallacei                         |     0 | Out of Stock | Buprestidae
+ 399 | Cyrestis camillus                            |     0 | Out of Stock | Nymphalidae
+ 400 | Cyrestis cocles                              |     0 | Out of Stock | -
+ 401 | Cyrestis nivea                               |     0 | Out of Stock | Nymphalidae
+ 402 | Cyrestis telamon                             |     0 | Out of Stock | -
+ 403 | Cyrestis thyonneus                           |     0 | Out of Stock | -
+ 404 | Cyrioides imperialis                         |     5 | Out of Stock | Buprestidae
+ 405 | Cyriopagopus schmidti                        |    10 | Medium       | Theraphosidae
+ 406 | Cyrtotrachelus buqueta                       |   400 | Out of Stock | Curculionidae
+ 407 | Cytrotrachelus buqueti                       |    75 | High         | Cerambycidae
+ 408 | Danaus affinis/genutia                       |   340 | High         | -
+ 409 | Danaus alcippus                              |     0 | Out of Stock | Nymphalidae
+ 410 | Danaus c. cynea                              |     0 | Out of Stock | -
+ 411 | Danaus chrysippus                            |   130 | High         | -
+ 412 | Danaus hypsea                                |     0 | Out of Stock | -
+ 413 | Danaus ismare                                |     0 | Out of Stock | -
+ 414 | Danaus petiverana                            |     0 | Out of Stock | -
+ 415 | Danaus plexippus                             |    52 | High         | -
+ 416 | Danaus vulgaris                              |     0 | Out of Stock | -
+ 417 | Danis danis                                  |     0 | Out of Stock | -
+ 418 | Daphnis nerii                                |    60 | High         | -
+ 419 | Decolorrihna micans                          |     2 | Low          | Cetonidae
+ 420 | Delias aedaja                                |     0 | Out of Stock | -
+ 421 | Delias albertisi                             |     0 | Out of Stock | -
+ 422 | Delias apoensis                              |     0 | Out of Stock | -
+ 423 | Delias aruna                                 |     0 | Out of Stock | Nymphalidae
+ 424 | Delias assorted                              |   120 | High         | -
+ 425 | Delias belisama                              |     5 | Out of Stock | -
+ 426 | Delias belladonna                            |     0 | Out of Stock | Nymphalidae
+ 427 | Delias caeneus caeneus                       |     0 | Out of Stock | -
+ 428 | Delias caeneus female                        |    42 | Medium       | -
+ 429 | Delias caeneus male                          |   100 | High         | -
+ 430 | Delias celebes                               |    15 | Medium       | -
+ 431 | Delias cepora                                |    10 | Medium       | -
+ 432 | Delias crithoe                               |     0 | Out of Stock | -
+ 433 | Delias cunningputti                          |     0 | Out of Stock | -
+ 434 | Delias descombesi                            |    34 | Medium       | Nymphalidae
+ 435 | Delias dixeyi                                |    63 | High         | -
+ 436 | Delias eichorni                              |     0 | Out of Stock | -
+ 437 | Delias gilliarsi                             |     0 | Out of Stock | -
+ 438 | Delias halconensis                           |     0 | Out of Stock | -
+ 439 | Delias hallstromi                            |     0 | Out of Stock | -
+ 440 | Delias heninggia                             |     0 | Out of Stock | -
+ 441 | Delias hyparate                              |    13 | Medium       | Nymphalidae
+ 442 | Delias hypomelas                             |     0 | Out of Stock | -
+ 443 | Delias hypsea                                |     0 | Out of Stock | -
+ 444 | Delias iltis                                 |     0 | Out of Stock | -
+ 445 | Delias isocharis                             |     0 | Out of Stock | -
+ 446 | Delias kota                                  |     0 | Out of Stock | -
+ 447 | Delias lada                                  |     0 | Out of Stock | -
+ 448 | Delias levicki                               |     0 | Out of Stock | -
+ 449 | Delias ligata                                |     0 | Out of Stock | -
+ 450 | Delias lucias                                |     0 | Out of Stock | -
+ 451 | Delias luctosa                               |     0 | Out of Stock | -
+ 452 | Delias meeki                                 |     0 | Out of Stock | -
+ 453 | Delias microsticha                           |     0 | Out of Stock | -
+ 454 | Delias mira                                  |     0 | Out of Stock | -
+ 455 | Delias nais                                  |     0 | Out of Stock | -
+ 456 | Delias neipelti                              |     0 | Out of Stock | Nymphalidae
+ 457 | Delias oraia                                 |     0 | Out of Stock | -
+ 458 | Delias perspicua                             |    29 | Medium       | -
+ 459 | Delias pheres                                |     0 | Out of Stock | -
+ 460 | Delias sagessa                               |     0 | Out of Stock | -
+ 461 | Delias sambawana                             |     0 | Out of Stock | -
+ 462 | Delias sp                                    |     0 | Out of Stock | -
+ 463 | Delias splendida                             |    12 | Medium       | -
+ 464 | Delias timorensis  Male                      |    17 | Medium       | -
+ 465 | Delias timorensis Female                     |    20 | Medium       | -
+ 466 | Delias woodi                                 |     0 | Out of Stock | -
+ 467 | Demochroa gratiosa                           |    48 | Medium       | Buprestidae
+ 468 | Demochroa lacordairei                        |    19 | Out of Stock | Cetonidae
+ 469 | Dercas enara                                 |    80 | Out of Stock | -
+ 470 | Deroplatys dessicata                         |     0 | Out of Stock | -
+ 471 | Deroplatys exsiccata                         |     0 | Out of Stock | -
+ 472 | Deroplatys lobata                            |     0 | Out of Stock | -
+ 473 | Deroplatys truncata                          |     0 | Out of Stock | -
+ 474 | Diabolica                                    |     7 | Medium       | Zoephiridae
+ 475 | Diaethria clymena                            |    81 | High         | -
+ 476 | Diastocera wallichi                          |     0 | Out of Stock | Cerambycidae
+ 477 | Dichorragia nesimachus                       |     0 | Out of Stock | -
+ 478 | Dicronocephalus shinomurai                   |     0 | Out of Stock | Cetonidae
+ 479 | Dicronorhina derbyana                        |     5 | Out of Stock | Cetonidae
+ 480 | Dicronorhina derbyana (brown white)          |     7 | Medium       | Cetonidae
+ 481 | Dicronorhina micans                          |     3 | Low          | Cetonidae
+ 482 | Diesbachia tamryris                          |     2 | Low          | -
+ 483 | Diesbachia tamyris                           |    10 | Medium       | -
+ 484 | Dihammus sp                                  |     0 | Out of Stock | Cerambycidae
+ 485 | Dihammus ssp                                 |     0 | Out of Stock | Cerambycidae
+ 486 | Dilochrosis balteata                         |     0 | Out of Stock | Cetonidae
+ 487 | Dinaponera grandis                           |     5 | Medium       | -
+ 488 | Dione juno                                   |    25 | Medium       | -
+ 489 | Diplopoda sp                                 |     0 | Out of Stock | -
+ 490 | Discophora necho                             |     0 | Out of Stock | -
+ 491 | Dismorphia nemesis                           |     8 | Low          | -
+ 492 | Doleschallia bisaltide                       |    27 | Medium       | -
+ 493 | Dorcas alcides                               |    69 | High         | Lucanidae
+ 494 | Dorcas antaeus                               |     0 | Out of Stock | Lucanidae
+ 495 | Dorcas curvidens                             |     0 | Out of Stock | Lucanidae
+ 496 | Dorcas detanii                               |     0 | Out of Stock | Lucanidae
+ 497 | Dorcas enara                                 |    90 | High         | Lucanidae
+ 498 | Dorcas meeki                                 |     0 | Out of Stock | Lucanidae
+ 499 | Dorcas reichei                               |     0 | Out of Stock | Lucanidae
+ 500 | Dorcas serrognathus                          |     0 | Out of Stock | Lucanidae
+ 501 | Dorcas t.gypaetus                            |     0 | Out of Stock | Lucanidae
+ 502 | Dorcas titanus                               |     0 | Out of Stock | Lucanidae
+ 503 | Dorcas tityus                                |     0 | Out of Stock | Lucanidae
+ 504 | Dorcas typhon                                |     0 | Out of Stock | Lucanidae
+ 505 | Dorysthenes walkeri                          |     0 | Out of Stock | Lucanidae
+ 506 | Doxocopa aghatina                            |     0 | Out of Stock | -
+ 507 | Doxocopa blue color                          |    38 | Medium       | -
+ 508 | Doxocopa cherubina                           |     6 | Medium       | -
+ 509 | Doxocopa lavina                              |     3 | Low          | Nymphalidae
+ 510 | Doxocopa sp                                  |    30 | Medium       | -
+ 511 | Doxocopa zunilda                             |     0 | Out of Stock | -
+ 512 | dragonflies mix                              |     0 | Out of Stock | -
+ 513 | Dryadula phaetusa                            |     0 | Out of Stock | Nymphalidae
+ 514 | Dryas julia                                  |   120 | High         | -
+ 515 | Dundubia spiculata                           |     0 | Out of Stock | -
+ 516 | Dyanstes grantii                             |     2 | Low          | Dynastinae
+ 517 | Dynamine athemon                             |    40 | Medium       | -
+ 518 | Dysphania subreleta                          |     0 | Out of Stock | -
+ 519 | Eciton quadrigtune                           |     0 | Out of Stock | Chrysomelidae
+ 520 | Elimnias agondas                             |     0 | Out of Stock | Nymphalidae
+ 521 | Elymnias agondas                             |    10 | Medium       | -
+ 522 | Enolotrupes sharpi                           |     0 | Out of Stock | Scarabeidae
+ 523 | Epepeotes rarus                              |     0 | Out of Stock | Cerambycidae
+ 524 | Epicaerus imbricatus                         |     0 | Out of Stock | Curculionidae
+ 525 | Epiphora mythimnia                           |     0 | Out of Stock | -
+ 526 | Erasmia pulchera                             |    23 | Out of Stock | -
+ 527 | Eterusia repleta                             |    42 | Medium       | -
+ 528 | Eterusia replete                             |    22 | Medium       | -
+ 529 | Euchirus longimanus                          |    17 | Medium       | Cerambycidae
+ 530 | Euchloron megaera                            |     0 | Out of Stock | -
+ 531 | Euchroea auripimenta                         |     8 | Medium       | Cetonidae
+ 532 | Euchroea coelestis                           |     0 | Out of Stock | Cetonidae
+ 533 | Euchroea histrionica                         |   250 | High         | Cetonidae
+ 534 | Euchroma gigantea                            |    50 | Medium       | Buprestidae
+ 535 | Eudicella morgani fem                        |     4 | Low          | Cetonidae
+ 536 | Eudicella shultzeorum fem                    |     7 | Medium       | Cetonidae
+ 537 | Eumorpha achemon                             |    74 | High         | -
+ 538 | Eunica alamena                               |     3 | Out of Stock | -
+ 539 | Eunica eurota                                |     0 | Out of Stock | -
+ 540 | Eunica sophonisba                            |     5 | Medium       | -
+ 541 | Eupatorus beccarii                           |     0 | Out of Stock | Dynastinae
+ 542 | Eupatorus burmanicus                         |    40 | Medium       | Dynastinae
+ 543 | Eupatorus gracilicornis                      |     2 | Low          | Dynastinae
+ 544 | Eupatorus gracillicornis                     |     0 | Out of Stock | Curculionidae
+ 545 | Euphaea refulgens                            |     0 | Out of Stock | -
+ 546 | Euphaedra medon                              |     2 | Low          | -
+ 547 | Euphaedra preussi                            |     1 | Low          | -
+ 548 | Euphaedra sp.                                |    40 | Medium       | -
+ 549 | Euphaedra themis                             |     0 | Out of Stock | -
+ 550 | Eupholus bennetti                            |     0 | Out of Stock | Curculionidae
+ 551 | Eupholus magnificua                          |     0 | Out of Stock | Curculionidae
+ 552 | Eupholus schoenherri                         |     0 | Out of Stock | Curculionidae
+ 553 | Eupholus ssp                                 |   412 | High         | Curculionidae
+ 554 | Euploea diana                                |     0 | Out of Stock | -
+ 555 | Euploea diocletianus                         |     0 | Out of Stock | -
+ 556 | Euploea midamus                              |     0 | Out of Stock | -
+ 557 | Euploea moorei                               |     0 | Out of Stock | -
+ 558 | Euploea mulciber                             |     0 | Out of Stock | Nymphalidae
+ 559 | Euploea redtenbacheri                        |     0 | Out of Stock | -
+ 560 | Euploea viola                                |     0 | Out of Stock | -
+ 561 | Eurema hecabe                                |   228 | High         | -
+ 562 | Eurema sp.                                   |     0 | Out of Stock | -
+ 563 | Euripus nyctellius                           |     0 | Out of Stock | -
+ 564 | Euroceses grandis                            |    22 | Medium       | Cetonidae
+ 565 | Eurycantha horrida                           |     0 | Out of Stock | -
+ 566 | Eurycnema verisubra                          |     0 | Out of Stock | -
+ 567 | Eurycosses grandis                           |    14 | Medium       | -
+ 568 | Eurynecrosia nigrofasciata                   |     5 | Medium       | -
+ 569 | Eurypelma cavimanus                          |    20 | Medium       | Theraphosidae
+ 570 | Eurypelma spinicrus                          |     0 | Out of Stock | Theraphosidae
+ 571 | Eurytides agesilaus                          |    10 | Medium       | -
+ 572 | Eurytides agetes                             |     0 | Out of Stock | -
+ 573 | Eurytides columbus                           |     0 | Out of Stock | Nymphalidae
+ 574 | Eurytides dolicaon                           |     0 | Out of Stock | -
+ 575 | Eurytides harmodius                          |     0 | Out of Stock | Nymphalidae
+ 576 | Eurytides leucaspis                          |     0 | Out of Stock | -
+ 577 | Eurytides pausanias                          |     0 | Out of Stock | -
+ 578 | Eurytides protesilaus                        |   210 | High         | -
+ 579 | Eurytides telesilaus                         |    31 | Medium       | -
+ 580 | Eurytides thyastes                           |    25 | Medium       | -
+ 581 | Eurytides xinias                             |     0 | Out of Stock | -
+ 582 | Eurytrachellelus titanus                     |     0 | Out of Stock | Lucanidae
+ 583 | Eurytrachellelus tityus                      |     0 | Out of Stock | Lucanidae
+ 584 | Euthalia dirtea                              |     0 | Out of Stock | -
+ 585 | Euthalia recta                               |     0 | Out of Stock | -
+ 586 | Euthalia teuta                               |     0 | Out of Stock | -
+ 587 | Euxanthe crossleyi                           |     0 | Out of Stock | -
+ 588 | Euxanthe eurinome                            |    10 | Medium       | -
+ 589 | Euxanthe trajanus                            |     2 | Low          | -
+ 590 | Evenus regalis                               |     9 | Out of Stock | -
+ 591 | Extatosoma popoi horridos                    |     0 | Out of Stock | -
+ 592 | Extatosoma tiartum                           |     5 | Out of Stock | -
+ 593 | Faunula faunula                              |     0 | Out of Stock | -
+ 594 | Formotosena montivaga                        |     0 | Out of Stock | -
+ 595 | Fulgora candelalia                           |     0 | Out of Stock | -
+ 596 | Fulgora castresii                            |     0 | Out of Stock | -
+ 597 | Fulgora latenaria                            |    25 | Out of Stock | -
+ 598 | Fulgora panthicodas                          |     0 | Out of Stock | -
+ 599 | Gaeana cheni                                 |     0 | Out of Stock | -
+ 600 | Gaeana festiva   orange                      |     0 | Out of Stock | -
+ 601 | Gaeana festiva  white                        |     5 | Medium       | -
+ 602 | Gelaeus walkeri                              |    43 | Medium       | -
+ 603 | Genus Speicies                               |     2 | Low          | Family
+ 604 | Glycphana moluccarum                         |     0 | Out of Stock | Cetonidae
+ 605 | Godyris duillia                              |     0 | Out of Stock | -
+ 606 | Golafa aecus male                            |     0 | Out of Stock | Scarabeidae
+ 607 | Golafa porteri female                        |    20 | Medium       | Scarabeidae
+ 608 | Goliathus goliathus                          |     6 | Medium       | -
+ 609 | Goliathus meleagris                          |    34 | Medium       | -
+ 610 | Goliathus orientalis                         |     0 | Out of Stock | -
+ 611 | Goliathus orientalis female                  |    10 | Out of Stock | -
+ 612 | Goliatus cacicus                             |     0 | Out of Stock | Cetonidae
+ 613 | Goliatus goliatus                            |     0 | Out of Stock | Cetonidae
+ 614 | Goliatus orientalis                          |     0 | Out of Stock | Cetonidae
+ 615 | Golofa aecus (M)                             |    16 | Out of Stock | Dynastinae
+ 616 | Golofa porteri                               |     0 | Out of Stock | Dynastinae
+ 617 | Gonepteryx amintha                           |     0 | Out of Stock | -
+ 618 | Graphium agamemnon                           |     1 | Out of Stock | Nymphalidae
+ 619 | Graphium androcles                           |   170 | High         | -
+ 620 | Graphium angolanus                           |    32 | Medium       | Nymphalidae
+ 621 | Graphium antheus                             |   100 | High         | Nymphalidae
+ 622 | Graphium antiphates                          |     0 | Out of Stock | -
+ 623 | Graphium aristeus                            |    70 | Low          | Nymphalidae
+ 624 | Graphium codrus                              |    30 | Medium       | -
+ 625 | Graphium colonna                             |     1 | Low          | -
+ 626 | Graphium delesserti                          |     0 | Out of Stock | -
+ 627 | Graphium doson                               |    10 | Out of Stock | -
+ 628 | Graphium eurypylus                           |     0 | Out of Stock | Nymphalidae
+ 629 | Graphium evemon                              |   660 | High         | -
+ 630 | Graphium leonidas                            |   110 | High         | Nymphalidae
+ 631 | Graphium macareus                            |     0 | Out of Stock | -
+ 632 | Graphium macfarlanei                         |     0 | Out of Stock | Nymphalidae
+ 633 | Graphium megarus                             |     0 | Out of Stock | Nymphalidae
+ 634 | Graphium meyeri                              |     0 | Out of Stock | -
+ 635 | Graphium milon                               |     0 | Out of Stock | -
+ 636 | Graphium n. swinhoe                          |     0 | Out of Stock | -
+ 637 | Graphium polycenes                           |   294 | High         | -
+ 638 | Graphium ramaceus                            |     0 | Out of Stock | -
+ 639 | Graphium rhesus                              |   150 | High         | Papilionidae
+ 640 | Graphium ridleyanus                          |     0 | Out of Stock | -
+ 641 | Graphium sarpedon                            |    65 | High         | Papilionidae
+ 642 | Graphium stressmani                          |    12 | Medium       | -
+ 643 | Graphium Thatshukovi                         |     0 | Out of Stock | -
+ 644 | Graphium tynderaeus                          |    23 | Medium       | -
+ 645 | Graphium weiskei                             |   689 | High         | Papilionidae
+ 646 | Gymnopholus sp                               |     0 | Out of Stock | Curculionidae
+ 647 | Haetera piera                                |    90 | High         | -
+ 648 | Haeteras sp                                  |     0 | Out of Stock | -
+ 649 | Hamadryas amphinome                          |    18 | Out of Stock | -
+ 650 | Hamadryas arinome                            |    10 | Medium       | -
+ 651 | Hamadryas fornax                             |     2 | Out of Stock | -
+ 652 | Hamadryas guatemalena                        |     0 | Out of Stock | -
+ 653 | Hamadryas laodamia  Female                   |    70 | High         | -
+ 654 | Hamadryas laodamia Male                      |    70 | High         | -
+ 655 | Hamadryas sp                                 |    55 | High         | -
+ 656 | Hamadryas velutina                           |     5 | Medium       | -
+ 657 | Hapalotremus carabaya                        |    28 | Out of Stock | Thelphonidae
+ 658 | Hapalotremus spinicrus                       |    18 | Out of Stock | Theraphosidae
+ 659 | Haplopelma carabaya                          |    20 | Medium       | Theraphosidae
+ 660 | Haplopelma minax (L)                         |     2 | Low          | Theraphosidae
+ 661 | Haplopelma minax (M)                         |     2 | Low          | Theraphosidae
+ 662 | Haplopelma sp                                |    32 | Out of Stock | Theraphosidae
+ 663 | Haplopelma tongmianesis                      |     3 | Low          | Theraphosidae
+ 664 | Hebomoia g. aturia                           |     0 | Out of Stock | -
+ 665 | Hebomoia glaucippe                           |    51 | High         | Papilionidae
+ 666 | Hebomoia leucippe                            |    50 | Medium       | Papilionidae
+ 667 | Hebomoia ssp                                 |     0 | Out of Stock | Papilionidae
+ 668 | Hecyra sp                                    |   104 | Out of Stock | Cerambycidae
+ 669 | Heliconius burneyi                           |     0 | Out of Stock | -
+ 670 | Heliconius doris                             |     0 | Out of Stock | -
+ 671 | Heliconius erato                             |     0 | Out of Stock | -
+ 672 | Heliconius julia                             |     0 | Out of Stock | -
+ 673 | Heliconius juno                              |     0 | Out of Stock | -
+ 674 | Heliconius melpomene                         |     0 | Out of Stock | Papilionidae
+ 675 | Heliconius mixed                             |     0 | Out of Stock | -
+ 676 | Heliconius numata                            |     4 | Out of Stock | -
+ 677 | Heliconius ssp                               |   150 | High         | -
+ 678 | Heliconius wallacei                          |     0 | Out of Stock | -
+ 679 | Helicopis cupido                             |     9 | Out of Stock | -
+ 680 | Heliocopris bucephalus                       |    70 | High         | Scarabeidae
+ 681 | Heliocopris dominus                          |    38 | Out of Stock | Scarabeidae
+ 682 | Heliocropris bucephalus                      |    70 | High         | Dynastinae
+ 683 | Heliocropris dominus                         |    29 | Medium       | Dynastinae
+ 684 | Hemicladus buqueti                           |    20 | Out of Stock | Cerambycidae
+ 685 | hemipepsis speculifer                        |     5 | Out of Stock | -
+ 686 | Hemiptera incarnata                          |     0 | Out of Stock | -
+ 687 | Hemiptera sanguinea                          |    60 | High         | -
+ 688 | Hemiptera sp                                 |   170 | High         | -
+ 689 | Hemiptera sp 5                               |   100 | High         | -
+ 690 | Hemiptera sp18                               |    80 | High         | -
+ 691 | Herena sumatrana                             |     0 | Out of Stock | -
+ 692 | herodula patellifera                         |    13 | Medium       | -
+ 693 | Hestina assimilis                            |     0 | Out of Stock | -
+ 694 | Heteremetrus ferina                          |    57 | High         | Thelphonidae
+ 695 | Heteremetrus laoticus                        |     0 | Out of Stock | Arachnida 
+ 696 | Heteropteryx dilitata     FEMALE             |    10 | Medium       | -
+ 697 | Heteropteryx dilitata    MALE                |    25 | Medium       | -
+ 698 | Heteropteryx grayii                          |     0 | Out of Stock | -
+ 699 | Heterorrhina sexmaculata                     |     0 | Out of Stock | Cetonidae
+ 700 | Hetrometrus spinifer                         |     0 | Out of Stock | Scorpiones
+ 701 | Hexarthrius buqueti                          |    10 | Medium       | Lucanidae
+ 702 | Hexarthrius parryi                           |    35 | Medium       | Lucanidae
+ 703 | Hexarthrius rhinoceros                       |     0 | Out of Stock | Lucanidae
+ 704 | Hierodula venosa                             |     0 | Out of Stock | -
+ 705 | Historis odius                               |    12 | Medium       | -
+ 706 | Hoplocerambyx sp                             |     0 | Out of Stock | Cerambycidae
+ 707 | Huechys incarnata                            |    74 | High         | -
+ 708 | Hyalophora cecropia                          |     0 | Out of Stock | -
+ 709 | Hyles gallil                                 |     0 | Out of Stock | -
+ 710 | Hyles lineata                                |     0 | Out of Stock | -
+ 711 | Hymenoptera scoliidae sp                     |     3 | Low          | -
+ 712 | Hymenoptera sp                               |     0 | Out of Stock | -
+ 713 | Hypochlora batesia                           |     0 | Out of Stock | -
+ 714 | Hypoctonus rangunensis                       |     0 | Out of Stock | Thelphonidae
+ 715 | Hypolimnas alimena                           |     0 | Out of Stock | -
+ 716 | Hypolimnas antevorta                         |     0 | Out of Stock | -
+ 717 | Hypolimnas apollina                          |     0 | Out of Stock | -
+ 718 | Hypolimnas bolina                            |     0 | Out of Stock | Papilionidae
+ 719 | Hypolimnas deois                             |     0 | Out of Stock | -
+ 720 | Hypolimnas dexithea                          |    70 | High         | -
+ 721 | Hypolimnas dubius                            |     0 | Out of Stock | Papilionidae
+ 722 | Hypolimnas hypasia                           |     0 | Out of Stock | -
+ 723 | Hypolimnas monteironis                       |     3 | Low          | -
+ 724 | Hypolimnas pandarus                          |    49 | Medium       | -
+ 725 | Hypolimnas polycletus                        |     0 | Out of Stock | -
+ 726 | Hypolimnas salmacis                          |    15 | Medium       | -
+ 727 | Hypolimnas sp.                               |     5 | Out of Stock | -
+ 728 | Hypolimnas usambara                          |     2 | Low          | -
+ 729 | Hypomeces squamosus                          |    80 | High         | -
+ 730 | Idea b. morosiana                            |    90 | High         | -
+ 731 | Idea blanchardi                              |   175 | High         | Papilionidae
+ 732 | Idea d'urvillei                              |     0 | Out of Stock | -
+ 733 | Idea idea                                    |   205 | High         | -
+ 734 | Idea idea morotai                            |    45 | Medium       | -
+ 735 | Idea l.chersonesia                           |     0 | Out of Stock | Papilionidae
+ 736 | Idea leuconoe                                |   350 | High         | -
+ 737 | Idea leuconoe clara                          |    15 | Out of Stock | -
+ 738 | Idea lynceus                                 |     0 | Out of Stock | -
+ 739 | Idea lynceus lynceus                         |    38 | Medium       | -
+ 740 | Idea wakatobi                                |    30 | Medium       | -
+ 741 | Ideopsis gaura                               |    38 | Medium       | Papilionidae
+ 742 | Ideopsis gaura perakana                      |    50 | Medium       | Papilionidae
+ 743 | Ideopsis juventa                             |     0 | Out of Stock | -
+ 744 | Idolomantis diabolica                        |     7 | Medium       | -
+ 745 | Imassus testaceus                            |     0 | Out of Stock | -
+ 746 | Imbrasia epimenthea                          |     6 | Medium       | -
+ 747 | Inachis io                                   |    15 | Medium       | -
+ 748 | Ingrisma burmanica                           |    45 | Medium       | Cetonidae
+ 749 | Ingrisma euryrrhina                          |    35 | Medium       | Cetonidae
+ 750 | Ischiopsopha ceramemsis                      |    90 | High         | Cetonidae
+ 751 | Ischiopsopha hylar                           |     0 | Out of Stock | Cetonidae
+ 752 | Ischiopsopha jamesi                          |     0 | Out of Stock | Cetonidae
+ 753 | Ischiopsopha lucivorax                       |     0 | Out of Stock | Cetonidae
+ 754 | Ischiopsopha ritsemae                        |    85 | High         | Cetonidae
+ 755 | Ischiopsopha wallacei                        |     8 | Medium       | Cetonidae
+ 756 | Ithominae                                    |     0 | Out of Stock | -
+ 757 | Jamines eunchylas                            |    30 | Medium       | -
+ 758 | Jumnos ruckeri                               |    34 | Medium       | Cetonidae
+ 759 | Junonia almania                              |    90 | High         | -
+ 760 | Junonia hierta                               |     0 | Out of Stock | -
+ 761 | Junonia orithya                              |     0 | Out of Stock | -
+ 762 | Junonia sp.                                  |    65 | High         | -
+ 763 | Junonia westermanni                          |     0 | Out of Stock | Papilionidae
+ 764 | Kalidasa nigromaculata                       |    10 | Out of Stock | -
+ 765 | Kalimna                                      |     5 | Medium       | -
+ 766 | Kallima inachus                              |    10 | Medium       | -
+ 767 | Kallima limborgii                            |     2 | Low          | -
+ 768 | Kallima new stock Feb '24                    |     0 | Out of Stock | -
+ 769 | Kallima rumia                                |     4 | Low          | -
+ 770 | Khuanalna draluobi                           |     0 | Out of Stock | -
+ 771 | Khuanalna electra                            |     0 | Out of Stock | -
+ 772 | Lacanus fryi                                 |     0 | Out of Stock | Lucanidae
+ 773 | Lamenitis lymire                             |     0 | Out of Stock | -
+ 774 | Lampropepla rotschildii                      |     0 | Out of Stock | Buprestidae
+ 775 | Lamproptera curia                            |     0 | Out of Stock | -
+ 776 | Lamproptera meges                            |    12 | Medium       | -
+ 777 | LARGE                                        |     0 | Out of Stock | -
+ 778 | Leopa cellata                                |    12 | Out of Stock | -
+ 779 | Leopa sikkina                                |     1 | Out of Stock | -
+ 780 | Lepidiota bimaculata                         |     0 | Out of Stock | Scarabeidae
+ 781 | Lepidiota stigma                             |     0 | Out of Stock | Scarabeidae
+ 782 | Lepromantella albella                        |    10 | Medium       | -
+ 783 | Lethocerus grandis  water beetle             |     0 | Out of Stock | -
+ 784 | Lexias Jadaetina female                      |    50 | Medium       | -
+ 785 | Lexias Jadaetina male                        |    50 | Medium       | -
+ 786 | Lexias pardalis female                       |    30 | Medium       | -
+ 787 | Lexias pardalis male                         |     0 | Out of Stock | -
+ 788 | Libelulas sp                                 |     0 | Out of Stock | -
+ 789 | Limenitis arthemis                           |     0 | Out of Stock | -
+ 790 | Limenitis lymire                             |     0 | Out of Stock | -
+ 791 | Liocheles sp.                                |     0 | Out of Stock | Theraphosidae
+ 792 | Liproterix lyra                              |     0 | Out of Stock | -
+ 793 | Locust gregaria                              |     0 | Out of Stock | -
+ 794 | Lohita grandis                               |     0 | Out of Stock | -
+ 795 | Lompatera bicolorata                         |     0 | Out of Stock | Lucanidae
+ 796 | Lompatera lutea                              |     0 | Out of Stock | Lucanidae
+ 797 | long horn mixed                              |     0 | Out of Stock | Cerambycidae
+ 798 | Longhorn beetles                             |    12 | Medium       | Cerambycidae
+ 799 | Longhorn beetles (assorted)                  |     9 | Medium       | -
+ 800 | Longhorn grasshopper                         |     0 | Out of Stock | -
+ 801 | Lucanids sp                                  |     0 | Out of Stock | Lucanidae
+ 802 | Lucanus dybowskyi                            |     0 | Out of Stock | Lucanidae
+ 803 | Lucanus fryi                                 |     0 | Out of Stock | Lucanidae
+ 804 | Lucanus sericeus                             |     0 | Out of Stock | Lucanidae
+ 805 | Lybithea goefroyi                            |     0 | Out of Stock | -
+ 806 | Lycaenidae sp.                               |     0 | Out of Stock | -
+ 807 | lycosidae roseus                             |     0 | Out of Stock | Theraphosidae
+ 808 | lycosidae sp.                                |     0 | Out of Stock | Theraphosidae
+ 809 | Lynchinids (mixed)                           |    22 | Medium       | -
+ 810 | Lyropteryx appolonia                         |     0 | Out of Stock | -
+ 811 | Lyropteryx lyra                              |     0 | Out of Stock | -
+ 812 | Macrodontia cervicornis                      |     1 | Out of Stock | Cerambycidae
+ 813 | Macrodontia cervicornis (M)                  |     6 | Medium       | Cerambycidae
+ 814 | Macrodorcus arrowi                           |     0 | Out of Stock | Lucanidae
+ 815 | Macrotristia chantrainei                     |     0 | Out of Stock | -
+ 816 | Malinaea comma                               |     0 | Out of Stock | -
+ 817 | Mantidae                                     |     5 | Medium       | -
+ 818 | Mantids (MAD)                                |     8 | Medium       | -
+ 819 | mantids madagascar                           |    15 | Medium       | -
+ 820 | Mantids sp                                   |     0 | Out of Stock | -
+ 821 | Mantodea madagascar                          |    15 | Medium       | -
+ 822 | Mantodea sp                                  |    28 | Medium       | -
+ 823 | Marmessoidea rosea     female                |     2 | Low          | -
+ 824 | Marmessoidea rosea  male                     |    10 | Medium       | -
+ 825 | Marpesia coresia                             |    40 | Medium       | -
+ 826 | Marpesia corinna                             |    60 | High         | -
+ 827 | Marpesia marcella                            |     0 | Out of Stock | -
+ 828 | Marpesia petreus                             |    29 | Medium       | -
+ 829 | Mastododera cocinea                          |     0 | Out of Stock | Cerambycidae
+ 830 | Mecynorrhina harrisi                         |    15 | Medium       | Cetonidae
+ 831 | Mecynorrhina torquata poggei                 |     1 | Low          | Cetonidae
+ 832 | Megacera                                     |     2 | Low          | Dynastinae
+ 833 | Megaceras briansaltini                       |     2 | Out of Stock | Scarabeidae
+ 834 | Megacrania batesii                           |     0 | Out of Stock | -
+ 835 | Megaloprepus sp.                             |    25 | Medium       | -
+ 836 | Megalorrhina harrisi f                       |    12 | Medium       | Cetonidae
+ 837 | Megaloxantha bicolor                         |    28 | Medium       | Buprestidae
+ 838 | Megaloxantha purpurascens                    |    40 | Medium       | Buprestidae
+ 839 | Megascolia azurea                            |     1 | Low          | -
+ 840 | Megascolia procer                            |     0 | Out of Stock | -
+ 841 | Megascolia sp1                               |     0 | Out of Stock | -
+ 842 | Megascolia velutina                          |     0 | Out of Stock | -
+ 843 | Megasoma actaeon                             |    40 | Out of Stock | Cerambycidae
+ 844 | Megasoma acteon                              |    10 | Medium       | Scarabeidae
+ 845 | Megasoma elaphas                             |     2 | Low          | Scarabeidae
+ 846 | Megasoma rex                                 |     9 | Out of Stock | Cerambycidae
+ 847 | Melanis pixe                                 |     0 | Out of Stock | -
+ 848 | Melanocyma faunula                           |     0 | Out of Stock | -
+ 849 | Melolonthidae sp                             |    89 | High         | Melolonthidae
+ 850 | Memphis glaucone                             |     0 | Out of Stock | -
+ 851 | Metallyticus splendidus                      |     4 | Out of Stock | -
+ 852 | Metallyticus splendidus    female            |     3 | Low          | -
+ 853 | Metallyticus splendidus    male              |     3 | Low          | -
+ 854 | Metamymorpha apicalis                        |    11 | Medium       | Buprestidae
+ 855 | Metamymorpha gloriosa                        |    15 | Medium       | Buprestidae
+ 856 | Metamymorpha hauseri                         |     5 | Medium       | Buprestidae
+ 857 | Metamymorpha nigrofasciatus                  |    10 | Medium       | Buprestidae
+ 858 | Metopodontus bison                           |     0 | Out of Stock | Lucanidae
+ 859 | Microstigma rotundatum                       |    28 | Medium       | -
+ 860 | Millipedes                                   |    10 | Out of Stock | -
+ 861 | Millipedes sp                                |     8 | Out of Stock | -
+ 862 | Millonia                                     |    40 | Medium       | -
+ 863 | Mimathyma schrenkii                          |    60 | High         | -
+ 864 | Moduza procris                               |     0 | Out of Stock | Papilionidae
+ 865 | Mormolyce castelnaudii                       |    15 | Out of Stock | Carabidae
+ 866 | Mormolyce phyllodes                          |     0 | Out of Stock | Carabidae
+ 867 | Morpho A2                                    |     0 | Out of Stock | -
+ 868 | Morpho achilles                              |     4 | Low          | -
+ 869 | Morpho adonis                                |   100 | High         | Papilionidae
+ 870 | Morpho amanthonte A1                         |   105 | High         | Papilionidae
+ 871 | Morpho amphitrion                            |     0 | Out of Stock | Papilionidae
+ 872 | Morpho aurora                                |    25 | Medium       | Papilionidae
+ 873 | Morpho cacica                                |     3 | Out of Stock | -
+ 874 | Morpho catenaria                             |    30 | Out of Stock | -
+ 875 | Morpho cypris                                |    10 | Medium       | -
+ 876 | Morpho deidamia                              |    40 | Medium       | Papilionidae
+ 877 | Morpho didius                                |   190 | High         | -
+ 878 | Morpho epistrophus catenaria                 |     0 | Out of Stock | -
+ 879 | Morpho eugenia                               |     9 | Out of Stock | -
+ 880 | Morpho godarti                               |     9 | Medium       | -
+ 881 | Morpho granadensis                           |     0 | Out of Stock | -
+ 882 | Morpho helena                                |    36 | Medium       | -
+ 883 | Morpho helenor                               |     0 | Out of Stock | -
+ 884 | Morpho juturna                               |     1 | Low          | -
+ 885 | Morpho luna                                  |    40 | Medium       | -
+ 886 | Morpho marcus                                |     0 | Out of Stock | -
+ 887 | Morpho menalaus                              |     0 | Out of Stock | -
+ 888 | Morpho patroclus                             |     0 | Out of Stock | Papilionidae
+ 889 | Morpho peleides                              |     0 | Out of Stock | -
+ 890 | Morpho phanademus                            |    10 | Out of Stock | -
+ 891 | Morpho polyphemus                            |     0 | Out of Stock | -
+ 892 | Morpho portis                                |    20 | Medium       | -
+ 893 | Morpho sp                                    |    10 | Medium       | -
+ 894 | Morpho sulkowssky                            |    92 | High         | -
+ 895 | Morpho sulkowssky  selemaRIS                 |     0 | Out of Stock | -
+ 896 | Morpho telemachus                            |    40 | Medium       | -
+ 897 | Morpho zephyritis                            |    11 | Out of Stock | -
+ 898 | Moth (atlas local)                           |    10 | Medium       | -
+ 899 | Moth sp                                      |    36 | Out of Stock | -
+ 900 | Mycteristes squamosus                        |     0 | Out of Stock | Cetonidae
+ 901 | Mylothris chloris                            |   145 | High         | Papilionidae
+ 902 | Mylothris rhodope                            |     0 | Out of Stock | -
+ 903 | Napeocles jucunda                            |    75 | High         | -
+ 904 | Necroscia annulipes                          |    20 | Medium       | -
+ 905 | Necroscia marginata                          |    55 | Out of Stock | -
+ 906 | Necroscia sp.                                |     0 | Out of Stock | -
+ 907 | Necroscia sp.    FEMALE                      |     0 | Out of Stock | -
+ 908 | Necroscia sp.    MALE                        |    29 | Medium       | -
+ 909 | Necyria duellona                             |    10 | Medium       | -
+ 910 | Necyria sp.                                  |    90 | High         | -
+ 911 | Neducanus maximus                            |     0 | Out of Stock | Lucanidae
+ 912 | Nemophas tricolor                            |     5 | Medium       | Cerambycidae
+ 913 | Nemoptera sinuata                            |    35 | Medium       | -
+ 914 | Neocelis dohrni                              |     1 | Out of Stock | -
+ 915 | Neocerambyx gigas                            |     0 | Out of Stock | Cerambycidae
+ 916 | Neolamprima adophinae                        |   400 | High         | Lucanidae
+ 917 | Neolamprima adophinae FEM                    |     0 | Out of Stock | Lucanidae
+ 918 | Neolamprima adophinae MALE                   |     0 | Out of Stock | Lucanidae
+ 919 | Neolucanus palmatus                          |     0 | Out of Stock | Lucanidae
+ 920 | Neolucanus swinhoi                           |     0 | Out of Stock | Lucanidae
+ 921 | Neomyrina nivea                              |     0 | Out of Stock | -
+ 922 | Neorina lowii                                |     0 | Out of Stock | -
+ 923 | Neoscelis dohrni                             |     0 | Out of Stock | Cetonidae
+ 924 | Nepheronia argia                             |   160 | High         | Papilionidae
+ 925 | Nepheronia pharis                            |     0 | Out of Stock | Papilionidae
+ 926 | Nepheronia thalassina                        |   535 | High         | Papilionidae
+ 927 | Nephila                                      |    10 | Medium       | Theraphosidae
+ 928 | Nephila maculata                             |     0 | Out of Stock | Theraphosidae
+ 929 | Nephila sp.                                  |     0 | Out of Stock | Theraphosidae
+ 930 | Nephila tongmianesis                         |     0 | Out of Stock | Theraphosidae
+ 931 | Neptis dejeani                               |     0 | Out of Stock | -
+ 932 | Neptis miah                                  |     0 | Out of Stock | -
+ 933 | Neptis nandina                               |     0 | Out of Stock | -
+ 934 | Nessaea hewitsoni                            |    50 | Medium       | -
+ 935 | Nessaea sp.                                  |    94 | High         | -
+ 936 | Neurobasis chinensis                         |    60 | High         | -
+ 937 | Neurobasis kaupi                             |   305 | High         | -
+ 938 | O. frischesieni                              |     0 | Out of Stock | Cerambycidae
+ 939 | Odius histeria                               |    45 | Medium       | -
+ 940 | Odonates                                     |     0 | Out of Stock | -
+ 941 | Odonates sp.                                 |    50 | Medium       | -
+ 942 | Odontolabis alces                            |     0 | Out of Stock | Lucanidae
+ 943 | Odontolabis belicosus                        |     0 | Out of Stock | Lucanidae
+ 944 | Odontolabis busmeister                       |     0 | Out of Stock | Lucanidae
+ 945 | Odontolabis curvera sinensis                 |     0 | Out of Stock | Lucanidae
+ 946 | Odontolabis cuvera                           |     0 | Out of Stock | Lucanidae
+ 947 | Odontolabis dalmani                          |    22 | Medium       | Lucanidae
+ 948 | Odontolabis elegans                          |     0 | Out of Stock | Lucanidae
+ 949 | Odontolabis elegans mouhoti                  |     0 | Out of Stock | Lucanidae
+ 950 | Odontolabis femoralis                        |     0 | Out of Stock | Lucanidae
+ 951 | Odontolabis gazella                          |     0 | Out of Stock | Lucanidae
+ 952 | Odontolabis intermedeus                      |     0 | Out of Stock | Lucanidae
+ 953 | Odontolabis lacordairei                      |    10 | Medium       | Lucanidae
+ 954 | Odontolabis ludekingi                        |     0 | Out of Stock | Lucanidae
+ 955 | Odontolabis mouhoti                          |     0 | Out of Stock | Lucanidae
+ 956 | Odontolabis parryi                           |     0 | Out of Stock | Lucanidae
+ 957 | Odontolabis sinensis                         |     0 | Out of Stock | Lucanidae
+ 958 | Odontolabis siva                             |    45 | Medium       | Lucanidae
+ 959 | Odontolabis siwa                             |     0 | Out of Stock | Lucanidae
+ 960 | Odontolabis sommeri                          |     0 | Out of Stock | Lucanidae
+ 961 | Odontolabis wollastoni                       |     0 | Out of Stock | Lucanidae
+ 962 | Orientopsaltria fangrayae                    |     0 | Out of Stock | -
+ 963 | Ornithoctoctorina sp.                        |    10 | Out of Stock | Theraphosidae
+ 964 | Ornithoptera priamus (Is this what you sent? |     0 | Out of Stock | -
+ 965 | Orthoptera                                   |     0 | Out of Stock | -
+ 966 | Orthoptera romaleidae                        |    80 | Out of Stock | -
+ 967 | Orthoptera sp.                               |     0 | Out of Stock | -
+ 968 | Orthoptera sp. 12                            |     0 | Out of Stock | -
+ 969 | Orthoptera sp12                              |    10 | Medium       | -
+ 970 | Oryctes nasiconis                            |     0 | Out of Stock | Scarabeidae
+ 971 | Oxyropterus audoniwi                         |     0 | Out of Stock | Elateridae
+ 972 | Pachliopta aristolochiae                     |     0 | Out of Stock | Papilionidae
+ 973 | Pachliopta kotzebuea                         |    20 | Medium       | -
+ 974 | Pachliopta polydorus                         |    14 | Medium       | -
+ 975 | Pachliopta polyphontes                       |    15 | Medium       | -
+ 976 | Pachyperia spinicolis                        |     0 | Out of Stock | Curculionidae
+ 977 | Pachyrynchus spp                             |    17 | Medium       | Chrysomelidae
+ 978 | Pachyteria dimidiata                         |    10 | Medium       | Cerambycidae
+ 979 | Palimna annulata                             |     3 | Out of Stock | Cerambycidae
+ 980 | Palla publius                                |     0 | Out of Stock | -
+ 981 | Palla ussheri                                |   125 | High         | Papilionidae
+ 982 | Palla violinitens                            |     0 | Out of Stock | Papilionidae
+ 983 | Pamphobetus antinous                         |    30 | Low          | Theraphosidae
+ 984 | Pamphobetus javaensis                        |     0 | Out of Stock | Theraphosidae
+ 985 | Pamphobetus minax    med                     |     0 | Out of Stock | Theraphosidae
+ 986 | Panacanthus cuspidatus                       |     0 | Out of Stock | -
+ 987 | Panacea procilla                             |     0 | Out of Stock | -
+ 988 | Panacea prola                                |   282 | High         | Papilionidae
+ 989 | Panacea sp.                                  |   100 | High         | -
+ 990 | Panaploscelis specularis                     |     0 | Out of Stock | -
+ 991 | Pandimus                                     |    10 | Medium       | Theraphosidae
+ 992 | Pandimus canvimanus                          |     0 | Out of Stock | Theraphosidae
+ 993 | Pandimus minax   large                       |     0 | Out of Stock | Theraphosidae
+ 994 | Pandimus sp                                  |     0 | Out of Stock | Theraphosidae
+ 995 | Pantoporia eulimeneo                         |     0 | Out of Stock | Papilionidae
+ 996 | Pantoporia larymna                           |     0 | Out of Stock | -
+ 997 | Papilio aegeus female                        |     5 | Medium       | -
+ 998 | Papilio aegeus male                          |     2 | Out of Stock | -
+ 999 | Papilio agetes                               |     0 | Out of Stock | Papilionidae
+1000 | Papilio ambrax                               |     0 | Out of Stock | -
+1001 | Papilio anchisiades                          |     0 | Out of Stock | -
+1002 | Papilio androcles                            |     0 | Out of Stock | -
+1003 | Papilio androgeos                            |     0 | Out of Stock | Papilionidae
+1004 | Papilio antenor                              |     0 | Out of Stock | -
+1005 | Papilio antimachus                           |     0 | Out of Stock | -
+1006 | Papilio arcturus                             |     0 | Out of Stock | -
+1007 | Papilio aristeus                             |     0 | Out of Stock | Papilionidae
+1008 | Papilio ascalaphus                           |   180 | High         | -
+1009 | Papilio ascalaphus Fem                       |     4 | Out of Stock | -
+1010 | Papilio autolycus                            |     0 | Out of Stock | -
+1011 | Papilio battus maydes                        |    20 | Medium       | -
+1012 | Papilio bianor                               |     0 | Out of Stock | -
+1013 | Papilio bianor   spring                      |    55 | High         | -
+1014 | Papilio bianor  summer                       |   125 | High         | -
+1015 | Papilio blumei                               |    95 | High         | -
+1016 | Papilio bromius                              |     0 | Out of Stock | Papilionidae
+1017 | Papilio columbus                             |     0 | Out of Stock | Papilionidae
+1018 | Papilio dardanus                             |    46 | Medium       | -
+1019 | Papilio deiphobus                            |    30 | Medium       | Papilionidae
+1020 | Papilio demodocus                            |     2 | Low          | Papilionidae
+1021 | Papilio demoleus                             |    16 | Out of Stock | Papilionidae
+1022 | Papilio demolion                             |     0 | Out of Stock | -
+1023 | Papilio epiphorbas                           |     0 | Out of Stock | Papilionidae
+1024 | Papilio euchenor                             |     9 | Medium       | Papilionidae
+1025 | Papilio eurytides                            |     0 | Out of Stock | -
+1026 | Papilio fuscus                               |   204 | High         | Papilionidae
+1027 | Papilio gallienus                            |     3 | Low          | -
+1028 | Papilio gambrisius                           |    30 | Medium       | -
+1029 | Papilio garleppi                             |     9 | Medium       | -
+1030 | Papilio gigon  ♀                             |     4 | Low          | Papilionidae
+1031 | Papilio gigon  ♂                             |    15 | Out of Stock | -
+1032 | Papilio helenus                              |     0 | Out of Stock | -
+1033 | Papilio hesperus                             |     6 | Medium       | -
+1034 | Papilio isidorus                             |     0 | Out of Stock | Papilionidae
+1035 | Papilio karna                                |   125 | High         | -
+1036 | Papilio laglaizei                            |     0 | Out of Stock | Papilionidae
+1037 | Papilio leucaspis                            |     0 | Out of Stock | -
+1038 | Papilio lormieri                             |   101 | High         | Papilionidae
+1039 | Papilio lorquinianus                         |   235 | High         | -
+1040 | Papilio lowi                                 |     0 | Out of Stock | -
+1041 | Papilio lowi female                          |    15 | Medium       | -
+1042 | Papilio lowi Male                            |    50 | Medium       | Papilionidae
+1043 | Papilio lycrophon                            |    60 | High         | -
+1044 | Papilio maackii  Summer                      |    60 | High         | -
+1045 | Papilio maackii (spring)                     |     1 | Low          | -
+1046 | Papilio maackii (summer)                     |    60 | High         | -
+1047 | Papilio maackii Spring                       |     1 | Low          | -
+1048 | Papilio mangoura                             |     2 | Low          | -
+1049 | Papilio mechowi                              |    18 | Medium       | -
+1050 | Papilio mechowianus                          |     9 | Medium       | -
+1051 | Papilio memnon                               |   138 | High         | -
+1052 | Papilio memnon agenor                        |     0 | Out of Stock | Papilionidae
+1053 | Papilio nephelus                             |     0 | Out of Stock | Papilionidae
+1054 | Papilio nireus                               |    40 | Medium       | -
+1055 | Papilio oenomaus                             |     0 | Out of Stock | -
+1056 | Papilio orizabus                             |     0 | Out of Stock | -
+1057 | Papilio ornythion                            |     0 | Out of Stock | Papilionidae
+1058 | Papilio p. paris                             |     0 | Out of Stock | -
+1059 | Papilio p. stockleyi                         |     9 | Out of Stock | -
+1060 | Papilio paeon                                |     0 | Out of Stock | -
+1061 | Papilio palinurus                            |   120 | Out of Stock | Papilionidae
+1062 | Papilio parides                              |     0 | Out of Stock | -
+1063 | Papilio paris                                |   120 | High         | Papilionidae
+1064 | Papilio pausanias                            |     0 | Out of Stock | -
+1065 | Papilio peranthus                            |    70 | High         | -
+1066 | Papilio peranthus (Trans)                    |   130 | High         | -
+1067 | Papilio pericles                             |     0 | Out of Stock | Papilionidae
+1068 | Papilio phorcas                              |     0 | Out of Stock | -
+1069 | Papilio polydorus                            |     0 | Out of Stock | -
+1070 | Papilio polyeuctes                           |     0 | Out of Stock | -
+1071 | Papilio polytes                              |     0 | Out of Stock | -
+1072 | Papilio protener                             |     0 | Out of Stock | -
+1073 | Papilio protesilaus                          |     0 | Out of Stock | Papilionidae
+1074 | Papilio ropina                               |    10 | Medium       | -
+1075 | Papilio rumanzovia                           |    60 | Out of Stock | -
+1076 | Papilio sataspes                             |     0 | Out of Stock | -
+1077 | Papilio thoas                                |   320 | High         | Papilionidae
+1078 | Papilio torquatus                            |    55 | High         | Papilionidae
+1079 | Papilio u. autolycus                         |     0 | Out of Stock | -
+1080 | Papilio u. ulysses                           |   300 | High         | Pieridae
+1081 | Papilio u. ulysses     sp                    |    14 | Medium       | -
+1082 | Papilio u. ulysses   female                  |     0 | Out of Stock | -
+1083 | Papilio ulysses                              |     0 | Out of Stock | -
+1084 | Papilio ulysses joesa                        |     0 | Out of Stock | -
+1085 | Papilio xinias                               |     0 | Out of Stock | Pieridae
+1086 | Papilio xuthus                               |    65 | High         | -
+1087 | Papilio zagreus                              |    35 | Medium       | -
+1088 | Papilio zalmoxis                             |     0 | Out of Stock | -
+1089 | Papilio zenobia                              |     0 | Out of Stock | Pieridae
+1090 | Paracyphocrania major                        |     0 | Out of Stock | -
+1091 | Paradasis viridiaenea                        |     0 | Out of Stock | Buprestidae
+1092 | Parantica vitrina                            |    85 | High         | -
+1093 | Pareronia tritaea                            |   175 | High         | Pieridae
+1094 | Parides anchisiades                          |    12 | Medium       | -
+1095 | Parides bolivar                              |    15 | Medium       | -
+1096 | Parides erlaces                              |     0 | Out of Stock | -
+1097 | Parides nox                                  |     0 | Out of Stock | -
+1098 | Parides photinus                             |     0 | Out of Stock | -
+1099 | Parides sesostris                            |    90 | High         | -
+1100 | Parides sp.                                  |     4 | Out of Stock | -
+1101 | Parides vertumnus                            |     0 | Out of Stock | Pieridae
+1102 | Parnasius thtshukovi                         |    54 | High         | -
+1103 | Parthenos sylvia                             |    30 | Medium       | -
+1104 | Passalidae sp.                               |   300 | Out of Stock | Passalidae
+1105 | Pathysa agetes                               |     0 | Out of Stock | -
+1106 | Pathysa antiphates                           |     0 | Out of Stock | -
+1107 | Pavieia superba                              |     0 | Out of Stock | Cerambycidae
+1108 | Pazala eurala                                |     0 | Out of Stock | -
+1109 | Pazala eurota                                |     0 | Out of Stock | -
+1110 | Penthicodes caja                             |     0 | Out of Stock | -
+1111 | Penticodes atomaria                          |     0 | Out of Stock | -
+1112 | Penticodes falinosa                          |     0 | Out of Stock | -
+1113 | Penticodes farinosa                          |     0 | Out of Stock | -
+1114 | Penticodes farinosa aeruginea                |     0 | Out of Stock | -
+1115 | Penticodes variegata                         |     0 | Out of Stock | -
+1116 | Pepona demophon                              |     0 | Out of Stock | -
+1117 | Pepona dexamenus                             |     0 | Out of Stock | -
+1118 | Pepsis heros                                 |    40 | Medium       | -
+1119 | Pepsis sp                                    |    26 | Medium       | -
+1120 | Pereute callinira                            |   350 | High         | Pieridae
+1121 | Pereute leucorosime                          |     0 | Out of Stock | -
+1122 | Pereute telthusa                             |     0 | Out of Stock | -
+1123 | Pericophinae sp                              |   272 | High         | -
+1124 | Perisama bomplandii                          |     8 | Out of Stock | -
+1125 | Perisama dorbignyi                           |    85 | Out of Stock | -
+1126 | Perisama dorbigyi                            |    80 | High         | -
+1127 | Perisama euriclea                            |     0 | Out of Stock | -
+1128 | Perisama humboldtii                          |   190 | High         | -
+1129 | Perisama lebasi hilara                       |    23 | Medium       | -
+1130 | Perisama lebasii                             |     0 | Out of Stock | -
+1131 | Perisama oppeli                              |    24 | Medium       | -
+1132 | Perisama sp                                  |    10 | Medium       | -
+1133 | Perisama tristrigosa                         |    83 | High         | -
+1134 | Perisama vaninka                             |    12 | Medium       | -
+1135 | Perrhybris lorena                            |    19 | Medium       | -
+1136 | Perrhybris mandela                           |     0 | Out of Stock | -
+1137 | Perrhybris pamela                            |    30 | Medium       | -
+1138 | Phaedimus zebuanas                           |     7 | Medium       | Cetonidae
+1139 | Phaedyma shepardi                            |     0 | Out of Stock | -
+1140 | Phaenopharos struthioneus                    |     0 | Out of Stock | -
+1141 | Phalaennopsis intermedia                     |     0 | Out of Stock | -
+1142 | Phaneus arnaudi                              |     4 | Out of Stock | Scarabeidae
+1143 | Phaneus sp                                   |     0 | Out of Stock | Scarabeidae
+1144 | Pharmacophagus antenor                       |     0 | Out of Stock | -
+1145 | Pharnacia serratipes                         |    10 | Out of Stock | -
+1146 | Pharnacia sp.                                |     0 | Out of Stock | -
+1147 | Phasma bambu                                 |     0 | Out of Stock | -
+1148 | Phasma chrysoptera                           |     0 | Out of Stock | -
+1149 | Phasma gigas                                 |     0 | Out of Stock | -
+1150 | Phasmatodea sp.                              |     4 | Low          | -
+1151 | Phasmidae sp.                                |     0 | Out of Stock | -
+1152 | Philaethria dido                             |    85 | High         | Pieridae
+1153 | Phlogiellus                                  |     0 | Out of Stock | Theraphosidae
+1154 | Phlogiellus crassipe                         |     0 | Out of Stock | Theraphosidae
+1155 | Phobaeticus serratipes                       |    24 | Medium       | -
+1156 | Phoebis argante                              |   100 | High         | Pieridae
+1157 | Phoebis avellaneda                           |     0 | Out of Stock | Pieridae
+1158 | Phoebis cipris                               |     0 | Out of Stock | Pieridae
+1159 | Phoebis philea                               |   100 | High         | Pieridae
+1160 | Phoebis rurina                               |    27 | Medium       | Pieridae
+1161 | Phoebis sennae                               |     0 | Out of Stock | Pieridae
+1162 | Phoebis statira                              |   250 | High         | -
+1163 | Phoebis trite                                |   100 | High         | -
+1164 | Phryna grossetaitai                          |     0 | Out of Stock | Phrynidae
+1165 | Phyllium bioculatum                          |    10 | Medium       | -
+1166 | Phyllium celebicum                           |     0 | Out of Stock | -
+1167 | Phyllium giganteum                           |    33 | Medium       | -
+1168 | Phyllium giganteum (green)                   |    98 | High         | -
+1169 | Phyllium giganteum (orange)                  |    22 | Out of Stock | -
+1170 | Phyllium giganteum (yellow)                  |    13 | Out of Stock | -
+1171 | Phyllium mamasaanse                          |    10 | Medium       | -
+1172 | Phyllium mamasaanse   MALE                   |     0 | Out of Stock | -
+1173 | Phyllium pulchrifolium                       |     0 | Out of Stock | -
+1174 | Phyllium pulchrifolium   Green               |    65 | High         | -
+1175 | Phyllium pulchrifolium   Yellow              |    25 | Medium       | -
+1176 | Phyllium pulchrifolium  Orange               |    12 | Medium       | -
+1177 | Phyllium pulchrifolium MALE                  |     0 | Out of Stock | -
+1178 | Phyllium siccifolium                         |     4 | Low          | -
+1179 | Phyllium siccifolium (yellow)                |     2 | Out of Stock | -
+1180 | Phyllium tobeloense                          |    10 | Medium       | -
+1181 | Phyllium tobeloense   MALE                   |     0 | Out of Stock | -
+1182 | Phymateus aegrotus                           |     0 | Out of Stock | -
+1183 | Phymateus saxosus                            |    15 | Out of Stock | -
+1184 | Phyxotricus                                  |     0 | Out of Stock | Theraphosidae
+1185 | Pieribalia lorena lorena                     |     0 | Out of Stock | -
+1186 | Pieribalia mandela apicalis                  |     0 | Out of Stock | -
+1187 | Pieris rhoclope                              |     0 | Out of Stock | -
+1188 | Platycrana viridana                          |     0 | Out of Stock | -
+1189 | Platypleura mira                             |     0 | Out of Stock | -
+1190 | Platypleura mokensis                         |     0 | Out of Stock | -
+1191 | Plusiotis chrysargirea                       |     5 | Medium       | Cetonidae
+1192 | Polybothris expansicollis                    |     0 | Out of Stock | Buprestidae
+1193 | Polybothris navicularis                      |     0 | Out of Stock | Buprestidae
+1194 | Polybothris s. gema                          |     0 | Out of Stock | Buprestidae
+1195 | Polybothris s. superba                       |     0 | Out of Stock | Buprestidae
+1196 | Polyctor stochleyi                           |     8 | Medium       | -
+1197 | Polydictya uniformis                         |     0 | Out of Stock | -
+1198 | Polydorus polydaemon                         |     0 | Out of Stock | -
+1199 | Polyura athamas                              |     0 | Out of Stock | -
+1200 | Polyura delphis concha                       |   130 | High         | -
+1201 | Polyura eudamippus                           |     0 | Out of Stock | -
+1202 | Polyura hebe                                 |     0 | Out of Stock | -
+1203 | Polyura jalysus                              |     0 | Out of Stock | Pieridae
+1204 | Polyura jupiter                              |     0 | Out of Stock | -
+1205 | Polyura moori                                |     0 | Out of Stock | -
+1206 | Polyura nepenthes                            |     0 | Out of Stock | -
+1207 | Polyura schreiberi                           |     0 | Out of Stock | -
+1208 | Pomponia imperatoria                         |    45 | Medium       | -
+1209 | Pomponia intermedia                          |     0 | Out of Stock | -
+1210 | Pomponia merula                              |    10 | Medium       | -
+1211 | Precis cleocharis                            |     0 | Out of Stock | Pieridae
+1212 | Precis columbina                             |    44 | Medium       | -
+1213 | Precis octavia                               |     0 | Out of Stock | -
+1214 | Precis rhadama                               |    30 | Medium       | -
+1215 | Precis rhadamas                              |     0 | Out of Stock | -
+1216 | Precis terea                                 |     0 | Out of Stock | -
+1217 | Precis westermanni                           |     0 | Out of Stock | -
+1218 | Prepona chromus                              |     0 | Out of Stock | -
+1219 | Prepona frank                                |     0 | Out of Stock | -
+1220 | Prepona omphale                              |     0 | Out of Stock | -
+1221 | Prepona pheridamas                           |     0 | Out of Stock | -
+1222 | Preponas blue color                          |    28 | Medium       | -
+1223 | Preponas orange color                        |    23 | Medium       | -
+1224 | Preponas praeneste                           |     0 | Out of Stock | -
+1225 | Preponas sp                                  |    38 | Medium       | -
+1226 | Prioneris philonome                          |   120 | High         | Pieridae
+1227 | Prioneris thesylis                           |     0 | Out of Stock | Pieridae
+1228 | Prionocalus cacicus                          |     5 | Medium       | Cerambycidae
+1229 | Prosopocoilus astacoides                     |     0 | Out of Stock | Lucanidae
+1230 | Prosopocoilus banchardi                      |     0 | Out of Stock | Lucanidae
+1231 | Prosopocoilus cinctus                        |     4 | Low          | Lucanidae
+1232 | Prosopocoilus cladognatus                    |     0 | Out of Stock | Lucanidae
+1233 | Prosopocoilus corpoloari                     |     0 | Out of Stock | Lucanidae
+1234 | Prosopocoilus fabriche                       |     0 | Out of Stock | Lucanidae
+1235 | Prosopocoilus lateralis                      |     0 | Out of Stock | Lucanidae
+1236 | Prosopocoilus occipitalis                    |    20 | Out of Stock | Lucanidae
+1237 | Prosopocoilus savagei                        |    50 | Medium       | Lucanidae
+1238 | Protaetiaa cyanochlora                       |    10 | Out of Stock | Scarabeidae
+1239 | Psaphis euschemoides                         |     0 | Out of Stock | -
+1240 | Psedomeges marmoratus                        |     0 | Out of Stock | Cerambycidae
+1241 | Pseudolycaena clarki aegina                  |     0 | Out of Stock | -
+1242 | Pseudolycaena damo                           |     0 | Out of Stock | -
+1243 | Pseudophasma acanthonota                     |     0 | Out of Stock | -
+1244 | Pseudophylidae sp.                           |     0 | Out of Stock | -
+1245 | Pseudophyllus neriifolius                    |    20 | Out of Stock | -
+1246 | Ptychandra ohtanni                           |     0 | Out of Stock | -
+1247 | Pyrops astarte                               |     4 | Low          | -
+1248 | Pyrops candelalia                            |     0 | Out of Stock | -
+1249 | Pyrops candelaria                            |     3 | Out of Stock | -
+1250 | Pyrops clavata                               |     6 | Out of Stock | -
+1251 | Pyrops clavata mizunumai                     |     0 | Out of Stock | -
+1252 | Pyrops hamadjahi                             |     0 | Out of Stock | -
+1253 | Pyrops hashimotoi                            |     0 | Out of Stock | -
+1254 | Pyrops itoi                                  |     0 | Out of Stock | -
+1255 | Pyrops pyroryncha                            |    25 | Medium       | -
+1256 | Pyrops spinolae                              |     0 | Out of Stock | -
+1257 | Pyrops sultana                               |    10 | Medium       | -
+1258 | Pyrops viridirostris                         |     0 | Out of Stock | -
+1259 | Pyrops whiteheadi                            |     0 | Out of Stock | -
+1260 | Pyrrhogyra edocla                            |    19 | Medium       | -
+1261 | Ranzania berteloni    male                   |    30 | Out of Stock | Cetonidae
+1262 | Rekoa meton                                  |     0 | Out of Stock | -
+1263 | Rhetus arcius                                |   100 | High         | -
+1264 | Rhetus dyosoni                               |    30 | Medium       | -
+1265 | Rhetus dyosonii                              |    10 | Medium       | -
+1266 | Rhetus periander                             |   100 | High         | -
+1267 | Rhinastus sternicornis                       |     0 | Out of Stock | Curculionidae
+1268 | Rhinopalpa polynice                          |     0 | Out of Stock | -
+1269 | Rhombodera basalis                           |     0 | Out of Stock | -
+1270 | Rhomborhina basalis                          |     0 | Out of Stock | Cetonidae
+1271 | Rhomborhina chatanayi                        |    47 | Medium       | Cetonidae
+1272 | Rhomborhina gigantea                         |   100 | High         | Cetonidae
+1273 | Rhomborhina jeanneli                         |     0 | Out of Stock | Cetonidae
+1274 | Rhomborhina mellyi                           |     0 | Out of Stock | Cetonidae
+1275 | Rhomborhina resplendens                      |    60 | High         | Cetonidae
+1276 | Rhytimna sp                                  |     0 | Out of Stock | Theraphosidae
+1277 | Rosalia formosa                              |     0 | Out of Stock | Lucanidae
+1278 | Rosalia lameerei                             |     0 | Out of Stock | Cerambycidae
+1279 | Rosalia sanguinolenta                        |    10 | Medium       | Cerambycidae
+1280 | Rosenbergia straussi                         |   200 | High         | Cerambycidae
+1281 | Rosenbergia weiskei                          |     0 | Out of Stock | Cerambycidae
+1282 | Rothschildia erycina                         |     0 | Out of Stock | -
+1283 | Rothschildia lebeau                          |     0 | Out of Stock | -
+1284 | Rothschildia orizaba                         |     0 | Out of Stock | -
+1285 | Sagra buqueti                                |     0 | Out of Stock | Chrysomelidae
+1286 | Sagra femorata                               |     0 | Out of Stock | Chrysomelidae
+1287 | Sagra formosa                                |     0 | Out of Stock | Chrysomelidae
+1288 | Sagra longicollis                            |     0 | Out of Stock | Chrysomelidae
+1289 | Sagra spp                                    |     0 | Out of Stock | Chrysomelidae
+1290 | Saiva cardinalis                             |     0 | Out of Stock | -
+1291 | Saiva decorata                               |     0 | Out of Stock | -
+1292 | Saiva transverso                             |     4 | Low          | -
+1293 | Salamis aethiops                             |     0 | Out of Stock | -
+1294 | Salamis anacardi                             |     0 | Out of Stock | -
+1295 | Salamis anteva                               |     0 | Out of Stock | -
+1296 | Salamis cacta                                |    35 | Medium       | -
+1297 | Salamis duprei                               |    12 | Medium       | -
+1298 | Salamis parhassus                            |     7 | Medium       | -
+1299 | Salamis temnora                              |     0 | Out of Stock | Pieridae
+1300 | Salvazana imperialis                         |     5 | Out of Stock | -
+1301 | Salvazana mirabilis                          |    22 | Medium       | -
+1302 | Samia Insularis  female                      |    25 | Out of Stock | -
+1303 | Samia Insularis  male                        |    25 | Out of Stock | -
+1304 | Samia kahlii                                 |     1 | Out of Stock | -
+1305 | Samia luzonica female                        |     0 | Out of Stock | -
+1306 | Samia luzonica male                          |     0 | Out of Stock | -
+1307 | Sanna intermedia   FEMALE                    |     0 | Out of Stock | -
+1308 | Sanna intermedia   MALE                      |     0 | Out of Stock | -
+1309 | Sanna regalis                                |     0 | Out of Stock | -
+1310 | Sasakia charonda                             |     0 | Out of Stock | -
+1311 | Sasuma sp.                                   |    35 | Out of Stock | -
+1312 | Scamandra sanguiflua                         |     5 | Medium       | -
+1313 | Scamandra tamborana                          |     0 | Out of Stock | -
+1314 | Scamandra thetis                             |     5 | Out of Stock | -
+1315 | Scapanes australis                           |     0 | Out of Stock | Dynastinae
+1316 | Scolidae sp01                                |     3 | Low          | -
+1317 | Scolopendra                                  |    10 | Medium       | -
+1318 | Scolopendra cithaerias                       |     5 | Medium       | -
+1319 | Scolopendra gigantea                         |     0 | Out of Stock | -
+1320 | Scolopendra sp big                           |     0 | Out of Stock | -
+1321 | Scolopendra sp small                         |     0 | Out of Stock | -
+1322 | scorpion                                     |    50 | Medium       | Theraphosidae
+1323 | Selenocosmia                                 |     0 | Out of Stock | Theraphosidae
+1324 | Semiotus imperialis                          |     0 | Out of Stock | Elateridae
+1325 | Sericinus montelus                           |     0 | Out of Stock | -
+1326 | Sevenia pechueli                             |     0 | Out of Stock | -
+1327 | Siproeta epaphus                             |    90 | High         | Pieridae
+1328 | Siproeta stelenes                            |    67 | High         | Pieridae
+1329 | Sisema neurodes                              |    12 | Out of Stock | -
+1330 | Skiber javaensis                             |     0 | Out of Stock | Skiber
+1331 | Smirna blomfildia                            |     0 | Out of Stock | -
+1332 | Spendica incordies                           |    32 | Medium       | Cetonidae
+1333 | Sphingnotus albertisi                        |   100 | High         | Cerambycidae
+1334 | Sphingnotus mirabilis                        |     0 | Out of Stock | Cerambycidae
+1335 | Spider sp                                    |     4 | Low          | Theraphosidae
+1336 | Spider sp 08                                 |     0 | Out of Stock | Theraphosidae
+1337 | Stellognatha maculata                        |     0 | Out of Stock | Cerambycidae
+1338 | Stephanocrates preussi                       |     1 | Low          | Cetonidae
+1339 | Sternocera aequisignata                      |   160 | High         | Buprestidae
+1340 | Sternocera boucardii                         |     5 | Medium       | Buprestidae
+1341 | Sternocera castaea                           |     6 | Out of Stock | Buprestidae
+1342 | Sternocera pulchra fisheri                   |    55 | High         | Buprestidae
+1343 | Sternocera ruficornis                        |     0 | Out of Stock | Buprestidae
+1344 | Sterphanorrhina guttata                      |     0 | Out of Stock | Cetonidae
+1345 | Stichopthalama frustorferi                   |     0 | Out of Stock | -
+1346 | Stichopthalama louisa                        |    35 | Medium       | Pieridae
+1347 | Stygophrynus dammermani                      |    20 | Medium       | Phrynidae
+1348 | Syntherata escarlata                         |     8 | Medium       | -
+1349 | T foveicep                                   |   125 | High         | -
+1350 | T. foveceip                                  |    65 | High         | -
+1351 | Taenaris catops                              |     0 | Out of Stock | -
+1352 | Taenaris diane                               |     0 | Out of Stock | -
+1353 | Taenaris mixed                               |     0 | Out of Stock | -
+1354 | Tagesodea nigrofasciata                      |    19 | Medium       | -
+1355 | Tagesodea nigrofasciata    male              |    10 | Medium       | -
+1356 | Tagesoidea nigrofasciata   female            |     0 | Out of Stock | -
+1357 | Tailainga binghami                           |     0 | Out of Stock | -
+1358 | Talbota nagana                               |     0 | Out of Stock | -
+1359 | Tanaecia pelea                               |     0 | Out of Stock | -
+1360 | Tarantula                                    |    21 | Medium       | Theraphosidae
+1361 | Taxiarchus giganteus                         |     1 | Low          | -
+1362 | Temenis laothoe                              |     0 | Out of Stock | -
+1363 | Tenodera aridifolia                          |     0 | Out of Stock | -
+1364 | Terinos atlita                               |     0 | Out of Stock | -
+1365 | Terinos terpander                            |     0 | Out of Stock | -
+1366 | Thaumastopeus chicheryi                      |     0 | Out of Stock | Cetonidae
+1367 | Thaumastopeus striatus                       |    75 | High         | Cetonidae
+1368 | Theclas sp                                   |     0 | Out of Stock | -
+1369 | Theodosia perakensis                         |     0 | Out of Stock | Cetonidae
+1370 | Theopropus elegans   female                  |    13 | Medium       | -
+1371 | Theretra alecto                              |     0 | Out of Stock | -
+1372 | Thessitus sp01                               |     2 | Low          | -
+1373 | Thyridia psidii                              |     0 | Out of Stock | -
+1374 | Thysania agripinna                           |    30 | Medium       | -
+1375 | Timelaea maculata                            |    60 | High         | -
+1376 | Tirachoidea cantori                          |    22 | Out of Stock | -
+1377 | Tirachoidea westwoodi                        |     0 | Out of Stock | -
+1378 | Tirachoidea westwoodi  FEMALE                |     0 | Out of Stock | -
+1379 | Tirumala hamaTA                              |    20 | Medium       | -
+1380 | Titanacris albipes                           |    14 | Medium       | -
+1381 | Titanus giganteus                            |     5 | Medium       | Cerambycidae
+1382 | Tithorea harmonia                            |     0 | Out of Stock | -
+1383 | Tmesisterini rafaelae                        |    40 | Medium       | Cerambycidae
+1384 | Tmessorhina alpestris bafutensis             |    40 | Medium       | Cetonidae
+1385 | Tmessorhina simillina                        |    30 | Medium       | Cetonidae
+1386 | Torynorrhina distincta                       |    20 | Medium       | Cetonidae
+1387 | Torynorrhina flammea  BLUE                   |    73 | High         | Cetonidae
+1388 | Torynorrhina flammea  RED                    |    39 | Medium       | Cetonidae
+1389 | Tosena albata                                |     9 | Medium       | -
+1390 | Tosena fasciata                              |     0 | Out of Stock | -
+1391 | Tosena melanoptera                           |     0 | Out of Stock | -
+1392 | Tosena paviei                                |    37 | Medium       | -
+1393 | Tosena sp                                    |     0 | Out of Stock | -
+1394 | Tosena splendida                             |    96 | High         | -
+1395 | Tragocephala jucunda                         |     0 | Out of Stock | Cerambycidae
+1396 | Trengganua sybylla                           |    32 | Medium       | -
+1397 | Trichogomphus martabani                      |     0 | Out of Stock | Scarabeidae
+1398 | Trigonophorus foveicep                       |     0 | Out of Stock | Cetonidae
+1399 | Trigonophorus rothchildi                     |     7 | Medium       | Cetonidae
+1400 | Trogonoptera brooks                          |     0 | Out of Stock | -
+1401 | Troides trojana                              |    40 | Medium       | -
+1402 | Tropidacris cristata                         |     5 | Out of Stock | -
+1403 | Tropidacris dux                              |     4 | Low          | -
+1404 | Tropidacris dux   FEMAle                     |     0 | Out of Stock | -
+1405 | Trygonopteryx sp.                            |     6 | Medium       | -
+1406 | Tylonycteric robustula                       |     1 | Low          | -
+1407 | Tyria jaxobaea                               |     0 | Out of Stock | -
+1408 | Urania fulgens                               |     0 | Out of Stock | -
+1409 | Urania leilus     NO ANTENNA                 |  1400 | High         | -
+1410 | Urania leilus   with antena                  |     0 | Out of Stock | -
+1411 | Vagrans egista                               |     0 | Out of Stock | -
+1412 | Valeria tritaea                              |   145 | High         | -
+1413 | Vanapa oberthueri                            |     0 | Out of Stock | Curculionidae
+1414 | Vanapa sp                                    |     0 | Out of Stock | Curculionidae
+1415 | Vespa tropica                                |     4 | Low          | -
+1416 | Vespidae                                     |     4 | Out of Stock | -
+1417 | Vestalis luctuosa                            |    45 | Out of Stock | -
+1418 | Vestalis melania                             |     0 | Out of Stock | -
+1419 | Victorina stelenes                           |    84 | Out of Stock | -
+1420 | Vindula alungis                              |     0 | Out of Stock | -
+1421 | Vindula arsinoe                              |     0 | Out of Stock | -
+1422 | Vindula erota                                |     1 | Out of Stock | -
+1423 | Vindula erotella                             |     0 | Out of Stock | -
+1424 | Wasp sp.                                     |    12 | Out of Stock | -
+1425 | wasps sp                                     |     8 | Medium       | -
+1426 | Whip scorpion                                |    42 | Out of Stock | Thelyphonidae
+1427 | Whip Scorpion                                |    40 | Medium       | Phrynidae
+1428 | Xixuthrus sp                                 |     0 | Out of Stock | Cerambycidae
+1429 | Xylocopa aestuans                            |    10 | Medium       | -
+1430 | Xylocopa caerulea                            |     0 | Out of Stock | -
+1431 | Xylocopa confusa                             |    90 | High         | -
+1432 | Xylocopa confusa    FEMALE                   |    12 | Medium       | -
+1433 | Xylocopa confusa   MALE                      |     6 | Medium       | -
+1434 | Xylocopa heros                               |     0 | Out of Stock | -
+1435 | Xylocopa latipes                             |     0 | Out of Stock | -
+1436 | Xylocopa olivacea                            |   100 | High         | -
+1437 | Xylocopa pubescens                           |    54 | High         | -
+1438 | Xylocopa sp.                                 |    76 | High         | -
+1439 | Xylocopa sp01                                |    10 | Medium       | -
+1440 | Xylocopa sp03                                |     3 | Low          | -
+1441 | Xylotrupes gideon                            |    40 | Medium       | Dynastinae
+1442 | Yoma sabina                                  |     0 | Out of Stock | -
+1443 | Yoma vaninka                                 |     0 | Out of Stock | Saturniidae
+1444 | Zanna nobilis                                |     0 | Out of Stock | -
+1445 | Zeuxidia amethystus                          |     3 | Low          | -
+1446 | Zeuxidia aurelius                            |    12 | Medium       | -
+1447 | Zeuxidia doubledayi                          |     1 | Low          | -

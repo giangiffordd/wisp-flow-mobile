@@ -1,0 +1,8 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPRECATED — This file is no longer used.
+#
+# specimens_full_clean.txt is now bundled directly into the main Dockerfile
+# via COPY . . — no separate specimens image is needed.
+#
+# Use docker-compose.yml with the single 'wisp-flow-mobile' service instead.
+# ─────────────────────────────────────────────────────────────────────────────

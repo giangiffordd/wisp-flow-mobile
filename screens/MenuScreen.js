@@ -1,15 +1,15 @@
 import React from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Dimensions 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions
 } from 'react-native';
-import { 
-  Boxes, 
-  History, 
+import {
+  Boxes,
+  History,
   ChevronRight,
   Cpu
 } from 'lucide-react-native';
@@ -46,14 +46,14 @@ export default function MenuScreen({ navigation }) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.sectionTitle}>Operations Modules</Text>
-      
+
       {/* Menu Grid */}
       <View style={styles.grid}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           return (
-            <TouchableOpacity 
-              key={item.id} 
+            <TouchableOpacity
+              key={item.id}
               style={styles.card}
               onPress={() => navigation.navigate(item.screen)}
               activeOpacity={0.7}
@@ -68,12 +68,12 @@ export default function MenuScreen({ navigation }) {
                   </View>
                 )}
               </View>
-              
+
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
               </View>
-              
+
               <View style={styles.cardFooter}>
                 <Text style={styles.launchText}>Open Module</Text>
                 <ChevronRight size={14} color="#94a3b8" />

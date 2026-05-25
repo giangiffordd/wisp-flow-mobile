@@ -14,7 +14,7 @@ import {
   LayoutAnimation,
   UIManager,
 } from 'react-native';
-import { Play, CheckCircle, Clock, Plus, X, Sparkles, Package, Bell, AlertCircle } from 'lucide-react-native';
+import { Play, CheckCircle, Clock, Plus, X, Sparkles, Package, Bell, AlertCircle, Lock } from 'lucide-react-native';
 import { fetchProductsCatalog } from '../src/supabaseClient';
 
 // Enable LayoutAnimation on Android
@@ -199,8 +199,35 @@ export default function WorkflowModule({ navigation, route }) {
     }
   };
 
-  // ── Navigate to YOLO scan for a step (small delay so press animation shows) ──
+  // ── Check if a step's prerequisite is satisfied ──
+  const isStepUnlocked = (step) => {
+    if (step.id === 1) return true; // Initial QC always accessible
+    const prereqStep = steps.find(s => s.id === step.id - 1);
+    return prereqStep?.status === 'completed';
+  };
+
+  // ── Navigate to YOLO scan, blocking if prerequisite not complete ──
   const handleOpenScan = (step) => {
+    if (!isStepUnlocked(step)) {
+      const prereqStep = steps.find(s => s.id === step.id - 1);
+      Alert.alert(
+        '🔒 Step Locked',
+        `Complete "${prereqStep?.title}" before accessing "${step.title}".\n\nOpening YOLO Scan for the required step.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Scan Prerequisite',
+            onPress: () => {
+              navigation && navigation.navigate('YoloScan', {
+                stepId: prereqStep.id,
+                stepTitle: prereqStep.title,
+              });
+            },
+          },
+        ]
+      );
+      return;
+    }
     animatePressIn(step.id);
     setTimeout(() => {
       animatePressOut(step.id);
@@ -336,56 +363,69 @@ export default function WorkflowModule({ navigation, route }) {
                 </View>
 
                 {/* Step Card — animated press */}
-                <Animated.View style={{ flex: 1, transform: [{ scale: stepScales[step.id] }] }}>
-                  <TouchableOpacity
-                    style={[
-                      styles.stepCard,
-                      step.status === 'active' && styles.stepCardActive,
-                    ]}
-                    onPressIn={() => animatePressIn(step.id)}
-                    onPressOut={() => animatePressOut(step.id)}
-                    onPress={() => handleOpenScan(step)}
-                    activeOpacity={1}
-                  >
-                    <View style={styles.stepRowMain}>
-                      <View style={styles.stepInfoContainer}>
-                        <Text style={[
-                          styles.stepTitle,
-                          step.status === 'active'  && styles.stepTitleActive,
-                          step.status === 'pending' && styles.stepTitlePending,
-                        ]}>
-                          {step.title}
-                        </Text>
-                        <Text style={styles.stepTime}>{step.time}</Text>
-                      </View>
-
-                      {/* Count badge on the right */}
-                      {countData !== null && countData !== undefined && (
-                        <View style={styles.countBadge}>
-                          <Text style={styles.countBadgeNum}>{countData.count}</Text>
-                          <Text style={styles.countBadgeLabel} numberOfLines={1}>
-                            {countData.specimenName
-                              ? countData.specimenName.split(' ').slice(0, 1).join('')
-                              : 'pcs'}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {step.status === 'active' && (
+                {(() => {
+                  const unlocked = isStepUnlocked(step);
+                  return (
+                    <Animated.View style={{ flex: 1, transform: [{ scale: stepScales[step.id] }] }}>
                       <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={(e) => {
-                          e.stopPropagation && e.stopPropagation();
-                          handleCompleteStep(step.id);
-                        }}
-                        activeOpacity={0.8}
+                        style={[
+                          styles.stepCard,
+                          step.status === 'active' && styles.stepCardActive,
+                          !unlocked && styles.stepCardLocked,
+                        ]}
+                        onPressIn={() => unlocked && animatePressIn(step.id)}
+                        onPressOut={() => unlocked && animatePressOut(step.id)}
+                        onPress={() => handleOpenScan(step)}
+                        activeOpacity={unlocked ? 1 : 0.6}
                       >
-                        <Text style={styles.actionButtonText}>Complete</Text>
+                        <View style={styles.stepRowMain}>
+                          <View style={styles.stepInfoContainer}>
+                            <Text style={[
+                              styles.stepTitle,
+                              step.status === 'active'  && styles.stepTitleActive,
+                              step.status === 'pending' && styles.stepTitlePending,
+                              !unlocked && styles.stepTitleLocked,
+                            ]}>
+                              {step.title}
+                            </Text>
+                            <Text style={styles.stepTime}>
+                              {!unlocked ? 'Complete previous step first' : step.time}
+                            </Text>
+                          </View>
+
+                          {/* Lock icon for blocked steps */}
+                          {!unlocked ? (
+                            <View style={styles.lockBadge}>
+                              <Lock size={14} color="#94a3b8" />
+                            </View>
+                          ) : countData !== null && countData !== undefined ? (
+                            <View style={styles.countBadge}>
+                              <Text style={styles.countBadgeNum}>{countData.count}</Text>
+                              <Text style={styles.countBadgeLabel} numberOfLines={1}>
+                                {countData.specimenName
+                                  ? countData.specimenName.split(' ').slice(0, 1).join('')
+                                  : 'pcs'}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+
+                        {step.status === 'active' && unlocked && (
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={(e) => {
+                              e.stopPropagation && e.stopPropagation();
+                              handleCompleteStep(step.id);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.actionButtonText}>Mark Complete</Text>
+                          </TouchableOpacity>
+                        )}
                       </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
+                    </Animated.View>
+                  );
+                })()}
               </View>
             );
           })}
@@ -768,6 +808,25 @@ const styles = StyleSheet.create({
     borderColor: '#B8D4E8',
     borderWidth: 1.5,
     backgroundColor: '#F7FBFF',
+  },
+  stepCardLocked: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    opacity: 0.7,
+  },
+  stepTitleLocked: {
+    color: '#94a3b8',
+  },
+  lockBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
   },
   stepRowMain: {
     flexDirection: 'row',

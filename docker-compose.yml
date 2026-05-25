@@ -1,7 +1,22 @@
 version: '3.8'
 
+# ─────────────────────────────────────────────────────────────────────────────
+# wisp-flow-mobile — single unified service
+#
+# This replaces the old two-image setup (app + separate specimens image).
+# specimens_full_clean.txt is bundled directly into this image via COPY . .
+#
+# HOW TO RUN ON ANY PC:
+#   1. Clone this repo
+#   2. Find your local IP:  ipconfig | findstr "IPv4"   (Windows)
+#                           ifconfig | grep "inet "      (Mac/Linux)
+#   3. Set REACT_NATIVE_PACKAGER_HOSTNAME below to that IP
+#   4. Run: docker compose up --build
+#   5. Scan the QR code printed in terminal with Expo Go
+# ─────────────────────────────────────────────────────────────────────────────
+
 services:
-  app:
+  wisp-flow-mobile:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,28 +24,17 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      # Mount the current directory for live-reloading
+      # Mount source for live-reloading during development
       - .:/app
-      # Do not overwrite container's node_modules with host's node_modules
+      # Preserve container's node_modules (don't overwrite with host's)
       - /app/node_modules
       - /app/.expo
     environment:
       - NODE_ENV=development
-      # For Windows host + WSL2 Docker, this sometimes helps file watching:
-      - CHOKIDAR_USEPOLLING=true
+      # ⚠️  Set this to YOUR machine's local IP address
+      #    Run: ipconfig | findstr "IPv4"  (Windows)
       - REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.9
-    # Run in LAN mode and use 'expect' to automatically answer the "Proceed anonymously" prompt
-    command: >
-      sh -c "apk add --no-cache expect && expect -c '
-      set timeout 15;
-      spawn npx expo start;
-      expect \"Proceed anonymously\" { 
-        sleep 1;
-        send \"\033\[B\"; 
-        sleep 0.5;
-        send \"\r\"; 
-      };
-      interact;
-      '"
+      # Helps file watching on Windows/WSL2
+      - CHOKIDAR_USEPOLLING=true
     stdin_open: true
     tty: true

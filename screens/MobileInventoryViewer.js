@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -13,13 +13,13 @@ import {
   UIManager,
   Animated,
 } from 'react-native';
-import { 
-  ArrowLeft, 
-  Search, 
-  X, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Package, 
+import {
+  ArrowLeft,
+  Search,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  Package,
   Info,
   SlidersHorizontal,
   XCircle,
@@ -37,21 +37,21 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // ── Fallback data (used when Supabase is offline) ──
 const initialInventory = [
-  { id: '1', species: 'Actias selene',          commonName: 'Indian Moon Moth',     stock: 145, bin: 'A-12', shelf: '03', updatedAt: null },
-  { id: '2', species: 'Attacus atlas',           commonName: 'Atlas Moth',           stock: 18,  bin: 'B-04', shelf: '01', updatedAt: null },
-  { id: '3', species: 'Morpho peleides',         commonName: 'Blue Morpho',          stock: 35,  bin: 'A-08', shelf: '02', updatedAt: null },
-  { id: '4', species: 'Heliconius charithonia',  commonName: 'Zebra Longwing',       stock: 0,   bin: 'C-15', shelf: '04', updatedAt: null },
-  { id: '5', species: 'Caligo eurilochus',       commonName: 'Forest Giant Owl',     stock: 67,  bin: 'A-22', shelf: '01', updatedAt: null },
-  { id: '6', species: 'Danaus plexippus',        commonName: 'Monarch Butterfly',    stock: 42,  bin: 'B-10', shelf: '03', updatedAt: null },
-  { id: '7', species: 'Graphium sarpedon',       commonName: 'Common Bluebottle',    stock: 3,   bin: 'C-02', shelf: '02', updatedAt: null },
-  { id: '8', species: 'Papilio palinurus',       commonName: 'Emerald Swallowtail',  stock: 84,  bin: 'B-14', shelf: '05', updatedAt: null },
+  { id: '1', species: 'Actias selene', commonName: 'Indian Moon Moth', stock: 145, bin: 'A-12', shelf: '03', updatedAt: null },
+  { id: '2', species: 'Attacus atlas', commonName: 'Atlas Moth', stock: 18, bin: 'B-04', shelf: '01', updatedAt: null },
+  { id: '3', species: 'Morpho peleides', commonName: 'Blue Morpho', stock: 35, bin: 'A-08', shelf: '02', updatedAt: null },
+  { id: '4', species: 'Heliconius charithonia', commonName: 'Zebra Longwing', stock: 0, bin: 'C-15', shelf: '04', updatedAt: null },
+  { id: '5', species: 'Caligo eurilochus', commonName: 'Forest Giant Owl', stock: 67, bin: 'A-22', shelf: '01', updatedAt: null },
+  { id: '6', species: 'Danaus plexippus', commonName: 'Monarch Butterfly', stock: 42, bin: 'B-10', shelf: '03', updatedAt: null },
+  { id: '7', species: 'Graphium sarpedon', commonName: 'Common Bluebottle', stock: 3, bin: 'C-02', shelf: '02', updatedAt: null },
+  { id: '8', species: 'Papilio palinurus', commonName: 'Emerald Swallowtail', stock: 84, bin: 'B-14', shelf: '05', updatedAt: null },
 ];
 
 const getStockLevel = (stock) => {
-  if (stock === 0)                  return { label: 'Out of Stock', color: '#ef4444', bgColor: '#fef2f2', borderColor: '#fecaca', type: 'out'    };
-  if (stock >= 1 && stock <= 19)   return { label: 'Low Stock',    color: '#f97316', bgColor: '#fff7ed', borderColor: '#ffedd5', type: 'low'    };
-  if (stock >= 20 && stock <= 49)  return { label: 'Medium Stock', color: '#eab308', bgColor: '#fef9c3', borderColor: '#fef08a', type: 'medium' };
-  return                                   { label: 'High Stock',  color: '#10b981', bgColor: '#ecfdf5', borderColor: '#a7f3d0', type: 'high'   };
+  if (stock === 0) return { label: 'Out of Stock', color: '#ef4444', bgColor: '#fef2f2', borderColor: '#fecaca', type: 'out' };
+  if (stock >= 1 && stock <= 19) return { label: 'Low Stock', color: '#f97316', bgColor: '#fff7ed', borderColor: '#ffedd5', type: 'low' };
+  if (stock >= 20 && stock <= 49) return { label: 'Medium Stock', color: '#eab308', bgColor: '#fef9c3', borderColor: '#fef08a', type: 'medium' };
+  return { label: 'High Stock', color: '#10b981', bgColor: '#ecfdf5', borderColor: '#a7f3d0', type: 'high' };
 };
 
 const formatUpdatedAt = (isoString) => {
@@ -68,12 +68,12 @@ const formatUpdatedAt = (isoString) => {
 };
 
 export default function MobileInventoryViewer({ navigation }) {
-  const [searchQuery, setSearchQuery]   = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL');
-  const [inventory, setInventory]       = useState(initialInventory);
-  const [isLoading, setIsLoading]       = useState(false);
-  const [dbStatus, setDbStatus]         = useState('checking');
-  const [expandedId, setExpandedId]     = useState(null);
+  const [inventory, setInventory] = useState(initialInventory);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState('checking');
+  const [expandedId, setExpandedId] = useState(null);
 
   // ── Load full inventory from Supabase (no limit) ──
   useEffect(() => {
@@ -97,27 +97,27 @@ export default function MobileInventoryViewer({ navigation }) {
           const formatted = data.map((item, index) => {
             const get = (key) => Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase());
 
-            const genusKey        = get('genus');
-            const speciesKey      = get('species');
-            const nameKey         = get('name');
-            const stockKey        = get('quantity') || get('stock');
-            const binKey          = get('bin');
-            const shelfKey        = get('shelf');
-            const updatedAtKey    = get('updated_at') || get('updatedat') || get('last_updated');
+            const genusKey = get('genus');
+            const speciesKey = get('species');
+            const nameKey = get('name');
+            const stockKey = get('quantity') || get('stock');
+            const binKey = get('bin');
+            const shelfKey = get('shelf');
+            const updatedAtKey = get('updated_at') || get('updatedat') || get('last_updated');
 
-            const genusVal    = genusKey  ? item[genusKey]   : '';
-            const speciesVal  = speciesKey ? item[speciesKey] : '';
-            const nameVal     = nameKey   ? item[nameKey]    : '';
+            const genusVal = genusKey ? item[genusKey] : '';
+            const speciesVal = speciesKey ? item[speciesKey] : '';
+            const nameVal = nameKey ? item[nameKey] : '';
 
             let scientific = '';
             if (genusVal && speciesVal) scientific = `${genusVal} ${speciesVal}`;
-            else if (genusVal)          scientific = genusVal;
-            else if (speciesVal)        scientific = speciesVal;
-            else                        scientific = nameVal || 'Unknown Specimen';
+            else if (genusVal) scientific = genusVal;
+            else if (speciesVal) scientific = speciesVal;
+            else scientific = nameVal || 'Unknown Specimen';
 
-            const stockVal     = stockKey    && typeof item[stockKey] === 'number' ? item[stockKey] : 0;
-            const binVal       = binKey      && item[binKey]   ? item[binKey]   : `A-${String(index + 1).padStart(2, '0')}`;
-            const shelfVal     = shelfKey    && item[shelfKey] ? item[shelfKey] : `0${(index % 5) + 1}`;
+            const stockVal = stockKey && typeof item[stockKey] === 'number' ? item[stockKey] : 0;
+            const binVal = binKey && item[binKey] ? item[binKey] : `A-${String(index + 1).padStart(2, '0')}`;
+            const shelfVal = shelfKey && item[shelfKey] ? item[shelfKey] : `0${(index % 5) + 1}`;
             const updatedAtVal = updatedAtKey && item[updatedAtKey] ? item[updatedAtKey] : null;
 
             return {
@@ -147,7 +147,7 @@ export default function MobileInventoryViewer({ navigation }) {
     loadInventory();
   }, []);
 
-  const totalItems    = inventory.length;
+  const totalItems = inventory.length;
   const lowStockCount = inventory.filter(item => item.stock < 20).length;
 
   const filteredInventory = useMemo(() => {
@@ -158,8 +158,8 @@ export default function MobileInventoryViewer({ navigation }) {
         item.commonName.toLowerCase().includes(q) ||
         item.bin.toLowerCase().includes(q);
       if (!matchesSearch) return false;
-      if (activeFilter === 'HIGH')    return item.stock >= 50;
-      if (activeFilter === 'MEDIUM')  return item.stock >= 20 && item.stock <= 49;
+      if (activeFilter === 'HIGH') return item.stock >= 50;
+      if (activeFilter === 'MEDIUM') return item.stock >= 20 && item.stock <= 49;
       if (activeFilter === 'LOW_OUT') return item.stock < 20;
       return true;
     });
@@ -176,26 +176,21 @@ export default function MobileInventoryViewer({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Slate Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            style={styles.backButton} 
+          <TouchableOpacity
+            style={styles.backButton}
             onPress={() => navigation.goBack()}
             activeOpacity={0.7}
           >
             <ArrowLeft size={20} color="#f8fafc" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Warehouse Inventory</Text>
-          {dbStatus === 'connected_live' && (
-            <View style={[styles.statusBadgeHeader, styles.statusBadgeHeaderLive]}>
-              <Text style={styles.statusBadgeHeaderText}>Live</Text>
-            </View>
-          )}
           {dbStatus === 'connected_empty' && (
             <View style={[styles.statusBadgeHeader, styles.statusBadgeHeaderEmpty]}>
               <Text style={styles.statusBadgeHeaderText}>Empty</Text>
@@ -256,9 +251,9 @@ export default function MobileInventoryViewer({ navigation }) {
       {/* Filter Tabs */}
       <View style={styles.tabContainer}>
         {[
-          { key: 'ALL',     label: 'All Items' },
-          { key: 'HIGH',    label: 'High (50+)' },
-          { key: 'MEDIUM',  label: 'Med (20–49)' },
+          { key: 'ALL', label: 'All Items' },
+          { key: 'HIGH', label: 'High (50+)' },
+          { key: 'MEDIUM', label: 'Med (20–49)' },
           { key: 'LOW_OUT', label: `Low / Out (${lowStockCount})` },
         ].map(tab => (
           <TouchableOpacity
@@ -280,7 +275,7 @@ export default function MobileInventoryViewer({ navigation }) {
           <Text style={styles.loadingText}>Fetching inventory from Supabase…</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           style={styles.listContainer}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
@@ -293,8 +288,8 @@ export default function MobileInventoryViewer({ navigation }) {
               const progressPercent = Math.min((item.stock / maxRange) * 100, 100);
 
               let IconComponent = CheckCircle2;
-              if (level.type === 'out')    IconComponent = XCircle;
-              else if (level.type === 'low')    IconComponent = AlertTriangle;
+              if (level.type === 'out') IconComponent = XCircle;
+              else if (level.type === 'low') IconComponent = AlertTriangle;
               else if (level.type === 'medium') IconComponent = Info;
 
               return (
@@ -444,8 +439,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     marginLeft: 4,
   },
-  statusBadgeHeaderLive:    { backgroundColor: 'rgba(16,185,129,0.2)' },
-  statusBadgeHeaderEmpty:   { backgroundColor: 'rgba(234,179,8,0.2)' },
+  statusBadgeHeaderLive: { backgroundColor: 'rgba(16,185,129,0.2)' },
+  statusBadgeHeaderEmpty: { backgroundColor: 'rgba(234,179,8,0.2)' },
   statusBadgeHeaderOffline: { backgroundColor: 'rgba(239,68,68,0.2)' },
   statusBadgeHeaderText: {
     color: '#f8fafc',

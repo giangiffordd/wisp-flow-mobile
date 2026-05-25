@@ -8,9 +8,10 @@ import {
   Alert,
   ActivityIndicator,
   Easing,
+  ScrollView,
 } from 'react-native';
-import { Camera, AlertCircle, ArrowLeft, Hash, Square } from 'lucide-react-native';
-import { fetchRandomSpecimen } from '../src/supabaseClient';
+import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, ChevronRight } from 'lucide-react-native';
+import { fetchRandomSpecimen, supabase } from '../src/supabaseClient';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 const NAVY = '#2B3441';
@@ -48,6 +49,13 @@ export default function YoloCameraModule({ navigation, route }) {
   const tallyRef                    = useRef(0);         // live ref for interval closure
   const countIntervalRef            = useRef(null);
   const scanTimeoutRef              = useRef(null);
+
+  // ── Session log state ──
+  // Each entry: { id, species, commonName, count, source, timestamp }
+  const [sessionLog, setSessionLog]     = useState([]);
+  const [isSyncing, setIsSyncing]       = useState(false);
+  const [syncStatus, setSyncStatus]     = useState(null); // null | 'success' | 'error'
+  const [countingDone, setCountingDone] = useState(false); // true after first stop-count
 
   // ── Pulse animation ──
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -162,17 +170,19 @@ export default function YoloCameraModule({ navigation, route }) {
     scanTimeoutRef.current = setTimeout(async () => {
       try {
         const result = await fetchRandomSpecimen();
+        const qcStatus = Math.random() < 0.7 ? 'pass' : 'flagged'; // 70% pass, 30% flagged
         if (result) {
-          setSpecimen(result);
+          setSpecimen({ ...result, qcStatus });
           setSource('supabase');
         } else {
           const fb = FALLBACK_SPECIMENS[Math.floor(Math.random() * FALLBACK_SPECIMENS.length)];
-          setSpecimen(fb);
+          setSpecimen({ ...fb, qcStatus });
           setSource('fallback');
         }
       } catch {
         const fb = FALLBACK_SPECIMENS[Math.floor(Math.random() * FALLBACK_SPECIMENS.length)];
-        setSpecimen(fb);
+        const qcStatus = Math.random() < 0.7 ? 'pass' : 'flagged';
+        setSpecimen({ ...fb, qcStatus });
         setSource('fallback');
       } finally {
         setIsLoading(false);
@@ -194,13 +204,28 @@ export default function YoloCameraModule({ navigation, route }) {
     }, 1500);
   };
 
-  // ── Stop counting and save result ──
-  const stopCounting = () => {
+  // ── Stop counting, save result to session log ──
+  const stopCounting = (saveToLog = false) => {
     if (countIntervalRef.current) {
       clearInterval(countIntervalRef.current);
       countIntervalRef.current = null;
     }
     setIsCounting(false);
+    setCountingDone(true);
+
+    if (saveToLog && specimen && tallyRef.current > 0) {
+      const entry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        species: specimen.species,
+        commonName: specimen.commonName,
+        count: tallyRef.current,
+        source: source,
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        qcStatus: specimen.qcStatus,
+      };
+      setSessionLog(prev => [entry, ...prev]);
+      setSyncStatus(null); // reset sync status since we have new data
+    }
   };
 
   // ── Handle Start Scan button ──
@@ -211,6 +236,7 @@ export default function YoloCameraModule({ navigation, route }) {
     setTally(0);
     tallyRef.current = 0;
     setIsCounting(false);
+    setCountingDone(false);
     if (countIntervalRef.current) {
       clearInterval(countIntervalRef.current);
       countIntervalRef.current = null;
@@ -222,42 +248,117 @@ export default function YoloCameraModule({ navigation, route }) {
     await doFetchSpecimen();
   };
 
-  // ── Handle Stop Scan — navigate back with count data if counting ──
+  // ── Scan Next: keep scanning session alive, fetch another specimen ──
+  const handleScanNext = async () => {
+    setSpecimen(null);
+    setSource(null);
+    setTally(0);
+    tallyRef.current = 0;
+    setIsCounting(false);
+    setCountingDone(false);
+    if (countIntervalRef.current) {
+      clearInterval(countIntervalRef.current);
+      countIntervalRef.current = null;
+    }
+    await doFetchSpecimen();
+  };
+
+  // ── Handle Stop Scan — save current count if counting, then stop ──
   const handleStopScan = () => {
-    stopCounting();
+    // If actively counting when stop pressed, save that count to log first
+    stopCounting(isCounting);
     setIsScanning(false);
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
     }
     setIsLoading(false);
+  };
 
-    if (isCounting && specimen && stepId !== null) {
-      const finalCount = tallyRef.current;
-      const specimenName = specimen.species;
-      // Navigate back to Workflow tab passing the scan result
-      navigation && navigation.navigate('MainTabs', {
-        screen: 'Workflow',
-        params: {
-          scanResult: { stepId, count: finalCount, specimenName },
-        },
-      });
-    } else {
-      navigation && navigation.goBack();
+  // ── Sync session log to Supabase ──
+  const handleSyncSession = async () => {
+    if (sessionLog.length === 0) return;
+    setIsSyncing(true);
+    setSyncStatus(null);
+
+    try {
+      if (!supabase) {
+        // Simulate a sync for offline mode
+        await new Promise(r => setTimeout(r, 1800));
+        setSyncStatus('success');
+        return;
+      }
+
+      // For each session entry, try to find the matching inventory row and increment stock
+      const results = await Promise.all(
+        sessionLog.map(async (entry) => {
+          const speciesParts = entry.species.trim().split(' ');
+          const genus = speciesParts[0] || '';
+          const species = speciesParts.slice(1).join(' ') || '';
+
+          // Find the row
+          const { data: rows, error: fetchErr } = await supabase
+            .from('inventory')
+            .select('id, quantity, stock')
+            .ilike('genus', `%${genus}%`)
+            .limit(1);
+
+          if (fetchErr || !rows || rows.length === 0) return false;
+
+          const row = rows[0];
+          const quantityKey = 'quantity' in row ? 'quantity' : 'stock';
+          const currentQty = row[quantityKey] ?? 0;
+
+          const { error: updateErr } = await supabase
+            .from('inventory')
+            .update({ [quantityKey]: currentQty + entry.count })
+            .eq('id', row.id);
+
+          return !updateErr;
+        })
+      );
+
+      const allOk = results.every(Boolean);
+      setSyncStatus(allOk ? 'success' : 'partial');
+    } catch (err) {
+      console.error('Sync error:', err);
+      setSyncStatus('error');
+    } finally {
+      setIsSyncing(false);
     }
+  };
+
+  // ── Clear session log ──
+  const handleClearSession = () => {
+    Alert.alert(
+      'Clear Session?',
+      'This will remove all scanned entries from this session log.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => {
+          setSessionLog([]);
+          setSyncStatus(null);
+        }},
+      ]
+    );
   };
 
   // ── Tapping detected specimen card — prompt to start counting ──
   const handleSpecimenPress = () => {
-    if (!specimen || isCounting) return;
+    if (!specimen || isCounting || countingDone) return;
     Alert.alert(
       'Start Counting?',
-      `Begin tallying all "${specimen.species}" detections until you stop the scan?`,
+      `Begin tallying all "${specimen.species}" detections until you tap Stop Count?`,
       [
         { text: 'Not Now', style: 'cancel' },
         { text: 'Start Counting', onPress: startCounting },
       ]
     );
+  };
+
+  // ── Stop counting and save to log (called from button) ──
+  const handleStopCount = () => {
+    stopCounting(true);
   };
 
   return (
@@ -297,9 +398,9 @@ export default function YoloCameraModule({ navigation, route }) {
           <>
             <CameraView style={StyleSheet.absoluteFillObject} facing="back" />
             
-            {/* Dark glassmorphic layer when not scanning */}
+            {/* Status badge pinned to top when not scanning */}
             {!isScanning && (
-              <View style={styles.cameraOverlay}>
+              <View style={styles.cameraOverlayTop}>
                 <View style={styles.glassBadge}>
                   <Text style={styles.glassBadgeText}>CAMERA ONLINE</Text>
                 </View>
@@ -334,17 +435,18 @@ export default function YoloCameraModule({ navigation, route }) {
                   width: boxPosition.width,
                   height: boxPosition.height,
                   opacity: boundingBoxOpacity,
+                  borderColor: specimen.qcStatus === 'flagged' ? '#ef4444' : '#10b981',
                 },
               ]}
             >
-              <View style={[styles.boxCorner, styles.boxCornerTL]} />
-              <View style={[styles.boxCorner, styles.boxCornerTR]} />
-              <View style={[styles.boxCorner, styles.boxCornerBL]} />
-              <View style={[styles.boxCorner, styles.boxCornerBR]} />
+              <View style={[styles.boxCorner, styles.boxCornerTL, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerTR, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerBL, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerBR, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
               
-              <View style={styles.boundingBoxLabel}>
+              <View style={[styles.boundingBoxLabel, specimen.qcStatus === 'flagged' && { backgroundColor: '#ef4444' }]}>
                 <Text style={styles.boundingBoxText}>
-                  {specimen.species} ({(85 + Math.floor(Math.random() * 14))}%)
+                  {specimen.species} ({(85 + Math.floor(Math.random() * 14))}%) - {specimen.qcStatus === 'flagged' ? 'FLAGGED' : 'PASS'}
                 </Text>
               </View>
             </Animated.View>
@@ -378,11 +480,6 @@ export default function YoloCameraModule({ navigation, route }) {
           {isScanning && isLoading && (
             <Animated.View style={[styles.scanLine, { transform: [{ translateY }] }]} />
           )}
-
-          {/* Counting pulse ring */}
-          {isCounting && (
-            <View style={styles.countingRing} />
-          )}
         </View>
 
         {/* Controls */}
@@ -396,16 +493,31 @@ export default function YoloCameraModule({ navigation, route }) {
               <Text style={styles.mainButtonText}>Start Scan</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.stopButton} onPress={handleStopScan}>
-              <Square size={16} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.mainButtonText}>Stop Scan</Text>
-            </TouchableOpacity>
+            <View style={styles.scanningControls}>
+              {isCounting ? (
+                <TouchableOpacity style={styles.stopCountButton} onPress={handleStopCount}>
+                  <Square size={15} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.mainButtonText}>Stop Count</Text>
+                </TouchableOpacity>
+              ) : countingDone ? (
+                <TouchableOpacity style={styles.scanNextButton} onPress={handleScanNext}>
+                  <RefreshCw size={15} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.mainButtonText}>Scan Next</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity style={styles.stopButton} onPress={handleStopScan}>
+                <Square size={15} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.mainButtonText}>End Session</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
 
       {/* ── Results Panel ── */}
       <View style={styles.resultsContainer}>
+
+        {/* Live Detection row */}
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsTitle}>Live Detection</Text>
           <View style={[styles.detectionCount, !specimen && styles.detectionCountZero]}>
@@ -414,34 +526,66 @@ export default function YoloCameraModule({ navigation, route }) {
         </View>
 
         {isLoading ? (
-          <View style={styles.emptyState}>
-            <AlertCircle size={28} color={SKY} />
-            <Text style={styles.emptyStateText}>Fetching specimen from inventory…</Text>
+          <View style={styles.detectionLoadingRow}>
+            <ActivityIndicator size="small" color={SKY} />
+            <Text style={styles.emptyStateText}>Scanning for specimen…</Text>
           </View>
         ) : specimen ? (
           <TouchableOpacity
-            style={[styles.detectionCard, isCounting && styles.detectionCardCounting]}
+            style={[
+              styles.detectionCard,
+              isCounting && styles.detectionCardCounting,
+              countingDone && !isCounting && styles.detectionCardDone,
+            ]}
             onPress={handleSpecimenPress}
-            activeOpacity={isCounting ? 1 : 0.75}
+            activeOpacity={(isCounting || countingDone) ? 1 : 0.75}
           >
             <View style={styles.detectionInfo}>
-              <View style={[styles.colorIndicator, { backgroundColor: isCounting ? '#f59e0b' : '#10b981' }]} />
+              <View style={[styles.colorIndicator, {
+                backgroundColor: isCounting 
+                  ? '#f59e0b' 
+                  : specimen.qcStatus === 'flagged' 
+                    ? '#ef4444' 
+                    : '#10b981'
+              }]} />
               <View style={styles.specimenTexts}>
                 <Text style={styles.specimenScientific}>{specimen.species}</Text>
-                <Text style={styles.specimenCommon}>{specimen.commonName}</Text>
-                {!isCounting && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={styles.specimenCommon}>{specimen.commonName}</Text>
+                  <View style={[
+                    styles.qcBadge,
+                    specimen.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+                  ]}>
+                    <Text style={[
+                      styles.qcBadgeText,
+                      specimen.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
+                    ]}>
+                      {specimen.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+                    </Text>
+                  </View>
+                </View>
+                {!isCounting && !countingDone && (
                   <Text style={styles.tapHint}>Tap to start counting</Text>
+                )}
+                {countingDone && (
+                  <Text style={[styles.tapHint, specimen.qcStatus === 'flagged' ? { color: '#ef4444' } : { color: '#10b981' }]}>
+                    {specimen.qcStatus === 'flagged' ? `⚠ Logged ${tally} to session (Flagged)` : `✓ Logged ${tally} to session`}
+                  </Text>
                 )}
               </View>
             </View>
             <View style={styles.rightMeta}>
               {isCounting ? (
-                /* Tally counter */
                 <Animated.View style={[styles.tallyBadge, { transform: [{ scale: tallyScale }] }]}>
                   <Hash size={12} color={SKY} style={{ marginBottom: 1 }} />
                   <Text style={styles.tallyNum}>{tally}</Text>
                   <Text style={styles.tallyLabel}>counted</Text>
                 </Animated.View>
+              ) : countingDone ? (
+                <View style={styles.doneBadge}>
+                  <CheckCircle size={14} color="#10b981" />
+                  <Text style={styles.doneText}>{tally}</Text>
+                </View>
               ) : (
                 <View style={styles.confidenceBadge}>
                   <Text style={styles.confidenceText}>
@@ -459,14 +603,14 @@ export default function YoloCameraModule({ navigation, route }) {
           </TouchableOpacity>
         ) : (
           <View style={styles.emptyState}>
-            <AlertCircle size={32} color="#cbd5e1" />
+            <AlertCircle size={28} color={isScanning ? SKY : '#475569'} />
             <Text style={styles.emptyStateText}>
-              {isScanning ? 'Scanning…' : 'Press Start Scan to detect a specimen'}
+              {isScanning ? 'Scanning environment…' : 'Press Start Scan to detect a specimen'}
             </Text>
           </View>
         )}
 
-        {/* Counting summary row */}
+        {/* Counting live summary */}
         {isCounting && specimen && (
           <View style={styles.countingSummaryRow}>
             <View style={styles.countingDot} />
@@ -475,6 +619,116 @@ export default function YoloCameraModule({ navigation, route }) {
             </Text>
           </View>
         )}
+
+        {/* ── Session Log ── */}
+        {sessionLog.length > 0 && (
+          <View style={styles.sessionLogContainer}>
+
+            {/* Session log header */}
+            <View style={styles.sessionLogHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.sessionLogTitle}>Session Log</Text>
+                <View style={styles.sessionCountBadge}>
+                  <Text style={styles.sessionCountText}>{sessionLog.length}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={handleClearSession} style={styles.clearLogButton}>
+                <Trash2 size={13} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Log entries */}
+            <ScrollView
+              style={styles.sessionLogScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+            >
+              {sessionLog.map((entry, idx) => (
+                <View
+                  key={entry.id}
+                  style={[
+                    styles.sessionLogEntry,
+                    idx === 0 && (entry.qcStatus === 'flagged' ? styles.sessionLogEntryLatestFlagged : styles.sessionLogEntryLatest),
+                  ]}
+                >
+                  <View style={styles.sessionEntryLeft}>
+                    <View style={[
+                      styles.sessionEntryDot, 
+                      idx === 0 && { backgroundColor: entry.qcStatus === 'flagged' ? '#ef4444' : '#10b981' }
+                    ]} />
+                    <View>
+                      <Text style={styles.sessionEntrySpecies}>{entry.species}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 1 }}>
+                        <Text style={styles.sessionEntryMeta}>{entry.commonName} · {entry.timestamp}</Text>
+                        {entry.qcStatus && (
+                          <View style={[
+                            styles.qcBadgeMini,
+                            entry.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+                          ]}>
+                            <Text style={[
+                              styles.qcBadgeTextMini,
+                              entry.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
+                            ]}>
+                              {entry.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.sessionEntryRight}>
+                    <Text style={styles.sessionEntryCount}>+{entry.count}</Text>
+                    {entry.source === 'supabase' && (
+                      <Text style={[styles.sourceTag, styles.sourceTagLive, { fontSize: 8 }]}>DB</Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Sync bar */}
+            <View style={styles.syncBar}>
+              {syncStatus === 'success' && (
+                <View style={styles.syncStatusRow}>
+                  <CheckCircle size={14} color="#10b981" />
+                  <Text style={[styles.syncStatusText, { color: '#10b981' }]}>Synced to database!</Text>
+                </View>
+              )}
+              {syncStatus === 'partial' && (
+                <View style={styles.syncStatusRow}>
+                  <AlertCircle size={14} color="#f59e0b" />
+                  <Text style={[styles.syncStatusText, { color: '#f59e0b' }]}>Partially synced</Text>
+                </View>
+              )}
+              {syncStatus === 'error' && (
+                <View style={styles.syncStatusRow}>
+                  <AlertCircle size={14} color="#ef4444" />
+                  <Text style={[styles.syncStatusText, { color: '#ef4444' }]}>Sync failed</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.syncButton,
+                  isSyncing && styles.syncButtonDisabled,
+                  syncStatus === 'success' && styles.syncButtonSuccess,
+                ]}
+                onPress={handleSyncSession}
+                disabled={isSyncing || sessionLog.length === 0}
+              >
+                {isSyncing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Upload size={14} color="#fff" style={{ marginRight: 6 }} />
+                )}
+                <Text style={styles.syncButtonText}>
+                  {isSyncing ? 'Syncing…' : syncStatus === 'success' ? 'Re-Sync' : 'Sync to Database'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        )}
+
       </View>
     </View>
   );
@@ -591,16 +845,21 @@ const styles = StyleSheet.create({
 
   cameraControls: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 25,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    paddingBottom: 32,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
     zIndex: 50,
+  },
+  scanningControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   startButton: {
     flexDirection: 'row',
@@ -615,15 +874,33 @@ const styles = StyleSheet.create({
   stopButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 36,
-    paddingVertical: 14,
-    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
     backgroundColor: '#dc2626',
+  },
+  stopCountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#f59e0b',
+  },
+  scanNextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#2B3441',
+    borderWidth: 1.5,
+    borderColor: SKY,
   },
   mainButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 14,
   },
 
   // ── Results ──
@@ -632,25 +909,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e293b',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     marginTop: -20,
   },
   resultsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   resultsTitle: {
     color: '#f8fafc',
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
   },
   detectionCount: {
     backgroundColor: '#2B3441',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -663,7 +941,14 @@ const styles = StyleSheet.create({
   detectionCountText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 13,
+  },
+  detectionLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
   },
 
   // ── Detection Card ──
@@ -672,7 +957,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#0f172a',
-    padding: 16,
+    padding: 14,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#334155',
@@ -680,6 +965,27 @@ const styles = StyleSheet.create({
   detectionCardCounting: {
     borderColor: '#f59e0b',
     borderWidth: 1.5,
+  },
+  detectionCardDone: {
+    borderColor: 'rgba(16,185,129,0.4)',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(16,185,129,0.04)',
+  },
+  doneBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.3)',
+  },
+  doneText: {
+    color: '#10b981',
+    fontWeight: '800',
+    fontSize: 14,
   },
   detectionInfo: {
     flexDirection: 'row',
@@ -778,10 +1084,10 @@ const styles = StyleSheet.create({
   countingSummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 8,
     backgroundColor: 'rgba(245,158,11,0.08)',
     borderRadius: 10,
-    padding: 10,
+    padding: 8,
     borderWidth: 1,
     borderColor: 'rgba(245,158,11,0.2)',
     gap: 8,
@@ -794,13 +1100,146 @@ const styles = StyleSheet.create({
   },
   countingSummaryText: {
     color: '#94a3b8',
-    fontSize: 12,
+    fontSize: 11,
     flex: 1,
   },
   countingSummaryBold: {
     color: '#f59e0b',
     fontWeight: '700',
     fontStyle: 'italic',
+  },
+
+  // ── Session Log ──
+  sessionLogContainer: {
+    marginTop: 10,
+    backgroundColor: '#0f172a',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#1e3a5f',
+    overflow: 'hidden',
+  },
+  sessionLogHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e3a5f',
+  },
+  sessionLogTitle: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  sessionCountBadge: {
+    backgroundColor: '#1e3a5f',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(184,212,232,0.2)',
+  },
+  sessionCountText: {
+    color: SKY,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  clearLogButton: {
+    padding: 4,
+  },
+  sessionLogScroll: {
+    maxHeight: 130,
+  },
+  sessionLogEntry: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(30,58,95,0.5)',
+  },
+  sessionLogEntryLatest: {
+    backgroundColor: 'rgba(16,185,129,0.05)',
+  },
+  sessionEntryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  sessionEntryDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: SKY,
+    flexShrink: 0,
+  },
+  sessionEntrySpecies: {
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '700',
+    fontStyle: 'italic',
+  },
+  sessionEntryMeta: {
+    color: '#475569',
+    fontSize: 10,
+    marginTop: 1,
+  },
+  sessionEntryRight: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  sessionEntryCount: {
+    color: '#10b981',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  // ── Sync Bar ──
+  syncBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1e3a5f',
+    gap: 10,
+  },
+  syncStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flex: 1,
+  },
+  syncStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2B3441',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: SKY,
+  },
+  syncButtonDisabled: {
+    opacity: 0.5,
+  },
+  syncButtonSuccess: {
+    borderColor: '#10b981',
+  },
+  syncButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
   },
 
   // ── Empty state ──
@@ -866,6 +1305,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 2,
   },
+  cameraOverlayTop: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 14,
+    zIndex: 3,
+  },
   glassBadge: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 1,
@@ -917,5 +1363,42 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 10,
     fontWeight: '700',
+  },
+  qcBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  qcBadgePass: {
+    backgroundColor: 'rgba(16,185,129,0.1)',
+    borderColor: 'rgba(16,185,129,0.3)',
+  },
+  qcBadgeFlagged: {
+    backgroundColor: 'rgba(239,68,68,0.1)',
+    borderColor: 'rgba(239,68,68,0.3)',
+  },
+  qcBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  qcBadgeTextPass: {
+    color: '#10b981',
+  },
+  qcBadgeTextFlagged: {
+    color: '#ef4444',
+  },
+  qcBadgeMini: {
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: 0.5,
+  },
+  qcBadgeTextMini: {
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  sessionLogEntryLatestFlagged: {
+    backgroundColor: 'rgba(239,68,68,0.05)',
   },
 });

@@ -1,24 +1,26 @@
-# Use Node 20 LTS as the base image
+# ─────────────────────────────────────────────────────────────────────────────
+# wisp-flow-mobile — unified single image
+# Includes the Expo React Native app AND specimens_full_clean.txt
+# (specimens data is bundled via COPY . . — no separate image needed)
+# ─────────────────────────────────────────────────────────────────────────────
 FROM node:20-alpine
 
-# Set the working directory inside the container
-WORKDIR /app
-
-# Install system dependencies needed for compiling native npm modules (if any)
+# System dependencies for native npm modules
 RUN apk add --no-cache bash libc6-compat python3 make g++
 
-# Copy package management files first for efficient caching
+WORKDIR /app
+
+# Copy package files first for efficient layer caching
 COPY package.json package-lock.json ./
 
-# Install npm dependencies
+# Install dependencies
 RUN npm ci
 
-# Copy the rest of the application files
+# Copy the entire project (includes specimens_full_clean.txt automatically)
 COPY . .
 
-# Expose Metro bundler port (8081 is the default for Expo/React Native)
+# Metro bundler port
 EXPOSE 8081
 
-# Default command to start the dev server
-# Using --tunnel is recommended inside Docker to allow physical phones to connect
-CMD ["npx", "expo", "start"]
+# Start Expo in LAN mode → prints QR code in terminal so phones can connect
+CMD ["npx", "expo", "start", "--lan"]

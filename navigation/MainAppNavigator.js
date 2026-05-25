@@ -1,14 +1,16 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Activity, Menu as MenuIcon } from 'lucide-react-native';
+import { Activity, ClipboardList, Package } from 'lucide-react-native';
 
 import WorkflowModule from '../screens/WorkflowModule';
-import MenuScreen from '../screens/MenuScreen';
+import TaskHistoryPendingLogs from '../screens/TaskHistoryPendingLogs';
+import MobileInventoryViewer from '../screens/MobileInventoryViewer';
 import GlobalHeader from '../components/GlobalHeader';
 
 const Tab = createBottomTabNavigator();
 
 const NAVY = '#2B3441';
+const SKY  = '#B8D4E8';
 
 export default function MainAppNavigator({ navigation }) {
   const handleLogout = () => {
@@ -23,8 +25,9 @@ export default function MainAppNavigator({ navigation }) {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          if (route.name === 'Workflow') return <Activity size={size} color={color} />;
-          if (route.name === 'Menu')     return <MenuIcon size={size} color={color} />;
+          if (route.name === 'Workflow')  return <Activity     size={size} color={color} />;
+          if (route.name === 'History')   return <ClipboardList size={size} color={color} />;
+          if (route.name === 'Inventory') return <Package      size={size} color={color} />;
         },
         tabBarActiveTintColor: NAVY,
         tabBarInactiveTintColor: '#94a3b8',
@@ -42,7 +45,7 @@ export default function MainAppNavigator({ navigation }) {
           shadowRadius: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
         },
         header: () => (
@@ -54,8 +57,21 @@ export default function MainAppNavigator({ navigation }) {
         ),
       })}
     >
-      <Tab.Screen name="Workflow" component={WorkflowModule} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
+      <Tab.Screen
+        name="Workflow"
+        component={WorkflowModule}
+        options={{ tabBarLabel: 'Workflow' }}
+      />
+      <Tab.Screen
+        name="History"
+        component={TaskHistoryPendingLogs}
+        options={{ tabBarLabel: 'Task History' }}
+      />
+      <Tab.Screen
+        name="Inventory"
+        component={MobileInventoryViewer}
+        options={{ tabBarLabel: 'Inventory' }}
+      />
     </Tab.Navigator>
   );
 }
