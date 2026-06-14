@@ -8,45 +8,53 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Animated,
-  Easing,
+  ScrollView,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react-native';
+import { COLORS } from '../theme';
 
-// ─────────────────────────────────────────────
-//  Color Palette (matches WispFlow butterfly logo)
-// ─────────────────────────────────────────────
-const COLORS = {
-  skyBg: '#B8D4E8',       // light sky blue
-  navy: '#2B3441',        // dark navy (butterfly body / text)
-  navyMid: '#3D4F63',     // mid navy
-  navyLight: '#6B7C93',   // secondary text
-  white: '#FFFFFF',
-  cardBg: '#FFFFFFCC',    // slightly translucent white
-  inputBg: '#EEF5FB',     // very light blue for inputs
-  inputBorder: '#C2D9EA',
-  inputBorderActive: '#2B3441',
-  errorRed: '#D94F4F',
-  errorBg: 'rgba(217,79,79,0.08)',
-  errorBorder: 'rgba(217,79,79,0.3)',
+// ─── Storefront-Aligned Palette ───────────────────────────────
+// Extracted from the wisp-flow storefront screenshot:
+//   Header:   #1A2332  (deep navy)
+//   Page bg:  #F8FAFC  (near-white)
+//   Cards:    #FFFFFF
+//   Accent:   #2563EB  (blue links / active)
+//   Text:     #0F172A  (dark)  → #64748B (muted)
+//   Borders:  #E2E8F0
+const SF = {
+  pageBg:      '#F8FAFC',
+  cardBg:      '#FFFFFF',
+  navy:        '#1A2332',
+  navyAlt:     '#253347',
+  textDark:    '#0F172A',
+  textMid:     '#1E293B',
+  textMuted:   '#64748B',
+  textLight:   '#94A3B8',
+  accent:      '#2563EB',
+  accentLight: '#DBEAFE',
+  border:      '#E2E8F0',
+  borderMid:   '#CBD5E1',
+  inputBg:     '#F1F5F9',
+  white:       '#FFFFFF',
 };
 
-// ─────────────────────────────────────────────
-//  Validation helpers
-// ─────────────────────────────────────────────
+// ─── Validation ───────────────────────────────────────────────
 function validateEmployeeId(id) {
-  if (!id || id.trim().length === 0) return 'Employee ID is required.';
-  if (id.trim().length < 3) return 'Employee ID must be at least 3 characters.';
+  if (!id || id.trim().length === 0) return 'Username is required.';
+  if (id.trim().length < 3) return 'Username must be at least 3 characters.';
   if (!/^[a-zA-Z0-9\-_]+$/.test(id.trim())) return 'Only letters, numbers, hyphens and underscores allowed.';
   return null;
 }
-
 function validatePin(pin) {
-  if (!pin || pin.trim().length === 0) return 'Access PIN is required.';
-  if (!/^\d{4}$/.test(pin.trim())) return 'PIN must be exactly 4 digits.';
+  if (!pin || pin.trim().length === 0) return 'Password is required.';
+  if (!/^\d{4}$/.test(pin.trim())) return 'Password must be exactly 4 digits.';
   return null;
 }
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function MobileStaffDashboard({ navigation }) {
   const [employeeId, setEmployeeId] = useState('');
@@ -55,7 +63,9 @@ export default function MobileStaffDashboard({ navigation }) {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ employeeId: null, pin: null, general: null });
 
-  // ── Validate all fields; returns true if valid ──
+  const [isEmployeeIdFocused, setIsEmployeeIdFocused] = useState(false);
+  const [isPinFocused, setIsPinFocused] = useState(false);
+
   const validate = () => {
     const empErr = validateEmployeeId(employeeId);
     const pinErr = validatePin(pin);
@@ -66,8 +76,6 @@ export default function MobileStaffDashboard({ navigation }) {
   const handleLogin = () => {
     if (!validate()) return;
     setIsLoading(true);
-
-    // Simulate network request
     setTimeout(() => {
       setIsLoading(false);
       if (employeeId.trim() === 'admin' && pin.trim() === '1234') {
@@ -85,26 +93,40 @@ export default function MobileStaffDashboard({ navigation }) {
     setErrors(prev => ({ ...prev, [field]: null, general: null }));
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.kbAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.content}>
+
+          {/* ── Butterfly watermark (subtle, behind brand section) ── */}
+          <View style={styles.watermarkContainer} pointerEvents="none">
+            <Image
+              source={require('../assets/images/butterfly-watermark.png')}
+              style={styles.watermarkImage}
+              resizeMode="contain"
+            />
+          </View>
 
           {/* ── Logo / Branding ── */}
           <View style={styles.brandSection}>
-            {/* Decorative butterfly-inspired circles */}
-            <View style={styles.decorCircleLeft} />
-            <View style={styles.decorCircleRight} />
-
-             <Text style={styles.brandTitle}>wisp-flow</Text>
+            <Text style={styles.brandTitle}>wisp-flow</Text>
+            <View style={styles.brandDivider} />
             <Text style={styles.brandTagline}>Factory Operations Portal</Text>
           </View>
 
           {/* ── Login Card ── */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Staff Login</Text>
+            <Text style={styles.cardSubtitle}>Enter your credentials to access the system</Text>
 
             {/* General Error */}
             {errors.general ? (
@@ -114,23 +136,30 @@ export default function MobileStaffDashboard({ navigation }) {
               </View>
             ) : null}
 
-            {/* Employee ID */}
+            {/* Username */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Employee ID</Text>
+              <Text style={styles.label}>Username</Text>
               <View style={[
                 styles.inputRow,
                 errors.employeeId && styles.inputRowError,
+                isEmployeeIdFocused && styles.inputRowFocused,
               ]}>
-                <User size={16} color={errors.employeeId ? COLORS.errorRed : COLORS.navyLight} style={styles.inputIcon} />
+                <User 
+                  size={16} 
+                  color={errors.employeeId ? COLORS.errorRed : (isEmployeeIdFocused ? SF.accent : SF.textLight)} 
+                  style={styles.inputIcon} 
+                />
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. EMP-1234 or admin"
-                  placeholderTextColor={COLORS.navyLight}
+                  placeholder="Enter your username"
+                  placeholderTextColor={SF.textLight}
                   value={employeeId}
                   onChangeText={(v) => { setEmployeeId(v); clearError('employeeId'); }}
                   autoCapitalize="none"
                   autoCorrect={false}
                   returnKeyType="next"
+                  onFocus={() => setIsEmployeeIdFocused(true)}
+                  onBlur={() => setIsEmployeeIdFocused(false)}
                 />
               </View>
               {errors.employeeId ? (
@@ -138,18 +167,23 @@ export default function MobileStaffDashboard({ navigation }) {
               ) : null}
             </View>
 
-            {/* Access PIN */}
+            {/* Password */}
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Access PIN</Text>
+              <Text style={styles.label}>Password</Text>
               <View style={[
                 styles.inputRow,
                 errors.pin && styles.inputRowError,
+                isPinFocused && styles.inputRowFocused,
               ]}>
-                <Lock size={16} color={errors.pin ? COLORS.errorRed : COLORS.navyLight} style={styles.inputIcon} />
+                <Lock 
+                  size={16} 
+                  color={errors.pin ? COLORS.errorRed : (isPinFocused ? SF.accent : SF.textLight)} 
+                  style={styles.inputIcon} 
+                />
                 <TextInput
                   style={styles.input}
-                  placeholder="4-digit PIN"
-                  placeholderTextColor={COLORS.navyLight}
+                  placeholder="Enter your password"
+                  placeholderTextColor={SF.textLight}
                   value={pin}
                   onChangeText={(v) => { setPin(v); clearError('pin'); }}
                   secureTextEntry={!pinVisible}
@@ -157,6 +191,8 @@ export default function MobileStaffDashboard({ navigation }) {
                   maxLength={4}
                   returnKeyType="done"
                   onSubmitEditing={handleLogin}
+                  onFocus={() => setIsPinFocused(true)}
+                  onBlur={() => setIsPinFocused(false)}
                 />
                 <TouchableOpacity
                   onPress={() => setPinVisible(v => !v)}
@@ -164,8 +200,8 @@ export default function MobileStaffDashboard({ navigation }) {
                   activeOpacity={0.7}
                 >
                   {pinVisible
-                    ? <EyeOff size={16} color={COLORS.navyLight} />
-                    : <Eye size={16} color={COLORS.navyLight} />
+                    ? <EyeOff size={16} color={isPinFocused ? SF.accent : SF.textLight} />
+                    : <Eye size={16} color={isPinFocused ? SF.accent : SF.textLight} />
                   }
                 </TouchableOpacity>
               </View>
@@ -174,7 +210,12 @@ export default function MobileStaffDashboard({ navigation }) {
               ) : null}
             </View>
 
-            {/* Authenticate Button */}
+            {/* Forgot password link */}
+            <TouchableOpacity style={styles.forgotRow} activeOpacity={0.7}>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+
+            {/* Login Button — storefront dark navy */}
             <TouchableOpacity
               style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
               onPress={handleLogin}
@@ -182,8 +223,8 @@ export default function MobileStaffDashboard({ navigation }) {
               activeOpacity={0.85}
             >
               {isLoading
-                ? <ActivityIndicator color={COLORS.white} />
-                : <Text style={styles.loginBtnText}>Authenticate</Text>
+                ? <ActivityIndicator color={SF.white} />
+                : <Text style={styles.loginBtnText}>Login</Text>
               }
             </TouchableOpacity>
 
@@ -192,7 +233,8 @@ export default function MobileStaffDashboard({ navigation }) {
             </Text>
           </View>
 
-        </View>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -201,52 +243,61 @@ export default function MobileStaffDashboard({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.skyBg,
+    backgroundColor: SF.pageBg, // Storefront near-white background
   },
   kbAvoid: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+    position: 'relative', // anchor for the watermark
+  },
+
+  // ── Butterfly Watermark ──
+  watermarkContainer: {
+    position: 'absolute',
+    top: '8%',
+    right: -20,
+    width: SCREEN_WIDTH * 0.55,
+    height: SCREEN_WIDTH * 0.55,
+    zIndex: 0,
+    opacity: 0.06,
+  },
+  watermarkImage: {
+    width: '100%',
+    height: '100%',
   },
 
   // ── Branding ──
   brandSection: {
     alignItems: 'center',
-    marginBottom: 36,
-    position: 'relative',
-  },
-  decorCircleLeft: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(43,52,65,0.06)',
-    left: -8,
-    top: 10,
-  },
-  decorCircleRight: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(43,52,65,0.05)',
-    right: 0,
-    top: 0,
+    marginBottom: 32,
+    zIndex: 1,
   },
   brandTitle: {
     fontSize: 42,
     fontWeight: '800',
-    color: COLORS.navy,
+    color: SF.navy, // Storefront dark navy
     letterSpacing: 2,
     fontStyle: 'italic',
   },
+  brandDivider: {
+    width: 40,
+    height: 3,
+    backgroundColor: SF.accent,
+    borderRadius: 2,
+    marginTop: 10,
+    marginBottom: 8,
+  },
   brandTagline: {
     fontSize: 12,
-    color: COLORS.navyMid,
-    marginTop: 8,
+    color: SF.textMuted,
     fontWeight: '700',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -254,23 +305,29 @@ const styles = StyleSheet.create({
 
   // ── Card ──
   card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 28,
+    backgroundColor: SF.cardBg,
+    borderRadius: 20,
     padding: 28,
-    shadowColor: COLORS.navy,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.14,
-    shadowRadius: 24,
-    elevation: 10,
+    zIndex: 1,
+    shadowColor: SF.navy,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: 'rgba(43,52,65,0.08)',
+    borderColor: SF.border,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: COLORS.navy,
-    marginBottom: 20,
+    color: SF.textDark,
     letterSpacing: 0.3,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    color: SF.textMuted,
+    marginBottom: 20,
+    marginTop: 4,
   },
 
   // ── Errors ──
@@ -305,7 +362,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: COLORS.navy,
+    color: SF.textMid,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 8,
@@ -313,10 +370,10 @@ const styles = StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
+    backgroundColor: SF.inputBg,
     borderWidth: 1.5,
-    borderColor: COLORS.inputBorder,
-    borderRadius: 14,
+    borderColor: SF.border,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
   },
@@ -324,13 +381,17 @@ const styles = StyleSheet.create({
     borderColor: COLORS.errorRed,
     backgroundColor: COLORS.errorBg,
   },
+  inputRowFocused: {
+    borderColor: SF.accent,
+    backgroundColor: SF.accentLight,
+  },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: COLORS.navy,
+    color: SF.textDark,
     fontWeight: '500',
   },
   eyeBtn: {
@@ -338,14 +399,26 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
+  // ── Forgot Password ──
+  forgotRow: {
+    alignItems: 'flex-end',
+    marginBottom: 16,
+    marginTop: -8,
+  },
+  forgotText: {
+    fontSize: 12,
+    color: SF.accent,
+    fontWeight: '600',
+  },
+
   // ── Button ──
   loginBtn: {
-    backgroundColor: COLORS.navy,
-    borderRadius: 14,
+    backgroundColor: SF.navy, // Storefront header dark navy
+    borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
-    shadowColor: COLORS.navy,
+    shadowColor: SF.navy,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
@@ -355,7 +428,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   loginBtnText: {
-    color: COLORS.white,
+    color: SF.white,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -364,12 +437,12 @@ const styles = StyleSheet.create({
   // ── Hint ──
   hintText: {
     textAlign: 'center',
-    color: COLORS.navyLight,
+    color: SF.textLight,
     fontSize: 12,
     marginTop: 14,
   },
   hintCode: {
-    color: COLORS.navy,
+    color: SF.textDark,
     fontWeight: '700',
   },
 });

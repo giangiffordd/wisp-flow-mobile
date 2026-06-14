@@ -7,12 +7,8 @@ import {
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import {
-  Boxes,
-  History,
-  ChevronRight,
-  Cpu
-} from 'lucide-react-native';
+import { Boxes, History, ChevronRight, Cpu } from 'lucide-react-native';
+import { COLORS, SHADOW_SM } from '../theme';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 48) / 2;
@@ -25,10 +21,11 @@ export default function MenuScreen({ navigation }) {
       subtitle: 'Warehouse Stock',
       screen: 'MobileInventoryViewer',
       icon: Boxes,
-      iconColor: '#8b5cf6',
+      iconBg: '#EFF6FF',
+      iconColor: COLORS.primary,
       badge: 'Realtime',
-      badgeColor: '#ede9fe',
-      badgeTextColor: '#5b21b6',
+      badgeBg: '#EFF6FF',
+      badgeColor: COLORS.primary,
     },
     {
       id: 'history',
@@ -36,10 +33,11 @@ export default function MenuScreen({ navigation }) {
       subtitle: 'Pending & Logs',
       screen: 'TaskHistoryPendingLogs',
       icon: History,
-      iconColor: '#ec4899',
+      iconBg: '#FEF2F2',
+      iconColor: COLORS.errorRed,
       badge: 'Review',
-      badgeColor: '#fce7f3',
-      badgeTextColor: '#9d174d',
+      badgeBg: '#FEF2F2',
+      badgeColor: COLORS.errorRed,
     },
   ];
 
@@ -56,15 +54,15 @@ export default function MenuScreen({ navigation }) {
               key={item.id}
               style={styles.card}
               onPress={() => navigation.navigate(item.screen)}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
               <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: item.iconColor + '15' }]}>
-                  <Icon size={24} color={item.iconColor} />
+                <View style={[styles.iconContainer, { backgroundColor: item.iconBg }]}>
+                  <Icon size={22} color={item.iconColor} />
                 </View>
                 {item.badge && (
-                  <View style={[styles.badge, { backgroundColor: item.badgeColor }]}>
-                    <Text style={[styles.badgeText, { color: item.badgeTextColor }]}>{item.badge}</Text>
+                  <View style={[styles.badge, { backgroundColor: item.badgeBg }]}>
+                    <Text style={[styles.badgeText, { color: item.badgeColor }]}>{item.badge}</Text>
                   </View>
                 )}
               </View>
@@ -76,7 +74,7 @@ export default function MenuScreen({ navigation }) {
 
               <View style={styles.cardFooter}>
                 <Text style={styles.launchText}>Open Module</Text>
-                <ChevronRight size={14} color="#94a3b8" />
+                <ChevronRight size={13} color={COLORS.textLight} />
               </View>
             </TouchableOpacity>
           );
@@ -85,7 +83,7 @@ export default function MenuScreen({ navigation }) {
 
       {/* System Status Footer */}
       <View style={styles.systemStatusCard}>
-        <Cpu size={20} color="#64748b" />
+        <Cpu size={18} color={COLORS.textMuted} />
         <View style={styles.systemStatusTextContainer}>
           <Text style={styles.systemStatusTitle}>Wisp Flow Diagnostics</Text>
           <Text style={styles.systemStatusSubtitle}>App Node: Online | Version: v1.0.0</Text>
@@ -99,78 +97,35 @@ export default function MenuScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EFF6FB',
+    backgroundColor: COLORS.pageBg,
   },
   content: {
     padding: 16,
     paddingBottom: 32,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  statCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    gap: 12,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  statIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  statVal: {
-    fontSize: 16,
-    color: '#0f172a',
-    fontWeight: '700',
-  },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 16,
-    letterSpacing: 0.3,
+    color: COLORS.textDark,
+    marginBottom: 14,
+    letterSpacing: 0.2,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   card: {
     width: cardWidth,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 3,
+    borderColor: COLORS.borderLight,
+    ...SHADOW_SM,
     justifyContent: 'space-between',
-    minHeight: 160,
+    minHeight: 150,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -179,33 +134,33 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '700',
   },
   cardBody: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#0f172a',
-    marginBottom: 4,
+    color: COLORS.textDark,
+    marginBottom: 3,
   },
   cardSubtitle: {
     fontSize: 12,
-    color: '#64748b',
+    color: COLORS.textMuted,
     fontWeight: '500',
   },
   cardFooter: {
@@ -213,40 +168,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-    paddingTop: 12,
+    borderTopColor: COLORS.pageBg,
+    paddingTop: 10,
   },
   launchText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: COLORS.textMuted,
   },
   systemStatusCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.cardBg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 16,
-    padding: 16,
-    gap: 12,
+    borderColor: COLORS.borderLight,
+    borderRadius: 10,
+    padding: 14,
+    gap: 10,
   },
   systemStatusTextContainer: {
     flex: 1,
   },
   systemStatusTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: COLORS.textMid,
   },
   systemStatusSubtitle: {
     fontSize: 11,
-    color: '#64748b',
+    color: COLORS.textMuted,
+    marginTop: 1,
   },
   statusPulse: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10b981',
+    backgroundColor: COLORS.successGreen,
   },
 });

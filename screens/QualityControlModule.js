@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { ShieldCheck, AlertTriangle, Send } from 'lucide-react-native';
+import { COLORS, SHADOW_SM } from '../theme';
 
 export default function QualityControlModule() {
   const [qcNotes, setQcNotes] = useState('');
@@ -12,9 +13,7 @@ export default function QualityControlModule() {
       Alert.alert('Missing Status', 'Please select a QC status before submitting.');
       return;
     }
-
     setIsSubmitting(true);
-    // Simulate submission
     setTimeout(() => {
       setIsSubmitting(false);
       setSelectedStatus(null);
@@ -26,45 +25,46 @@ export default function QualityControlModule() {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
+
+        {/* Inspection status card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Inspection Status</Text>
           <Text style={styles.cardSubtitle}>Batch #BT-9921</Text>
 
           <View style={styles.statusGrid}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
-                styles.statusOption, 
+                styles.statusOption,
                 styles.statusPass,
-                selectedStatus === 'pass' && styles.statusPassSelected
+                selectedStatus === 'pass' && styles.statusPassSelected,
               ]}
               onPress={() => setSelectedStatus('pass')}
             >
-              <ShieldCheck size={32} color={selectedStatus === 'pass' ? '#ffffff' : '#10b981'} />
+              <ShieldCheck size={30} color={selectedStatus === 'pass' ? COLORS.white : COLORS.successGreen} />
               <Text style={[
-                styles.statusText, 
-                styles.statusPassText,
-                selectedStatus === 'pass' && styles.statusTextSelected
+                styles.statusText,
+                { color: selectedStatus === 'pass' ? COLORS.white : COLORS.successGreen },
               ]}>PASS</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
-                styles.statusOption, 
+                styles.statusOption,
                 styles.statusFail,
-                selectedStatus === 'fail' && styles.statusFailSelected
+                selectedStatus === 'fail' && styles.statusFailSelected,
               ]}
               onPress={() => setSelectedStatus('fail')}
             >
-              <AlertTriangle size={32} color={selectedStatus === 'fail' ? '#ffffff' : '#ef4444'} />
+              <AlertTriangle size={30} color={selectedStatus === 'fail' ? COLORS.white : COLORS.errorRed} />
               <Text style={[
-                styles.statusText, 
-                styles.statusFailText,
-                selectedStatus === 'fail' && styles.statusTextSelected
+                styles.statusText,
+                { color: selectedStatus === 'fail' ? COLORS.white : COLORS.errorRed },
               ]}>FAIL</Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* QC notes card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>QC Notes</Text>
           <TextInput
@@ -72,23 +72,25 @@ export default function QualityControlModule() {
             multiline
             numberOfLines={4}
             placeholder="Enter any observations, defects, or general notes..."
-            placeholderTextColor="#94a3b8"
+            placeholderTextColor={COLORS.textLight}
             value={qcNotes}
             onChangeText={setQcNotes}
             textAlignVertical="top"
           />
         </View>
 
-        <TouchableOpacity 
-          style={[styles.submitButton, (!selectedStatus || isSubmitting) && styles.submitButtonDisabled]} 
+        {/* Submit button — ICPI blue primary */}
+        <TouchableOpacity
+          style={[styles.submitButton, (!selectedStatus || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={!selectedStatus || isSubmitting}
         >
           <Text style={styles.submitButtonText}>
             {isSubmitting ? 'Submitting...' : 'Submit Report'}
           </Text>
-          {!isSubmitting && <Send size={18} color="#ffffff" style={{ marginLeft: 8 }} />}
+          {!isSubmitting && <Send size={16} color={COLORS.white} style={{ marginLeft: 8 }} />}
         </TouchableOpacity>
+
       </View>
     </ScrollView>
   );
@@ -97,106 +99,95 @@ export default function QualityControlModule() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: COLORS.pageBg,
   },
   content: {
-    padding: 16,
+    padding: 14,
   },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOW_SM,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 4,
+    color: COLORS.textDark,
+    marginBottom: 3,
   },
   cardSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 20,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 16,
   },
   statusGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
+    gap: 12,
   },
   statusOption: {
     flex: 1,
     alignItems: 'center',
-    padding: 24,
-    borderRadius: 16,
-    borderWidth: 2,
+    padding: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
   },
   statusPass: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
+    backgroundColor: COLORS.successBg,
+    borderColor: COLORS.successBorder,
   },
   statusPassSelected: {
-    backgroundColor: '#10b981',
-    borderColor: '#10b981',
+    backgroundColor: COLORS.successGreen,
+    borderColor: COLORS.successGreen,
   },
   statusFail: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
+    backgroundColor: COLORS.errorBg,
+    borderColor: COLORS.errorBorder,
   },
   statusFailSelected: {
-    backgroundColor: '#ef4444',
-    borderColor: '#ef4444',
+    backgroundColor: COLORS.errorRed,
+    borderColor: COLORS.errorRed,
   },
   statusText: {
-    marginTop: 12,
-    fontSize: 16,
+    marginTop: 10,
+    fontSize: 15,
     fontWeight: '700',
   },
-  statusPassText: {
-    color: '#10b981',
-  },
-  statusFailText: {
-    color: '#ef4444',
-  },
-  statusTextSelected: {
-    color: '#ffffff',
-  },
   textArea: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: COLORS.pageBg,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    color: '#334155',
-    fontSize: 15,
-    minHeight: 120,
+    borderColor: COLORS.borderLight,
+    borderRadius: 8,
+    padding: 12,
+    color: COLORS.textMid,
+    fontSize: 14,
+    minHeight: 110,
   },
   submitButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    padding: 14,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 3,
   },
   submitButtonDisabled: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: COLORS.textLight,
     shadowOpacity: 0,
     elevation: 0,
   },
   submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: COLORS.white,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

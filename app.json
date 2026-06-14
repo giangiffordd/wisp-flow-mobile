@@ -13,15 +13,13 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.giangifford.wispflowmobile"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -36,11 +34,10 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      "expo-router"
+      "expo-web-browser"
     ],
     "experiments": {
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
       "eas": {

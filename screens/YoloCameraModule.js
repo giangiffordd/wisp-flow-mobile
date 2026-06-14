@@ -10,6 +10,8 @@ import {
   Easing,
   ScrollView,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, ChevronRight } from 'lucide-react-native';
 import { fetchRandomSpecimen, supabase } from '../src/supabaseClient';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -28,6 +30,7 @@ const FALLBACK_SPECIMENS = [
 ];
 
 export default function YoloCameraModule({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const stepTitle = route?.params?.stepTitle || 'YOLO Scan';
   const stepId    = route?.params?.stepId    ?? null;
 
@@ -73,6 +76,9 @@ export default function YoloCameraModule({ navigation, route }) {
     outputRange: [10, 240],
   });
 
+  // ── Specimen detected banner fade animation ──
+  const bannerOpacity = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     let pulse;
     if (isScanning) {
@@ -113,8 +119,15 @@ export default function YoloCameraModule({ navigation, route }) {
         duration: 400,
         useNativeDriver: true,
       }).start();
+      // Fade in the specimen detected banner
+      Animated.timing(bannerOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     } else {
       boundingBoxOpacity.setValue(0);
+      bannerOpacity.setValue(0);
     }
   }, [specimen, isLoading]);
 
@@ -196,6 +209,13 @@ export default function YoloCameraModule({ navigation, route }) {
     setTally(1);
     setIsCounting(true);
 
+    // Immediately fade out the Specimen Detected banner & Target Acquired pill
+    Animated.timing(bannerOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start();
+
     // Mock: increment tally every 1.5 seconds (simulates more detections)
     countIntervalRef.current = setInterval(() => {
       tallyRef.current += 1;
@@ -263,16 +283,59 @@ export default function YoloCameraModule({ navigation, route }) {
     await doFetchSpecimen();
   };
 
-  // ── Handle Stop Scan — save current count if counting, then stop ──
-  const handleStopScan = () => {
+  // ── Handle Stop Scan — save to AsyncStorage, then clear all visual state ──
+  const handleStopScan = async () => {
     // If actively counting when stop pressed, save that count to log first
-    stopCounting(isCounting);
-    setIsScanning(false);
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
+    const finalLog = [...sessionLog];
+    if (isCounting && specimen && tallyRef.current > 0) {
+      const entry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        species: specimen.species,
+        commonName: specimen.commonName,
+        count: tallyRef.current,
+        source: source,
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        qcStatus: specimen.qcStatus,
+        stepTitle,
+        stepId,
+      };
+      finalLog.unshift(entry);
     }
+
+    // Persist to AsyncStorage for Task History
+    if (finalLog.length > 0) {
+      try {
+        const existing = await AsyncStorage.getItem('task_history');
+        const prev = existing ? JSON.parse(existing) : [];
+        const merged = [...finalLog.map(e => ({
+          id: `scan-${e.id}`,
+          batchId: stepId ? `STEP-${stepId}` : 'SCAN',
+          stage: stepTitle || 'YOLO Scan',
+          timestamp: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          status: e.qcStatus === 'flagged' ? 'pending' : 'approved',
+          operator: 'EMP-Scan',
+          notes: `${e.species} ×${e.count} detected by YOLO${e.qcStatus === 'flagged' ? ' — Flagged for review' : ''}`,
+        })), ...prev];
+        await AsyncStorage.setItem('task_history', JSON.stringify(merged));
+      } catch (err) {
+        console.warn('AsyncStorage write failed:', err);
+      }
+    }
+
+    // Clear all intervals and visual state
+    if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
+    if (scanTimeoutRef.current) { clearTimeout(scanTimeoutRef.current); scanTimeoutRef.current = null; }
+    setIsScanning(false);
     setIsLoading(false);
+    setSpecimen(null);
+    setSource(null);
+    setTally(0);
+    tallyRef.current = 0;
+    setIsCounting(false);
+    setCountingDone(false);
+    setSessionLog([]);
+    setSyncStatus(null);
+    bannerOpacity.setValue(0);
   };
 
   // ── Sync session log to Supabase ──
@@ -365,7 +428,7 @@ export default function YoloCameraModule({ navigation, route }) {
     <View style={styles.container}>
 
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
@@ -456,13 +519,14 @@ export default function YoloCameraModule({ navigation, route }) {
             {!isScanning && (
               <Camera size={52} color={SKY} style={{ marginBottom: 10 }} />
             )}
+            {/* Idle/loading/counting status — only shown when NOT in target-acquired state */}
             <Text style={[styles.cameraText, isScanning && styles.cameraTextActive]}>
               {isLoading
                 ? 'Scanning environment with YOLOv8...'
                 : isScanning
                   ? isCounting
                     ? `Tracking ${specimen?.species ?? 'specimen'}…`
-                    : 'Target acquired — tap specimen below to count'
+                    : '' // target acquired pill shown separately below
                   : permission?.granted
                     ? 'System ready. Press Start Scan.'
                     : 'Camera offline. Press Start Scan to run simulation.'}
@@ -475,6 +539,18 @@ export default function YoloCameraModule({ navigation, route }) {
               </TouchableOpacity>
             )}
           </Animated.View>
+
+          {/* Specimen Detected Banner — pinned bottom of camera, fades away when counting starts */}
+          {specimen && !isLoading && !isCounting && (
+            <Animated.View style={[styles.specimenBanner, { opacity: bannerOpacity }]}>
+              <View style={styles.specimenBannerDot} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.specimenBannerText}>
+                  Specimen Detected - Tap specimen below to count
+                </Text>
+              </View>
+            </Animated.View>
+          )}
 
           {/* Scanning sweep laser */}
           {isScanning && isLoading && (
@@ -1330,6 +1406,72 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     backgroundColor: '#334155',
     borderColor: '#475569',
+  },
+
+  // ── Specimen Detected Banner ──
+  specimenBanner: {
+    position: 'absolute',
+    bottom: 78,        // just above camera controls row
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.45)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 10,
+    zIndex: 30,
+  },
+  specimenBannerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10b981',
+  },
+  specimenBannerText: {
+    color: '#34d399',
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 0.2,
+  },
+  specimenBannerSub: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+
+  // ── Target Acquired pill (top-right, out of center) ──
+  targetAcquiredPill: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6,
+    zIndex: 25,
+  },
+  targetAcquiredDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10b981',
+  },
+  targetAcquiredText: {
+    color: '#34d399',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
 
   // ── Bounding Box Realism Styles ──

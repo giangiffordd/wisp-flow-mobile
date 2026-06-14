@@ -9,8 +9,11 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { ArrowLeft, Scan, CheckCircle2, Box, Package, ShieldCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS, SHADOW_SM } from '../theme';
 
 export default function PackagingBarcodeScanner({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [scanStatus, setScanStatus] = useState('scanning'); // scanning, success
   const [boxData, setBoxData] = useState(null);
   
@@ -100,7 +103,7 @@ export default function PackagingBarcodeScanner({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Dark Slate Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
@@ -221,26 +224,25 @@ export default function PackagingBarcodeScanner({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.pageBg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
+    backgroundColor: COLORS.headerBg,
     paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: COLORS.headerBorder,
   },
   backButton: {
     padding: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 7,
   },
   headerTitle: {
-    color: '#f8fafc',
+    color: COLORS.textOnDark,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -251,8 +253,8 @@ const styles = StyleSheet.create({
   stageBadge: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#94a3b8',
-    backgroundColor: '#334155',
+    color: COLORS.textLight,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -378,97 +380,94 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 6,
   },
   dataCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 18,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    padding: 16,
     width: '100%',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
+    borderColor: COLORS.borderLight,
+    ...SHADOW_SM,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#1e293b',
+    color: COLORS.textDark,
   },
   divider: {
     height: 1,
-    backgroundColor: '#f1f5f9',
-    marginBottom: 12,
+    backgroundColor: COLORS.pageBg,
+    marginBottom: 10,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 6,
+    marginVertical: 5,
   },
   infoLabel: {
-    color: '#64748b',
+    color: COLORS.textMuted,
     fontSize: 13,
     fontWeight: '500',
   },
   infoValue: {
-    color: '#0f172a',
-    fontSize: 14,
+    color: COLORS.textDark,
+    fontSize: 13,
     fontWeight: '700',
   },
   qtyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: COLORS.primaryMuted,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: COLORS.primaryLight,
   },
   qtyText: {
-    color: '#2563eb',
-    fontSize: 12,
+    color: COLORS.primary,
+    fontSize: 11,
     fontWeight: '600',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
+    backgroundColor: COLORS.successBg,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#bbf7d0',
+    borderColor: COLORS.successBorder,
   },
   statusText: {
-    color: '#166534',
-    fontSize: 12,
+    color: '#065F46',
+    fontSize: 11,
     fontWeight: '600',
   },
   scanButton: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 16,
-    paddingVertical: 16,
+    backgroundColor: COLORS.primary,
+    borderRadius: 8,
+    paddingVertical: 14,
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
-    marginTop: 16,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 3,
+    marginTop: 14,
   },
   scanButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: COLORS.white,
+    fontSize: 14,
     fontWeight: '700',
   },
 });
+

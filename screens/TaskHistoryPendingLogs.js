@@ -1,25 +1,30 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
   LayoutAnimation,
   Platform,
-  UIManager
+  UIManager,
+  Animated,
 } from 'react-native';
-import { 
-  ArrowLeft, 
-  FileSpreadsheet, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  ChevronDown, 
-  ChevronUp, 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ArrowLeft,
+  FileSpreadsheet,
+  Clock,
+  CheckCircle,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
   Calendar,
   Layers
 } from 'lucide-react-native';
+import { COLORS, SHADOW_SM } from '../theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -91,11 +96,45 @@ const initialLogs = [
   },
 ];
 
+export default function TaskHistoryPendingLogs({ navigation, route }) {
+  const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
+  const screenFadeAnim = useRef(new Animated.Value(0)).current;
 
-export default function TaskHistoryPendingLogs({ navigation }) {
+  useEffect(() => {
+    if (isFocused) {
+      screenFadeAnim.setValue(0);
+      Animated.timing(screenFadeAnim, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      screenFadeAnim.setValue(0);
+    }
+  }, [isFocused, screenFadeAnim]);
+
   const [logs, setLogs] = useState(initialLogs);
-  const [activeTab, setActiveTab] = useState('ALL'); // ALL, PENDING, APPROVED, REJECTED
+  const [activeTab, setActiveTab] = useState('ALL');
   const [expandedLogId, setExpandedLogId] = useState(null);
+
+  useEffect(() => {
+    async function loadScanHistory() {
+      try {
+        const raw = await AsyncStorage.getItem('task_history');
+        if (!raw) return;
+        const scanEntries = JSON.parse(raw);
+        setLogs(prev => {
+          const existingIds = new Set(prev.map(l => l.id));
+          const newEntries = scanEntries.filter(e => !existingIds.has(e.id));
+          return newEntries.length > 0 ? [...newEntries, ...prev] : prev;
+        });
+      } catch (err) {
+        console.warn('AsyncStorage read failed:', err);
+      }
+    }
+    loadScanHistory();
+  }, [isFocused]);
 
   const filteredLogs = useMemo(() => {
     if (activeTab === 'ALL') return logs;
@@ -104,34 +143,31 @@ export default function TaskHistoryPendingLogs({ navigation }) {
 
   const toggleExpand = (id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    if (expandedLogId === id) {
-      setExpandedLogId(null);
-    } else {
-      setExpandedLogId(id);
-    }
+    setExpandedLogId(prev => (prev === id ? null : id));
   };
 
+  // ── Status badge matching ICPI pill badges ─────────────────
   const getStatusBadge = (status) => {
     switch (status) {
       case 'pending':
         return (
-          <View style={[styles.statusPill, styles.statusPending]}>
-            <Clock size={12} color="#b45309" style={{ marginRight: 4 }} />
-            <Text style={[styles.statusText, styles.textPending]}>Pending Manager Approval</Text>
+          <View style={[styles.statusPill, { backgroundColor: COLORS.warningBg, borderColor: COLORS.warningBorder }]}>
+            <Clock size={11} color={COLORS.warningAmber} style={{ marginRight: 4 }} />
+            <Text style={[styles.statusText, { color: '#92400E' }]}>Pending Approval</Text>
           </View>
         );
       case 'approved':
         return (
-          <View style={[styles.statusPill, styles.statusApproved]}>
-            <CheckCircle size={12} color="#047857" style={{ marginRight: 4 }} />
-            <Text style={[styles.statusText, styles.textApproved]}>Approved</Text>
+          <View style={[styles.statusPill, { backgroundColor: COLORS.successBg, borderColor: COLORS.successBorder }]}>
+            <CheckCircle size={11} color={COLORS.successGreen} style={{ marginRight: 4 }} />
+            <Text style={[styles.statusText, { color: '#065F46' }]}>Approved</Text>
           </View>
         );
       case 'rejected':
         return (
-          <View style={[styles.statusPill, styles.statusRejected]}>
-            <XCircle size={12} color="#b91c1c" style={{ marginRight: 4 }} />
-            <Text style={[styles.statusText, styles.textRejected]}>Rejected</Text>
+          <View style={[styles.statusPill, { backgroundColor: COLORS.errorBg, borderColor: COLORS.errorBorder }]}>
+            <XCircle size={11} color={COLORS.errorRed} style={{ marginRight: 4 }} />
+            <Text style={[styles.statusText, { color: '#991B1B' }]}>Rejected</Text>
           </View>
         );
       default:
@@ -140,225 +176,214 @@ export default function TaskHistoryPendingLogs({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Slate Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={20} color="#f8fafc" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Task Logs & History</Text>
-        </View>
-        <FileSpreadsheet size={20} color="#cbd5e1" />
-      </View>
+    <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+      <View style={styles.container}>
 
-      {/* 480px Max-Width Centered Wrapper */}
-      <View style={styles.contentWrapper}>
-        {/* Navigation Tabs */}
-        <View style={styles.tabContainer}>
-          {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.activeTab]}
-              onPress={() => {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setActiveTab(tab);
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                {tab.charAt(0) + tab.slice(1).toLowerCase()}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Scrollable Logs List */}
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {filteredLogs.length > 0 ? (
-            filteredLogs.map((log) => {
-              const isExpanded = expandedLogId === log.id;
-
-              return (
-                <View key={log.id} style={styles.logCard}>
-                  {/* Card Header Header (Top Right Status, Top Left Batch ID) */}
-                  <View style={styles.cardTopRow}>
-                    <View style={styles.batchContainer}>
-                      <Text style={styles.batchLabel}>Batch ID</Text>
-                      <Text style={styles.batchIdText}>#{log.batchId}</Text>
-                    </View>
-                    {getStatusBadge(log.status)}
-                  </View>
-
-                  {/* Divider */}
-                  <View style={styles.divider} />
-
-                  {/* Main Details (Stage & Quantity) */}
-                  <TouchableOpacity 
-                    style={styles.cardDetailsButton}
-                    onPress={() => toggleExpand(log.id)}
-                    activeOpacity={0.9}
-                  >
-                    <View style={styles.infoGrid}>
-                      <View style={styles.infoItem}>
-                        <View style={styles.iconLabelRow}>
-                          <Layers size={13} color="#64748b" style={{ marginRight: 6 }} />
-                          <Text style={styles.infoItemLabel}>Workflow Stage</Text>
-                        </View>
-                        <Text style={styles.infoItemVal}>{log.stage}</Text>
-                      </View>
-                    </View>
-
-                    {/* Expand Indicator */}
-                    <View style={styles.expandRow}>
-                      <Calendar size={12} color="#94a3b8" style={{ marginRight: 4 }} />
-                      <Text style={styles.timestampText}>{log.timestamp}</Text>
-                      <View style={styles.flexSpacer} />
-                      <Text style={styles.expandText}>{isExpanded ? 'Hide Details' : 'Show Details'}</Text>
-                      {isExpanded ? (
-                        <ChevronUp size={14} color="#3b82f6" />
-                      ) : (
-                        <ChevronDown size={14} color="#3b82f6" />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-
-                  {/* Expanded Supervisor Notes */}
-                  {isExpanded && (
-                    <View style={styles.notesContainer}>
-                      <Text style={styles.notesTitle}>Audit Trail Notes</Text>
-                      <View style={styles.operatorRow}>
-                        <Text style={styles.operatorLabel}>Submitted By:</Text>
-                        <Text style={styles.operatorValue}>{log.operator}</Text>
-                      </View>
-                      <View style={styles.noteContentBox}>
-                        <Text style={styles.noteText}>{log.notes}</Text>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              );
-            })
-          ) : (
-            <View style={styles.emptyContainer}>
-              <FileSpreadsheet size={36} color="#cbd5e1" style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyTitle}>No Forms Found</Text>
-              <Text style={styles.emptySubtitle}>There are no logs matching this status tab currently registered.</Text>
+        {/* ── Dark Navy Header ── */}
+        {route?.name !== 'History' && (
+          <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <View style={styles.headerLeft}>
+              <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+                <ArrowLeft size={20} color={COLORS.textOnDark} />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Task Logs & History</Text>
             </View>
-          )}
-        </ScrollView>
+            <FileSpreadsheet size={19} color={COLORS.textLight} />
+          </View>
+        )}
+
+        <View style={styles.contentWrapper}>
+          {/* ── Tab bar — ICPI-style segments ── */}
+          <View style={styles.tabContainer}>
+            {['ALL', 'PENDING', 'APPROVED', 'REJECTED'].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tab, activeTab === tab && styles.activeTab]}
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setActiveTab(tab);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                  {tab.charAt(0) + tab.slice(1).toLowerCase()}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+            {filteredLogs.length > 0 ? (
+              filteredLogs.map((log) => {
+                const isExpanded = expandedLogId === log.id;
+                return (
+                  <View key={log.id} style={styles.logCard}>
+                    {/* Top row: batch ID + status badge */}
+                    <View style={styles.cardTopRow}>
+                      <View>
+                        <Text style={styles.batchLabel}>Batch ID</Text>
+                        <Text style={styles.batchIdText}>#{log.batchId}</Text>
+                      </View>
+                      {getStatusBadge(log.status)}
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    {/* Stage details + expand toggle */}
+                    <TouchableOpacity
+                      style={styles.cardDetailsButton}
+                      onPress={() => toggleExpand(log.id)}
+                      activeOpacity={0.9}
+                    >
+                      <View style={styles.infoGrid}>
+                        <View style={styles.infoItem}>
+                          <View style={styles.iconLabelRow}>
+                            <Layers size={12} color={COLORS.textMuted} style={{ marginRight: 5 }} />
+                            <Text style={styles.infoItemLabel}>Workflow Stage</Text>
+                          </View>
+                          <Text style={styles.infoItemVal}>{log.stage}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.expandRow}>
+                        <Calendar size={11} color={COLORS.textLight} style={{ marginRight: 4 }} />
+                        <Text style={styles.timestampText}>{log.timestamp}</Text>
+                        <View style={styles.flexSpacer} />
+                        <Text style={styles.expandText}>{isExpanded ? 'Hide Details' : 'Show Details'}</Text>
+                        {isExpanded
+                          ? <ChevronUp size={13} color={COLORS.primary} />
+                          : <ChevronDown size={13} color={COLORS.primary} />}
+                      </View>
+                    </TouchableOpacity>
+
+                    {/* Expanded notes panel */}
+                    {isExpanded && (
+                      <View style={styles.notesContainer}>
+                        <Text style={styles.notesTitle}>Audit Trail Notes</Text>
+                        <View style={styles.operatorRow}>
+                          <Text style={styles.operatorLabel}>Submitted By:</Text>
+                          <Text style={styles.operatorValue}>{log.operator}</Text>
+                        </View>
+                        <View style={styles.noteContentBox}>
+                          <Text style={styles.noteText}>{log.notes}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.emptyContainer}>
+                <FileSpreadsheet size={32} color={COLORS.borderMid} style={{ marginBottom: 10 }} />
+                <Text style={styles.emptyTitle}>No Forms Found</Text>
+                <Text style={styles.emptySubtitle}>There are no logs matching this status tab currently registered.</Text>
+              </View>
+            )}
+          </ScrollView>
+        </View>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: COLORS.pageBg,
   },
+
+  // ── Header ──────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
+    backgroundColor: COLORS.headerBg,
     paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
+    borderBottomColor: COLORS.headerBorder,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   backButton: {
     padding: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 7,
   },
   headerTitle: {
-    color: '#f8fafc',
+    color: COLORS.textOnDark,
     fontSize: 16,
     fontWeight: '700',
   },
+
   contentWrapper: {
     flex: 1,
     width: '100%',
-    maxWidth: 480, // Layout wrapper max-width requirement
+    maxWidth: 480,
     alignSelf: 'center',
   },
+
+  // ── Tabs — ICPI segment bar ────────────────────────────────
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    padding: 8,
+    backgroundColor: COLORS.cardBg,
+    padding: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    gap: 4,
+    borderBottomColor: COLORS.borderLight,
+    gap: 3,
   },
   tab: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 7,
   },
   activeTab: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: COLORS.primary,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#64748b',
+    color: COLORS.textMuted,
   },
   activeTabText: {
-    color: '#1e293b',
+    color: COLORS.white,
     fontWeight: '700',
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 14, paddingBottom: 32 },
+
+  // ── Log Card ──────────────────────────────────────────────
   logCard: {
-    backgroundColor: '#ffffff', // Clean white card requirement
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    borderColor: COLORS.borderLight,
+    ...SHADOW_SM,
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  batchContainer: {
-    flexDirection: 'column',
-  },
   batchLabel: {
     fontSize: 9,
     fontWeight: '600',
-    color: '#94a3b8',
+    color: COLORS.textLight,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   batchIdText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#0f172a',
-    marginTop: 2,
+    color: COLORS.textDark,
+    marginTop: 1,
   },
   statusPill: {
     flexDirection: 'row',
@@ -368,142 +393,119 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
   },
-  statusPending: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fef3c7',
-  },
-  statusApproved: {
-    backgroundColor: '#ecfdf5',
-    borderColor: '#d1fae5',
-  },
-  statusRejected: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
   statusText: {
     fontSize: 10,
     fontWeight: '700',
   },
-  textPending: {
-    color: '#b45309',
-  },
-  textApproved: {
-    color: '#047857',
-  },
-  textRejected: {
-    color: '#b91c1c',
-  },
   divider: {
     height: 1,
-    backgroundColor: '#f1f5f9',
-    marginVertical: 12,
+    backgroundColor: COLORS.pageBg,
+    marginVertical: 10,
   },
-  cardDetailsButton: {
-    width: '100%',
-  },
+  cardDetailsButton: { width: '100%' },
   infoGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 10,
   },
-  infoItem: {
-    flex: 1,
-  },
+  infoItem: { flex: 1 },
   iconLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   infoItemLabel: {
     fontSize: 10,
-    color: '#64748b',
+    color: COLORS.textMuted,
     fontWeight: '500',
   },
   infoItemVal: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1e293b',
+    color: COLORS.textMid,
   },
   expandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f8fafc',
-    paddingTop: 10,
+    borderTopColor: COLORS.pageBg,
+    paddingTop: 8,
   },
   timestampText: {
     fontSize: 11,
-    color: '#94a3b8',
+    color: COLORS.textLight,
     fontWeight: '500',
   },
-  flexSpacer: {
-    flex: 1,
-  },
+  flexSpacer: { flex: 1 },
   expandText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#3b82f6',
-    marginRight: 4,
+    color: COLORS.primary,
+    marginRight: 3,
   },
+
+  // ── Notes panel ──────────────────────────────────────────────
   notesContainer: {
-    marginTop: 14,
-    paddingTop: 12,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
+    borderTopColor: COLORS.pageBg,
   },
   notesTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#334155',
-    marginBottom: 6,
+    color: COLORS.textMid,
+    marginBottom: 5,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   operatorRow: {
     flexDirection: 'row',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   operatorLabel: {
     fontSize: 11,
-    color: '#64748b',
+    color: COLORS.textMuted,
     fontWeight: '500',
     marginRight: 4,
   },
   operatorValue: {
     fontSize: 11,
-    color: '#0f172a',
+    color: COLORS.textDark,
     fontWeight: '600',
   },
   noteContentBox: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: COLORS.pageBg,
     padding: 10,
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: COLORS.borderLight,
   },
   noteText: {
     fontSize: 12,
-    color: '#475569',
-    lineHeight: 18,
+    color: COLORS.textMuted,
+    lineHeight: 17,
     fontStyle: 'italic',
   },
+
+  // ── Empty state ──────────────────────────────────────────────
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1e293b',
+    color: COLORS.textDark,
     marginBottom: 4,
   },
   emptySubtitle: {
     fontSize: 12,
-    color: '#64748b',
+    color: COLORS.textMuted,
     textAlign: 'center',
     paddingHorizontal: 24,
-    lineHeight: 18,
+    lineHeight: 17,
   },
 });
