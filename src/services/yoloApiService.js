@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // 3. checkHealth GETs / to verify server + model readiness
 
 const API_URL_KEY = 'yolo_api_url';
-const DEFAULT_API_URL = 'http://192.168.1.4:8000';
+const DEFAULT_API_URL = 'http://139.59.117.202:8000';
 const REQUEST_TIMEOUT = 12000;
 
 /**

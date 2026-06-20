@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
+import { submitScanBatch } from '../services/supabaseService';
 
 // ===== AI GENERATED: useBatch =====
 // Purpose: Encapsulates all batch lifecycle state and AsyncStorage persistence
@@ -169,6 +170,21 @@ export default function useBatch() {
     setRecentBatches(updatedHistory);
     setActiveBatch(null);
     await AsyncStorage.setItem('recent_batches', JSON.stringify(updatedHistory)).catch(() => {});
+
+    // Sync to Supabase (fire-and-forget — does not block the UI)
+    const passCount    = finalizedBatch.specimens.filter(s => s.status === 'pass').length;
+    const flaggedCount = finalizedBatch.specimens.filter(s => s.status === 'flagged' || s.status === 'escalated').length;
+    submitScanBatch({
+      species:        finalizedBatch.species,
+      species_display: finalizedBatch.commonName || finalizedBatch.species,
+      stage_number:   finalizedBatch.stageNumber || 9,
+      stage_name:     finalizedBatch.stageName   || 'Quality Control',
+      specimens:      finalizedBatch.specimens,
+      total_scanned:  finalizedBatch.specimens.length,
+      pass_count:     passCount,
+      flagged_count:  flaggedCount,
+      worker_name:    'Worker',
+    }).catch(() => {});
   }
 
   const stats = activeBatch ? {

@@ -101,3 +101,118 @@ export async function fetchProductsCatalog() {
     return null;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────
+//  Scan Batches — YoLo QC results saved for web dashboard approval
+// ─────────────────────────────────────────────────────────────────
+
+export async function submitScanBatch(batchData) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('scan_batches')
+      .insert({
+        species:         batchData.species,
+        species_display: batchData.species_display || batchData.species,
+        stage_number:    batchData.stage_number || 9,
+        stage_name:      batchData.stage_name || 'Quality Control',
+        status:          'pending_approval',
+        specimens:       batchData.specimens || [],
+        total_scanned:   batchData.total_scanned || 0,
+        pass_count:      batchData.pass_count || 0,
+        flagged_count:   batchData.flagged_count || 0,
+        notes:           batchData.notes || null,
+        worker_name:     batchData.worker_name || 'Worker',
+      })
+      .select()
+      .single();
+    if (error) { console.error('submitScanBatch error:', error.message); return null; }
+    return data;
+  } catch (e) {
+    console.error('submitScanBatch exception:', e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Production Batches — 12-stage lifecycle tracking
+// ─────────────────────────────────────────────────────────────────
+
+export async function createProductionBatch(batchName, species) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('production_batches')
+      .insert({ batch_name: batchName, species, current_stage: 1, status: 'in_progress' })
+      .select()
+      .single();
+    if (error) { console.error('createProductionBatch error:', error.message); return null; }
+    return data;
+  } catch (e) {
+    console.error('createProductionBatch exception:', e);
+    return null;
+  }
+}
+
+export async function getProductionBatches() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('production_batches')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) { console.error('getProductionBatches error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('getProductionBatches exception:', e);
+    return [];
+  }
+}
+
+export async function advanceBatchStage(batchId, newStage) {
+  if (!supabase) return false;
+  try {
+    const status = newStage > 12 ? 'completed' : 'in_progress';
+    const { error } = await supabase
+      .from('production_batches')
+      .update({ current_stage: newStage, status, updated_at: new Date().toISOString() })
+      .eq('id', batchId);
+    if (error) { console.error('advanceBatchStage error:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('advanceBatchStage exception:', e);
+    return false;
+  }
+}
+
+export async function addStageLog(batchId, stageNumber, stageName, logText, workerName = 'Worker') {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('stage_logs')
+      .insert({ batch_id: batchId, stage_number: stageNumber, stage_name: stageName, log_text: logText, worker_name: workerName })
+      .select()
+      .single();
+    if (error) { console.error('addStageLog error:', error.message); return null; }
+    return data;
+  } catch (e) {
+    console.error('addStageLog exception:', e);
+    return null;
+  }
+}
+
+export async function getStageLogsForBatch(batchId) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('stage_logs')
+      .select('*')
+      .eq('batch_id', batchId)
+      .order('logged_at', { ascending: true });
+    if (error) { console.error('getStageLogsForBatch error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('getStageLogsForBatch exception:', e);
+    return [];
+  }
+}

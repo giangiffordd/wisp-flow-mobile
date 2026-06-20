@@ -13,12 +13,26 @@ import {
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
 import { supabase } from '../src/services/supabaseService';
 import { checkHealth, predictImage } from '../src/services/yoloApiService';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import ApiSettingsModal from '../components/ApiSettingsModal';
+
+async function notifySpecimenFlagged(speciesName) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Specimen Flagged for Review',
+        body:  `${speciesName} — missing parts detected. Manager review required.`,
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch {}
+}
 
 const NAVY = '#2B3441';
 const SKY  = '#B8D4E8';
@@ -702,6 +716,11 @@ export default function YoloCameraModule({ navigation, route }) {
         timestamp:       new Date().toISOString(),
       })),
     ]).catch(() => {});
+
+    if (primary.qcStatus === 'flagged') {
+      await notifySpecimenFlagged(primary.species);
+    }
+
     navigation.goBack();
   };
 

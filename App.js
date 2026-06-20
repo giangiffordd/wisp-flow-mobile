@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
+
+// Show notifications as alerts even while app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge:  false,
+  }),
+});
 
 import MobileStaffDashboard from './screens/MobileStaffDashboard';
 import MainAppNavigator from './navigation/MainAppNavigator';
@@ -19,6 +29,10 @@ import TaskHistoryPendingLogs from './screens/TaskHistoryPendingLogs';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  useEffect(() => {
+    Notifications.requestPermissionsAsync();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />

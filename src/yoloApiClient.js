@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_URL_KEY = 'yolo_api_url';
 
 // ── Default API URL (your PC's local IP running the Flask server) ──
-const DEFAULT_API_URL = 'http://192.168.1.4:8000';
+const DEFAULT_API_URL = 'http://139.59.117.202:8000';
 
 // ── Timeout for API calls (ms) ──
 const REQUEST_TIMEOUT = 12000;

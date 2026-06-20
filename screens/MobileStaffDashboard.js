@@ -9,7 +9,6 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Image,
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -105,15 +104,6 @@ export default function MobileStaffDashboard({ navigation }) {
           bounces={false}
         >
           <View style={styles.content}>
-
-          {/* ── Butterfly watermark (subtle, behind brand section) ── */}
-          <View style={styles.watermarkContainer} pointerEvents="none">
-            <Image
-              source={require('../assets/images/butterfly-watermark.png')}
-              style={styles.watermarkImage}
-              resizeMode="contain"
-            />
-          </View>
 
           {/* ── Logo / Branding ── */}
           <View style={styles.brandSection}>
