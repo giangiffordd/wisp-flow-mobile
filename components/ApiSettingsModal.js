@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { X, Wifi, WifiOff, CheckCircle, AlertCircle, Server } from 'lucide-react-native';
-import { getApiUrl, setApiUrl, checkHealth } from '../src/yoloApiClient';
+import { getApiUrl, setApiUrl, checkHealth } from '../src/services/yoloApiService';
 
 const NAVY = '#2B3441';
 const SKY  = '#B8D4E8';

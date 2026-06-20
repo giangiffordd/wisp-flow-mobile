@@ -15,8 +15,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
-import { supabase } from '../src/supabaseClient';
-import { checkHealth, predictImage } from '../src/yoloApiClient';
+import { supabase } from '../src/services/supabaseService';
+import { checkHealth, predictImage } from '../src/services/yoloApiService';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import ApiSettingsModal from '../components/ApiSettingsModal';
 

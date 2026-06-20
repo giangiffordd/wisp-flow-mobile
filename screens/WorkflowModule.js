@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,16 +8,10 @@ import {
   Alert,
   Animated,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import { Bell, Plus, ChevronRight, RotateCcw, Trash2 } from 'lucide-react-native';
 import { COLORS, SHADOW_SM } from '../theme';
-
-const generateId = () =>
-  Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-
-// After 2 rescans (3 total attempts) → escalate
-const MAX_RESCANS = 2;
+import useBatch, { MAX_RESCANS } from '../src/hooks/useBatch';
 
 const ALERTS_PREVIEW = [
   { id: '1', title: 'Specimen Flagged in QC', type: 'critical' },
@@ -43,106 +37,30 @@ export default function WorkflowModule({ navigation, route }) {
   const isFocused = useIsFocused();
   const fadeAnim  = useRef(new Animated.Value(0)).current;
 
-  const [currentSpecies, setCurrentSpecies] = useState({ species: 'Awaiting scan…', commonName: '' });
-  const [activeBatch,    setActiveBatch]    = useState(null);
-  const [recentBatches,  setRecentBatches]  = useState([]);
+  const {
+    activeBatch,
+    recentBatches,
+    currentSpecies,
+    stats,
+    startNewBatch,
+    applyDiscard,
+    submitBatch,
+  } = useBatch();
 
-  // ── Fade in + load all persisted data on focus ──
+  // Fade in on focus
   useEffect(() => {
     if (!isFocused) { fadeAnim.setValue(0); return; }
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-
-    const load = async () => {
-      try {
-        const pairs = await AsyncStorage.multiGet([
-          'last_detected_species',
-          'active_batch',
-          'recent_batches',
-          'pending_specimen_result',
-        ]);
-        const [speciesRaw, batchRaw, historyRaw, pendingRaw] = pairs.map(p => p[1]);
-
-        if (speciesRaw) { try { setCurrentSpecies(JSON.parse(speciesRaw)); } catch {} }
-        if (historyRaw) { try { setRecentBatches(JSON.parse(historyRaw)); }  catch {} }
-
-        let batch = null;
-        try { batch = batchRaw ? JSON.parse(batchRaw) : null; } catch {}
-
-        if (pendingRaw) {
-          await AsyncStorage.removeItem('pending_specimen_result');
-          try {
-            const result = JSON.parse(pendingRaw);
-            if (batch && result.batchId === batch.id) {
-              batch = applyResultToBatch(batch, result);
-              await AsyncStorage.setItem('active_batch', JSON.stringify(batch));
-            }
-          } catch {}
-        }
-
-        setActiveBatch(batch);
-      } catch {}
-    };
-
-    load();
   }, [isFocused]);
 
-  // ── Apply a scan result to a batch (pure — returns new batch object) ──
-  const applyResultToBatch = (batch, result) => {
-    if (result.isRescan && result.specimenId) {
-      const updatedSpecimens = batch.specimens.map(s => {
-        if (s.id !== result.specimenId) return s;
-        const newRescanCount = s.rescan_count + 1;
-        const shouldEscalate = result.status === 'flagged' && newRescanCount >= MAX_RESCANS;
-        return {
-          ...s,
-          status:          shouldEscalate ? 'escalated' : result.status,
-          rescan_count:    newRescanCount,
-          last_scanned_at: new Date().toISOString(),
-        };
-      });
-      return { ...batch, specimens: updatedSpecimens };
-    }
-
-    const newSpecimen = {
-      id:               generateId(),
-      status:           result.status,
-      species:          result.speciesDisplay || result.species,
-      confidence:       result.confidence || 0,
-      parts_found:      result.partsFound   || {},
-      parts_required:   result.partsRequired || {},
-      species_mismatch: result.species_mismatch || false,
-      rescan_count:     0,
-      discard_reason:   null,
-      discard_notes:    null,
-      scanned_at:       result.timestamp || new Date().toISOString(),
-      last_scanned_at:  result.timestamp || new Date().toISOString(),
-    };
-    return { ...batch, specimens: [...batch.specimens, newSpecimen] };
-  };
-
-  // ── Persist active batch whenever it changes ──
-  useEffect(() => {
-    if (activeBatch === null) {
-      AsyncStorage.removeItem('active_batch').catch(() => {});
-    } else {
-      AsyncStorage.setItem('active_batch', JSON.stringify(activeBatch)).catch(() => {});
-    }
-  }, [activeBatch]);
-
-  // ── Start a new batch ──
+  // ── Start a new batch (guard handled in hook call site) ──
   const handleNewBatch = () => {
     if (activeBatch?.specimens?.length > 0) {
       Alert.alert('Active Batch', 'Finish the current batch before starting a new one.');
       return;
     }
-    setActiveBatch({
-      id:          generateId(),
-      createdAt:   new Date().toISOString(),
-      species:     currentSpecies.species,
-      commonName:  currentSpecies.commonName,
-      specimens:   [],
-    });
+    startNewBatch();
   };
 
   // ── Navigate to scanner for a new specimen ──
@@ -171,7 +89,7 @@ export default function WorkflowModule({ navigation, route }) {
     });
   };
 
-  // ── Discard a specimen with reason ──
+  // ── Discard a specimen — Alert stays in component (UI concern) ──
   const handleDiscard = (specimen) => {
     Alert.alert('Discard Specimen', 'Select a reason:', [
       { text: 'Physically Damaged', onPress: () => applyDiscard(specimen, 'Physically Damaged') },
@@ -179,15 +97,6 @@ export default function WorkflowModule({ navigation, route }) {
       { text: 'Other',              onPress: () => applyDiscard(specimen, 'Other')              },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  };
-
-  const applyDiscard = (specimen, reason) => {
-    setActiveBatch(prev => ({
-      ...prev,
-      specimens: prev.specimens.map(s =>
-        s.id === specimen.id ? { ...s, status: 'discarded', discard_reason: reason } : s
-      ),
-    }));
   };
 
   // ── Finish batch → go to summary screen ──
@@ -198,27 +107,6 @@ export default function WorkflowModule({ navigation, route }) {
     }
     navigation.navigate('BatchSummary', { batch: activeBatch });
   };
-
-  // ── Called by BatchSummary after manager submission ──
-  const submitBatch = async (submittedBatch) => {
-    const finalized = {
-      ...submittedBatch,
-      status:      'pending_approval',
-      submittedAt: new Date().toISOString(),
-    };
-    const updated = [finalized, ...recentBatches].slice(0, 10);
-    setRecentBatches(updated);
-    setActiveBatch(null);
-    await AsyncStorage.setItem('recent_batches', JSON.stringify(updated)).catch(() => {});
-  };
-
-  // ── Computed batch stats ──
-  const stats = activeBatch ? {
-    pass:      activeBatch.specimens.filter(s => s.status === 'pass').length,
-    flagged:   activeBatch.specimens.filter(s => s.status === 'flagged').length,
-    escalated: activeBatch.specimens.filter(s => s.status === 'escalated').length,
-    discarded: activeBatch.specimens.filter(s => s.status === 'discarded').length,
-  } : null;
 
   const fmtTime = iso =>
     new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

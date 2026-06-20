@@ -29,7 +29,7 @@ import {
   MapPin,
   Hash,
 } from 'lucide-react-native';
-import { supabase } from '../src/supabaseClient';
+import { supabase } from '../src/services/supabaseService';
 import { COLORS, SHADOW_SM } from '../theme';
 
 // ── Fallback data ──────────────────────────────────────────────
