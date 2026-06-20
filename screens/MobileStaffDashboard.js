@@ -50,7 +50,6 @@ function validateEmployeeId(id) {
 }
 function validatePin(pin) {
   if (!pin || pin.trim().length === 0) return 'Password is required.';
-  if (!/^\d{4}$/.test(pin.trim())) return 'Password must be exactly 4 digits.';
   return null;
 }
 
@@ -187,8 +186,6 @@ export default function MobileStaffDashboard({ navigation }) {
                   value={pin}
                   onChangeText={(v) => { setPin(v); clearError('pin'); }}
                   secureTextEntry={!pinVisible}
-                  keyboardType="number-pad"
-                  maxLength={4}
                   returnKeyType="done"
                   onSubmitEditing={handleLogin}
                   onFocus={() => setIsPinFocused(true)}

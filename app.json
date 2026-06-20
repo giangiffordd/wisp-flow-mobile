@@ -8,7 +8,7 @@
     "scheme": "wispflowmobile",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -31,6 +31,12 @@
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
           }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow wisp-flow-mobile to access your camera."
         }
       ],
       "expo-font",

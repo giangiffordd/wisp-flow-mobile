@@ -107,13 +107,13 @@ export default function MobileInventoryViewer({ navigation, route }) {
     }
   }, [isFocused, screenFadeAnim]);
 
-  const [searchQuery, setSearchQuery]     = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [activeFilter, setActiveFilter]   = useState('ALL');
-  const [inventory, setInventory]         = useState(initialInventory);
-  const [isLoading, setIsLoading]         = useState(false);
-  const [dbStatus, setDbStatus]           = useState('checking');
-  const [expandedId, setExpandedId]       = useState(null);
+  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [inventory, setInventory] = useState(initialInventory);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState('checking');
+  const [expandedId, setExpandedId] = useState(null);
   const debounceRef = useRef(null);
 
   const handleSearchChange = useCallback((text) => {
@@ -140,27 +140,27 @@ export default function MobileInventoryViewer({ navigation, route }) {
         } else if (data && data.length > 0) {
           const formatted = data.map((item, index) => {
             const get = (key) => Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase());
-            const genusKey     = get('genus');
-            const speciesKey   = get('species');
-            const nameKey      = get('name');
-            const stockKey     = get('quantity') || get('stock');
-            const binKey       = get('bin');
-            const shelfKey     = get('shelf');
+            const genusKey = get('genus');
+            const speciesKey = get('species');
+            const nameKey = get('name');
+            const stockKey = get('quantity') || get('stock');
+            const binKey = get('bin');
+            const shelfKey = get('shelf');
             const updatedAtKey = get('updated_at') || get('updatedat') || get('last_updated');
 
-            const genusVal   = genusKey   ? item[genusKey]   : '';
+            const genusVal = genusKey ? item[genusKey] : '';
             const speciesVal = speciesKey ? item[speciesKey] : '';
-            const nameVal    = nameKey    ? item[nameKey]    : '';
+            const nameVal = nameKey ? item[nameKey] : '';
 
             let scientific = '';
             if (genusVal && speciesVal) scientific = `${genusVal} ${speciesVal}`;
-            else if (genusVal)          scientific = genusVal;
-            else if (speciesVal)        scientific = speciesVal;
-            else                        scientific = nameVal || 'Unknown Specimen';
+            else if (genusVal) scientific = genusVal;
+            else if (speciesVal) scientific = speciesVal;
+            else scientific = nameVal || 'Unknown Specimen';
 
-            const stockVal     = stockKey && typeof item[stockKey] === 'number' ? item[stockKey] : 0;
-            const binVal       = binKey   && item[binKey]   ? item[binKey]   : `A-${String(index + 1).padStart(2, '0')}`;
-            const shelfVal     = shelfKey && item[shelfKey] ? item[shelfKey] : `0${(index % 5) + 1}`;
+            const stockVal = stockKey && typeof item[stockKey] === 'number' ? item[stockKey] : 0;
+            const binVal = binKey && item[binKey] ? item[binKey] : `A-${String(index + 1).padStart(2, '0')}`;
+            const shelfVal = shelfKey && item[shelfKey] ? item[shelfKey] : `0${(index % 5) + 1}`;
             const updatedAtVal = updatedAtKey && item[updatedAtKey] ? item[updatedAtKey] : null;
 
             return {
@@ -188,7 +188,7 @@ export default function MobileInventoryViewer({ navigation, route }) {
     loadInventory();
   }, []);
 
-  const totalItems    = inventory.length;
+  const totalItems = inventory.length;
   const lowStockCount = useMemo(() => inventory.filter(item => item.stock < 20).length, [inventory]);
 
   const filteredInventory = useMemo(() => {
@@ -199,8 +199,8 @@ export default function MobileInventoryViewer({ navigation, route }) {
         item.commonName.toLowerCase().includes(q) ||
         item.bin.toLowerCase().includes(q);
       if (!matchesSearch) return false;
-      if (activeFilter === 'HIGH')    return item.stock >= 50;
-      if (activeFilter === 'MEDIUM')  return item.stock >= 20 && item.stock <= 49;
+      if (activeFilter === 'HIGH') return item.stock >= 50;
+      if (activeFilter === 'MEDIUM') return item.stock >= 20 && item.stock <= 49;
       if (activeFilter === 'LOW_OUT') return item.stock < 20;
       return true;
     });
@@ -290,9 +290,9 @@ export default function MobileInventoryViewer({ navigation, route }) {
         {/* ── Filter tabs — same pill pattern as ICPI "All Families / All Statuses" ── */}
         <View style={styles.tabContainer}>
           {[
-            { key: 'ALL',     label: 'All Items' },
-            { key: 'HIGH',    label: 'High (50+)' },
-            { key: 'MEDIUM',  label: 'Med (20–49)' },
+            { key: 'ALL', label: 'All Items' },
+            { key: 'HIGH', label: 'High (50+)' },
+            { key: 'MEDIUM', label: 'Med (20–49)' },
             { key: 'LOW_OUT', label: `Low / Out (${lowStockCount})` },
           ].map(tab => (
             <TouchableOpacity
@@ -348,8 +348,8 @@ const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
   const progressPercent = Math.min((item.stock / maxRange) * 100, 100);
 
   let IconComponent = CheckCircle2;
-  if (level.type === 'out')    IconComponent = XCircle;
-  else if (level.type === 'low')    IconComponent = AlertTriangle;
+  if (level.type === 'out') IconComponent = XCircle;
+  else if (level.type === 'low') IconComponent = AlertTriangle;
   else if (level.type === 'medium') IconComponent = Info;
 
   return (

@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import MobileStaffDashboard from './screens/MobileStaffDashboard';
 import MainAppNavigator from './navigation/MainAppNavigator';
 import YoloCameraModule from './screens/YoloCameraModule';
+import BatchSummary from './screens/BatchSummary';
 
 // Import newly created screens
 import PackagingBarcodeScanner from './screens/PackagingBarcodeScanner';
@@ -30,7 +31,8 @@ export default function App() {
           <Stack.Screen name="ProcessFlowchart" component={ProcessFlowchart} />
           <Stack.Screen name="MobileInventoryViewer" component={MobileInventoryViewer} />
           <Stack.Screen name="TaskHistoryPendingLogs" component={TaskHistoryPendingLogs} />
-          <Stack.Screen name="YoloScan" component={YoloCameraModule} />
+          <Stack.Screen name="YoloScan"      component={YoloCameraModule} />
+          <Stack.Screen name="BatchSummary" component={BatchSummary}      />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

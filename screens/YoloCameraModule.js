@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,76 +9,350 @@ import {
   ActivityIndicator,
   Easing,
   ScrollView,
+  Image,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, ChevronRight } from 'lucide-react-native';
-import { fetchRandomSpecimen, supabase } from '../src/supabaseClient';
+import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
+import { supabase } from '../src/supabaseClient';
+import { checkHealth, predictImage } from '../src/yoloApiClient';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import ApiSettingsModal from '../components/ApiSettingsModal';
 
 const NAVY = '#2B3441';
 const SKY  = '#B8D4E8';
 
-// Fallback specimens if Supabase is unavailable
-const FALLBACK_SPECIMENS = [
-  { species: 'Danaus plexippus',       commonName: 'Monarch Butterfly' },
-  { species: 'Morpho peleides',        commonName: 'Blue Morpho' },
-  { species: 'Heliconius charithonia', commonName: 'Zebra Longwing' },
-  { species: 'Graphium sarpedon',      commonName: 'Common Bluebottle' },
-  { species: 'Papilio palinurus',      commonName: 'Emerald Swallowtail' },
-  { species: 'Actias selene',          commonName: 'Indian Moon Moth' },
+// ═══════════════════════════════════════════════════════════════════════════════
+//  WISP-FLOW AI LOGIC — Ported directly from api.py / best.pt model
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// The 12 parent species detected by best.pt
+const PARENT_SPECIES = [
+  'papilio_thoas', 'thysania_agripina', 'pomponia_imperatoria',
+  'idea_lynceus', 'polyura_delphis_concha', 'papilio_palinurus',
+  'papilio_karna', 'papilio_rumanzovia', 'papilio_blumei',
+  'papilio_ulysses', 'phyllium_pulchrifolium', 'xylotrupes_gideon',
 ];
+
+// The 5 anatomical part classes
+const PART_CLASSES = ['wing', 'antenna', 'leg', 'shell_wing', 'horn'];
+
+// Species display info — scientific name → common name mapping
+const SPECIES_INFO = {
+  'papilio_thoas':            { common: 'King Swallowtail' },
+  'thysania_agripina':        { common: 'White Witch Moth' },
+  'pomponia_imperatoria':     { common: 'Empress Cicada' },
+  'idea_lynceus':             { common: 'Tree Nymph Butterfly' },
+  'polyura_delphis_concha':   { common: 'Jewelled Nawab' },
+  'papilio_palinurus':        { common: 'Emerald Swallowtail' },
+  'papilio_karna':            { common: 'Karna Swallowtail' },
+  'papilio_rumanzovia':       { common: 'Scarlet Mormon' },
+  'papilio_blumei':           { common: 'Peacock Swallowtail' },
+  'papilio_ulysses':          { common: 'Blue Emperor' },
+  'phyllium_pulchrifolium':   { common: 'Leaf Insect' },
+  'xylotrupes_gideon':        { common: 'Rhinoceros Beetle' },
+};
+
+// Group 1: Standard Butterflies & Moths — 4 wings + 2 antennae
+const GROUP_4W_2A = [
+  'papilio_thoas', 'thysania_agripina', 'idea_lynceus',
+  'polyura_delphis_concha', 'papilio_palinurus', 'papilio_karna',
+  'papilio_rumanzovia', 'papilio_blumei',
+];
+
+// QA rules: species → required parts for PASS status (mirroring api.py exactly)
+const QA_RULES = {};
+GROUP_4W_2A.forEach(sp => { QA_RULES[sp] = { wing: 4, antenna: 2 }; });
+
+// Group 2: Pomponia Imperatoria — 4 wings + 4 legs
+QA_RULES['pomponia_imperatoria'] = { wing: 4, leg: 4 };
+
+// Group 3: Papilio Ulysses — 4 wings + 2 antennae (swallowtail, same as GROUP_4W_2A)
+QA_RULES['papilio_ulysses'] = { wing: 4, antenna: 2 };
+
+// Group 4: Leaf Insect — 6 legs + 2 antennae
+QA_RULES['phyllium_pulchrifolium'] = { leg: 6, antenna: 2 };
+
+// Group 5: Rhino Beetle — 2 wings + 2 shell_wings + 4 legs + 1 horn
+QA_RULES['xylotrupes_gideon'] = { wing: 2, shell_wing: 2, leg: 4, horn: 1 };
+
+// Part type colors for bounding box rendering (matching test.py palette)
+const PART_COLORS = {
+  wing:       '#00FFFF',  // Cyan
+  antenna:    '#FFD700',  // Yellow/Gold
+  leg:        '#00FF00',  // Lime Green
+  shell_wing: '#FF8C00',  // Orange
+  horn:       '#FF00FF',  // Magenta
+};
+
+// ── Helper functions (mirroring api.py) ──────────────────────────────────────
+
+function formatSpeciesName(className) {
+  const parts = className.split('_');
+  if (parts.length >= 2) {
+    return parts[0].charAt(0).toUpperCase() + parts[0].slice(1) + ' ' + parts.slice(1).join(' ');
+  }
+  return className.charAt(0).toUpperCase() + className.slice(1);
+}
+
+
+function applyQaRouting(speciesName, foundParts) {
+  const rules = QA_RULES[speciesName];
+  if (!rules) return { status: 'FLAGGED', required: {} };
+  const isPass = Object.entries(rules).every(
+    ([part, count]) => (foundParts[part] || 0) === count
+  );
+  return { status: isPass ? 'PASS' : 'FLAGGED', required: rules };
+}
+
+// ── Simulation Engine ────────────────────────────────────────────────────────
+
+function generateSimulatedPartBox(parentBox, partType, index, totalOfType) {
+  // Generate realistic part bounding boxes relative to parent box
+  const pw = parentBox.w;
+  const ph = parentBox.h;
+  const px = parentBox.x;
+  const py = parentBox.y;
+
+  let partW, partH, partX, partY;
+
+  switch (partType) {
+    case 'wing':
+      // Wings are placed in quadrants of the specimen
+      partW = pw * (0.25 + Math.random() * 0.15);
+      partH = ph * (0.3 + Math.random() * 0.15);
+      if (totalOfType <= 4) {
+        // 4-wing layout: TL, TR, BL, BR
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        partX = px + col * (pw * 0.45) + pw * 0.05 + (Math.random() * pw * 0.05);
+        partY = py + row * (ph * 0.4) + ph * 0.1 + (Math.random() * ph * 0.05);
+      } else {
+        // 8-wing: arranged in a grid (Papilio ulysses)
+        const col = index % 4;
+        const row = Math.floor(index / 4);
+        partW = pw * (0.18 + Math.random() * 0.08);
+        partH = ph * (0.25 + Math.random() * 0.1);
+        partX = px + col * (pw * 0.22) + pw * 0.05 + (Math.random() * pw * 0.03);
+        partY = py + row * (ph * 0.35) + ph * 0.12 + (Math.random() * ph * 0.05);
+      }
+      break;
+
+    case 'antenna':
+      // Antennae at the top of the specimen
+      partW = pw * (0.06 + Math.random() * 0.04);
+      partH = ph * (0.15 + Math.random() * 0.08);
+      partX = px + pw * (0.3 + index * 0.25) + (Math.random() * pw * 0.05);
+      partY = py + ph * 0.05 + (Math.random() * ph * 0.05);
+      break;
+
+    case 'leg':
+      // Legs along the sides/bottom
+      partW = pw * (0.05 + Math.random() * 0.04);
+      partH = ph * (0.12 + Math.random() * 0.1);
+      if (totalOfType <= 4) {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        partX = px + col * (pw * 0.7) + pw * 0.1 + (Math.random() * pw * 0.05);
+        partY = py + ph * 0.4 + row * (ph * 0.2) + (Math.random() * ph * 0.05);
+      } else {
+        // 6 legs (leaf insect) — 2 columns of 3
+        const col = index % 2;
+        partX = px + col * (pw * 0.65) + pw * 0.1 + (Math.random() * pw * 0.05);
+        partY = py + ph * 0.25 + (index % 3) * (ph * 0.2) + (Math.random() * ph * 0.03);
+      }
+      break;
+
+    case 'shell_wing':
+      // Shell wings on the back
+      partW = pw * (0.3 + Math.random() * 0.1);
+      partH = ph * (0.35 + Math.random() * 0.1);
+      partX = px + index * (pw * 0.35) + pw * 0.08 + (Math.random() * pw * 0.05);
+      partY = py + ph * 0.2 + (Math.random() * ph * 0.05);
+      break;
+
+    case 'horn':
+      // Horn at the top center
+      partW = pw * (0.12 + Math.random() * 0.06);
+      partH = ph * (0.2 + Math.random() * 0.08);
+      partX = px + pw * 0.4 + (Math.random() * pw * 0.1);
+      partY = py + ph * 0.02 + (Math.random() * ph * 0.05);
+      break;
+
+    default:
+      partW = pw * 0.15;
+      partH = ph * 0.15;
+      partX = px + pw * 0.3 + Math.random() * pw * 0.3;
+      partY = py + ph * 0.3 + Math.random() * ph * 0.3;
+  }
+
+  // Clamp to parent bounds
+  partX = Math.max(px, Math.min(partX, px + pw - partW));
+  partY = Math.max(py, Math.min(partY, py + ph - partH));
+
+  return {
+    x: partX,
+    y: partY,
+    w: partW,
+    h: partH,
+  };
+}
+
+function simulateDetection() {
+  // Pick a random species from the 12 real species
+  const speciesKey = PARENT_SPECIES[Math.floor(Math.random() * PARENT_SPECIES.length)];
+  const info = SPECIES_INFO[speciesKey] || { common: formatSpeciesName(speciesKey) };
+  const rules = QA_RULES[speciesKey] || {};
+
+  // Generate the parent bounding box
+  const parentBox = {
+    x: 0.08 + Math.random() * 0.15,
+    y: 0.08 + Math.random() * 0.12,
+    w: 0.5 + Math.random() * 0.2,
+    h: 0.45 + Math.random() * 0.2,
+  };
+  // Clamp to viewport
+  parentBox.w = Math.min(parentBox.w, 1 - parentBox.x - 0.02);
+  parentBox.h = Math.min(parentBox.h, 1 - parentBox.y - 0.02);
+
+  const parentConfidence = (0.82 + Math.random() * 0.16);
+
+  // Decide whether to simulate a PASS or FLAGGED scenario (~65% pass)
+  const shouldPass = Math.random() < 0.65;
+
+  // Generate parts based on QA rules
+  const generatedParts = [];
+  const foundParts = {};
+  PART_CLASSES.forEach(p => { foundParts[p] = 0; });
+
+  Object.entries(rules).forEach(([partType, requiredCount]) => {
+    // For PASS: generate exact count; for FLAGGED: vary the count
+    let count;
+    if (shouldPass) {
+      count = requiredCount;
+    } else {
+      // Generate incorrect count: missing 1-2 parts or extra 1
+      const variation = Math.random() < 0.7
+        ? -Math.ceil(Math.random() * Math.min(2, requiredCount))
+        : 1;
+      count = Math.max(0, requiredCount + variation);
+    }
+
+    foundParts[partType] = count;
+
+    for (let i = 0; i < count; i++) {
+      const partBox = generateSimulatedPartBox(parentBox, partType, i, count);
+      generatedParts.push({
+        name: partType,
+        confidence: (0.75 + Math.random() * 0.2),
+        box: partBox,
+      });
+    }
+  });
+
+  // Apply QA routing using the real logic
+  const { status: qaStatus, required: requiredParts } = applyQaRouting(speciesKey, foundParts);
+
+  // Build the specimen result (same shape as API response)
+  const specimen = {
+    id: `sim-${Date.now()}-0`,
+    species: formatSpeciesName(speciesKey),
+    rawSpecies: speciesKey,
+    commonName: info.common,
+    confidence: parentConfidence,
+    qcStatus: qaStatus === 'PASS' ? 'pass' : 'flagged',
+    box: parentBox,
+    partsFound: Object.fromEntries(Object.entries(foundParts).filter(([, v]) => v > 0)),
+    partsRequired: requiredParts,
+    detectedParts: generatedParts,  // Individual part boxes for rendering
+  };
+
+  return specimen;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 export default function YoloCameraModule({ navigation, route }) {
   const insets = useSafeAreaInsets();
-  const stepTitle = route?.params?.stepTitle || 'YOLO Scan';
-  const stepId    = route?.params?.stepId    ?? null;
+  const stepTitle       = route?.params?.stepTitle       || 'YOLO Scan';
+  const stepId          = route?.params?.stepId          ?? null;
+  const batchId         = route?.params?.batchId         ?? null;
+  const batchSpecies    = route?.params?.batchSpecies    ?? null;
+  const scanMode        = route?.params?.mode            || 'standalone';
+  const specimenId      = route?.params?.specimenId      ?? null;
+  const originalDefects = route?.params?.originalDefects ?? null;
 
   // ── Camera permission state ──
   const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef(null);
+
+  // ── API connection state ──
+  const [apiStatus, setApiStatus] = useState('checking'); // 'checking' | 'connected' | 'offline'
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   // ── Scan state ──
   const [isScanning, setIsScanning] = useState(false);
-  const [specimen, setSpecimen]     = useState(null);   // detected specimen
+  const [specimens, setSpecimens]   = useState([]);       // array of detected specimens
+  const [rawParts, setRawParts]     = useState([]);       // individual part detections for rendering
+  const [annotatedImageBase64, setAnnotatedImageBase64] = useState(null); // Server-rendered image
+  const [capturedPhotoUri, setCapturedPhotoUri] = useState(null); // Instant freeze frame
   const [isLoading, setIsLoading]   = useState(false);
-  const [source, setSource]         = useState(null);   // 'supabase' | 'fallback'
+  const [source, setSource]         = useState(null);      // 'api' | 'simulation'
+  const [scanError, setScanError]   = useState(null);
 
-  // Bounding box position states for realism
-  const [boxPosition, setBoxPosition] = useState({ top: '30%', left: '25%', width: '50%', height: '40%' });
+  // ── Phase 2 States ──
+  const [workerName] = useState('Operator');
+  const [dailyStats, setDailyStats] = useState({ scanned: 0, passed: 0 });
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [isRepairMode, setIsRepairMode] = useState(false);
+  const [scanSummaryData, setScanSummaryData] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
 
-  // ── Counting state ──
-  const [isCounting, setIsCounting] = useState(false);
-  const [tally, setTally]           = useState(0);
-  const tallyRef                    = useRef(0);         // live ref for interval closure
-  const countIntervalRef            = useRef(null);
-  const scanTimeoutRef              = useRef(null);
+  // ── Selected specimen for counting ──
+  const [selectedIdx, setSelectedIdx]     = useState(null);
+  const [isCounting, setIsCounting]       = useState(false);
+  const [tally, setTally]                 = useState(0);
+  const tallyRef                          = useRef(0);
+  const countIntervalRef                  = useRef(null);
 
   // ── Session log state ──
-  // Each entry: { id, species, commonName, count, source, timestamp }
   const [sessionLog, setSessionLog]     = useState([]);
   const [isSyncing, setIsSyncing]       = useState(false);
-  const [syncStatus, setSyncStatus]     = useState(null); // null | 'success' | 'error'
-  const [countingDone, setCountingDone] = useState(false); // true after first stop-count
+  const [syncStatus, setSyncStatus]     = useState(null);
+  const [countingDone, setCountingDone] = useState(false);
 
-  // ── Pulse animation ──
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  // ── Counter badge pop animation ──
-  const tallyScale = useRef(new Animated.Value(1)).current;
-
-  // ── Bounding box opacity animation ──
+  // ── Animations ──
+  const pulseAnim        = useRef(new Animated.Value(1)).current;
+  const tallyScale       = useRef(new Animated.Value(1)).current;
   const boundingBoxOpacity = useRef(new Animated.Value(0)).current;
-
-  // ── Laser line sweep animation ──
-  const laserAnim = useRef(new Animated.Value(0)).current;
+  const bannerOpacity    = useRef(new Animated.Value(0)).current;
+  const laserAnim        = useRef(new Animated.Value(0)).current;
   const translateY = laserAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [10, 240],
   });
 
-  // ── Specimen detected banner fade animation ──
-  const bannerOpacity = useRef(new Animated.Value(0)).current;
+  // ── Check API connection on mount and when settings close ──
+  const checkApiConnection = useCallback(async () => {
+    setApiStatus('checking');
+    const result = await checkHealth();
+    setApiStatus(result.reachable && result.modelLoaded ? 'connected' : 'offline');
+  }, []);
 
+  useEffect(() => {
+    checkApiConnection();
+  }, [checkApiConnection]);
+
+  const handleSettingsClose = useCallback(() => {
+    setSettingsVisible(false);
+    checkApiConnection();
+  }, [checkApiConnection]);
+
+  // ── Pulse animation ──
   useEffect(() => {
     let pulse;
     if (isScanning) {
@@ -95,15 +369,14 @@ export default function YoloCameraModule({ navigation, route }) {
     return () => pulse && pulse.stop();
   }, [isScanning]);
 
-  // Cleanup count interval and scan timeout on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (countIntervalRef.current) clearInterval(countIntervalRef.current);
-      if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     };
   }, []);
 
-  // ── Animate tally badge every increment ──
+  // ── Animate tally badge ──
   const animateTally = () => {
     Animated.sequence([
       Animated.timing(tallyScale, { toValue: 1.35, duration: 120, useNativeDriver: true }),
@@ -111,27 +384,22 @@ export default function YoloCameraModule({ navigation, route }) {
     ]).start();
   };
 
-  // ── Bounding box opacity trigger ──
+  // ── Bounding box + banner animation ──
   useEffect(() => {
-    if (specimen && !isLoading) {
+    if (specimens.length > 0 && !isLoading) {
       Animated.timing(boundingBoxOpacity, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
+        toValue: 1, duration: 400, useNativeDriver: true,
       }).start();
-      // Fade in the specimen detected banner
       Animated.timing(bannerOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
+        toValue: 1, duration: 300, useNativeDriver: true,
       }).start();
     } else {
       boundingBoxOpacity.setValue(0);
       bannerOpacity.setValue(0);
     }
-  }, [specimen, isLoading]);
+  }, [specimens, isLoading]);
 
-  // ── Laser line sweep loop ──
+  // ── Laser sweep animation ──
   useEffect(() => {
     let animation;
     if (isScanning && isLoading) {
@@ -139,14 +407,12 @@ export default function YoloCameraModule({ navigation, route }) {
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(laserAnim, {
-            toValue: 1,
-            duration: 1500,
+            toValue: 1, duration: 1500,
             easing: Easing.bezier(0.4, 0, 0.2, 1),
             useNativeDriver: true,
           }),
           Animated.timing(laserAnim, {
-            toValue: 0,
-            duration: 1500,
+            toValue: 0, duration: 1500,
             easing: Easing.bezier(0.4, 0, 0.2, 1),
             useNativeDriver: true,
           }),
@@ -160,63 +426,110 @@ export default function YoloCameraModule({ navigation, route }) {
     return () => animation && animation.stop();
   }, [isScanning, isLoading]);
 
-  // ── Fetch ONE specimen on demand ──
-  const doFetchSpecimen = async () => {
+  // ── REAL SCAN: Capture frame and send to YOLO API ──
+  const doRealScan = async () => {
     setIsLoading(true);
-    // Randomize bounding box coordinates for realistic look
-    const randomTop = Math.floor(Math.random() * 25) + 15; // 15% to 40%
-    const randomLeft = Math.floor(Math.random() * 30) + 10; // 10% to 40%
-    const randomWidth = Math.floor(Math.random() * 20) + 35; // 35% to 55%
-    const randomHeight = Math.floor(Math.random() * 20) + 30; // 30% to 50%
-    setBoxPosition({
-      top: `${randomTop}%`,
-      left: `${randomLeft}%`,
-      width: `${randomWidth}%`,
-      height: `${randomHeight}%`
-    });
+    setScanError(null);
 
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-    }
-
-    // Simulate 3.5 seconds scanning phase before finding a specimen
-    scanTimeoutRef.current = setTimeout(async () => {
-      try {
-        const result = await fetchRandomSpecimen();
-        const qcStatus = Math.random() < 0.7 ? 'pass' : 'flagged'; // 70% pass, 30% flagged
-        if (result) {
-          setSpecimen({ ...result, qcStatus });
-          setSource('supabase');
-        } else {
-          const fb = FALLBACK_SPECIMENS[Math.floor(Math.random() * FALLBACK_SPECIMENS.length)];
-          setSpecimen({ ...fb, qcStatus });
-          setSource('fallback');
-        }
-      } catch {
-        const fb = FALLBACK_SPECIMENS[Math.floor(Math.random() * FALLBACK_SPECIMENS.length)];
-        const qcStatus = Math.random() < 0.7 ? 'pass' : 'flagged';
-        setSpecimen({ ...fb, qcStatus });
-        setSource('fallback');
-      } finally {
-        setIsLoading(false);
+    try {
+      if (!cameraRef.current) {
+        throw new Error('Camera ref not available');
       }
-    }, 3500);
+
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+        base64: false,
+        skipProcessing: true,
+      });
+      setCapturedPhotoUri(photo.uri);
+
+      const result = await predictImage(photo.uri);
+
+      if (result && result.status === 'success' && result.specimens && result.specimens.length > 0) {
+        // Real detections from the AI model
+        const mappedSpecimens = result.specimens.map((s, i) => ({
+          id: `real-${Date.now()}-${i}`,
+          species: s.species_display,
+          rawSpecies: s.species,
+          commonName: s.species_display,
+          confidence: s.confidence,
+          qcStatus: s.qa_status === 'PASS' ? 'pass' : 'flagged',
+          box: s.box,
+          partsFound: s.parts_found || {},
+          partsRequired: s.parts_required || {},
+          detectedParts: [],  // Individual parts come from raw_detections
+        }));
+
+        // Extract part-level detections from raw_detections
+        const partDetections = (result.raw_detections || [])
+          .filter(d => PART_CLASSES.includes(d.class))
+          .map(d => ({
+            name: d.class,
+            confidence: d.confidence,
+            box: d.box,
+          }));
+
+        setSpecimens(mappedSpecimens);
+        setRawParts(partDetections);
+        if (result.annotated_image_base64) {
+          setAnnotatedImageBase64(result.annotated_image_base64);
+        }
+        setSource('api');
+        setSelectedIdx(null);
+        
+        // Prompt user immediately
+        setTimeout(() => {
+          promptSaveAndSync(mappedSpecimens, result.annotated_image_base64);
+        }, 500);
+        return;
+      }
+
+      if (result && result.status === 'success' && result.specimens && result.specimens.length === 0) {
+        setScanError('None detected — aim at the specimen and try again.');
+        setSpecimens([]);
+        setRawParts([]);
+        setSource('api');
+        return;
+      }
+
+      throw new Error('API returned no data');
+    } catch (err) {
+      console.warn('Real scan failed, falling back to simulation:', err.message);
+      await doSimulatedScan();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── SIMULATED SCAN: Uses full WISP-FLOW AI logic ──
+  const doSimulatedScan = async () => {
+    try {
+      // Simulate a realistic detection delay
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 1200));
+
+      const specimen = simulateDetection();
+
+      setSpecimens([specimen]);
+      setRawParts(specimen.detectedParts || []);
+      setSource('simulation');
+      setSelectedIdx(null);
+    } catch (err) {
+      console.warn('Simulation error:', err);
+      setScanError('Simulation failed. Please try again.');
+    }
   };
 
   // ── Start counting for a detected specimen ──
-  const startCounting = () => {
-    tallyRef.current = 1; // count the first detection
+  const startCounting = (idx) => {
+    setSelectedIdx(idx);
+    tallyRef.current = 1;
     setTally(1);
     setIsCounting(true);
 
-    // Immediately fade out the Specimen Detected banner & Target Acquired pill
     Animated.timing(bannerOpacity, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
+      toValue: 0, duration: 150, useNativeDriver: true,
     }).start();
 
-    // Mock: increment tally every 1.5 seconds (simulates more detections)
     countIntervalRef.current = setInterval(() => {
       tallyRef.current += 1;
       setTally(tallyRef.current);
@@ -224,7 +537,7 @@ export default function YoloCameraModule({ navigation, route }) {
     }, 1500);
   };
 
-  // ── Stop counting, save result to session log ──
+  // ── Stop counting ──
   const stopCounting = (saveToLog = false) => {
     if (countIntervalRef.current) {
       clearInterval(countIntervalRef.current);
@@ -233,7 +546,8 @@ export default function YoloCameraModule({ navigation, route }) {
     setIsCounting(false);
     setCountingDone(true);
 
-    if (saveToLog && specimen && tallyRef.current > 0) {
+    if (saveToLog && selectedIdx !== null && specimens[selectedIdx] && tallyRef.current > 0) {
+      const specimen = specimens[selectedIdx];
       const entry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         species: specimen.species,
@@ -242,52 +556,76 @@ export default function YoloCameraModule({ navigation, route }) {
         source: source,
         timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         qcStatus: specimen.qcStatus,
+        confidence: specimen.confidence,
+        partsFound: specimen.partsFound,
+        partsRequired: specimen.partsRequired,
       };
       setSessionLog(prev => [entry, ...prev]);
-      setSyncStatus(null); // reset sync status since we have new data
+      setSyncStatus(null);
     }
   };
 
-  // ── Handle Start Scan button ──
+  // ── Handle Start Scan ──
   const handleStartScan = async () => {
     setIsScanning(true);
-    setSpecimen(null);
+    setSpecimens([]);
+    setRawParts([]);
+    setAnnotatedImageBase64(null);
+    setCapturedPhotoUri(null);
     setSource(null);
     setTally(0);
     tallyRef.current = 0;
     setIsCounting(false);
     setCountingDone(false);
+    setSelectedIdx(null);
+    setScanError(null);
     if (countIntervalRef.current) {
       clearInterval(countIntervalRef.current);
       countIntervalRef.current = null;
     }
-    if (scanTimeoutRef.current) {
-      clearTimeout(scanTimeoutRef.current);
-      scanTimeoutRef.current = null;
+
+    if (apiStatus === 'connected' && permission?.granted) {
+      await doRealScan();
+    } else {
+      setIsLoading(true);
+      await doSimulatedScan();
+      setIsLoading(false);
     }
-    await doFetchSpecimen();
   };
 
-  // ── Scan Next: keep scanning session alive, fetch another specimen ──
+  // ── Scan Next ──
   const handleScanNext = async () => {
-    setSpecimen(null);
+    setSpecimens([]);
+    setRawParts([]);
+    setAnnotatedImageBase64(null);
+    setCapturedPhotoUri(null);
     setSource(null);
     setTally(0);
     tallyRef.current = 0;
     setIsCounting(false);
     setCountingDone(false);
+    setSelectedIdx(null);
+    setScanError(null);
     if (countIntervalRef.current) {
       clearInterval(countIntervalRef.current);
       countIntervalRef.current = null;
     }
-    await doFetchSpecimen();
+
+    if (apiStatus === 'connected' && permission?.granted) {
+      await doRealScan();
+    } else {
+      setIsLoading(true);
+      await doSimulatedScan();
+      setIsLoading(false);
+    }
   };
 
-  // ── Handle Stop Scan — save to AsyncStorage, then clear all visual state ──
+  // ── Handle Stop Scan ──
   const handleStopScan = async () => {
-    // If actively counting when stop pressed, save that count to log first
+    setScanSummaryData(null);
     const finalLog = [...sessionLog];
-    if (isCounting && specimen && tallyRef.current > 0) {
+    if (isCounting && selectedIdx !== null && specimens[selectedIdx] && tallyRef.current > 0) {
+      const specimen = specimens[selectedIdx];
       const entry = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         species: specimen.species,
@@ -314,7 +652,7 @@ export default function YoloCameraModule({ navigation, route }) {
           timestamp: new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
           status: e.qcStatus === 'flagged' ? 'pending' : 'approved',
           operator: 'EMP-Scan',
-          notes: `${e.species} ×${e.count} detected by YOLO${e.qcStatus === 'flagged' ? ' — Flagged for review' : ''}`,
+          notes: `${e.species} ×${e.count} detected by YOLO (${source === 'api' ? 'AI Model' : 'Simulation'})${e.qcStatus === 'flagged' ? ' — Flagged for review' : ''}`,
         })), ...prev];
         await AsyncStorage.setItem('task_history', JSON.stringify(merged));
       } catch (err) {
@@ -322,20 +660,197 @@ export default function YoloCameraModule({ navigation, route }) {
       }
     }
 
-    // Clear all intervals and visual state
+    // Clear all state
     if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
-    if (scanTimeoutRef.current) { clearTimeout(scanTimeoutRef.current); scanTimeoutRef.current = null; }
     setIsScanning(false);
     setIsLoading(false);
-    setSpecimen(null);
+    setSpecimens([]);
+    setRawParts([]);
+    setAnnotatedImageBase64(null);
+    setCapturedPhotoUri(null);
     setSource(null);
     setTally(0);
     tallyRef.current = 0;
     setIsCounting(false);
     setCountingDone(false);
+    setSelectedIdx(null);
     setSessionLog([]);
     setSyncStatus(null);
+    setScanError(null);
     bannerOpacity.setValue(0);
+  };
+
+  // ── Batch mode: write result to AsyncStorage then go back ──
+  const commitToBatch = async (primary, isMismatch) => {
+    const info = SPECIES_INFO[primary.rawSpecies];
+    await Promise.all([
+      AsyncStorage.setItem('last_detected_species', JSON.stringify({
+        species:    primary.species,
+        commonName: info ? info.common : primary.species,
+      })),
+      AsyncStorage.setItem('pending_specimen_result', JSON.stringify({
+        isRescan:        scanMode === 'rescan',
+        specimenId:      specimenId,
+        batchId:         batchId,
+        status:          primary.qcStatus,
+        species:         primary.rawSpecies,
+        speciesDisplay:  primary.species,
+        confidence:      primary.confidence,
+        partsFound:      primary.partsFound   || {},
+        partsRequired:   primary.partsRequired || {},
+        species_mismatch: isMismatch,
+        timestamp:       new Date().toISOString(),
+      })),
+    ]).catch(() => {});
+    navigation.goBack();
+  };
+
+  const handleAddToBatch = () => {
+    if (!batchId || specimens.length === 0) return;
+    const primary = specimens[0];
+
+    const isMismatch =
+      batchSpecies &&
+      primary.species.toLowerCase() !== batchSpecies.toLowerCase();
+
+    if (isMismatch) {
+      Alert.alert(
+        'Species Mismatch',
+        `This batch is for ${batchSpecies}.\nYou scanned ${primary.species}.\n\nWas this intentional?`,
+        [
+          { text: 'Add Anyway',   onPress: () => commitToBatch(primary, true) },
+          { text: 'Discard Scan', style: 'destructive', onPress: () => navigation.goBack() },
+          { text: 'Cancel',       style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    commitToBatch(primary, false);
+  };
+
+  // ── Post-Scan Prompt & Save Flow ──
+  const promptSaveAndSync = (detectedSpecimens, base64Image) => {
+    if (!detectedSpecimens || detectedSpecimens.length === 0) return;
+    // SEAMLESS FLOW: Bypass the modal and auto-save immediately.
+    saveAndSyncScan(detectedSpecimens, base64Image);
+  };
+
+  const saveAndSyncScan = async (detectedSpecimens, base64Image) => {
+    setScanSummaryData(null);
+    setIsLoading(true);
+    try {
+      let passedThisScan = 0;
+      let scannedThisScan = detectedSpecimens.length;
+      
+      // 1. Sync Inventory & Defects to Supabase
+      if (supabase) {
+        for (const spec of detectedSpecimens) {
+          const genus = spec.species.trim().split(' ')[0] || '';
+          
+          if (spec.qcStatus === 'pass') {
+            passedThisScan++;
+            if (isRepairMode) {
+              await supabase
+                .from('defects')
+                .insert({
+                   species: spec.species,
+                   missing_parts: 'Fixed (Pending Approval)',
+                   status: 'pending_approval',
+                   worker: workerName || 'Unknown'
+                });
+            } else {
+              const { data: rows, error: fetchErr } = await supabase
+                .from('inventory')
+                .select('id, quantity, stock')
+                .ilike('genus', `%${genus}%`)
+                .limit(1);
+
+              if (!fetchErr && rows && rows.length > 0) {
+                const row = rows[0];
+                const quantityKey = 'quantity' in row ? 'quantity' : 'stock';
+                const currentQty = row[quantityKey] ?? 0;
+                await supabase
+                  .from('inventory')
+                  .update({ [quantityKey]: currentQty + 1 })
+                  .eq('id', row.id);
+              }
+            }
+          } else {
+            // It is FLAGGED, log to 'defects' table
+            const required = Object.keys(spec.partsRequired || {});
+            const found = Object.keys(spec.partsFound || {});
+            const missing = required.filter(p => !found.includes(p));
+            
+            await supabase
+              .from('defects')
+              .insert({
+                 species: spec.species,
+                 missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
+                 status: 'new',
+                 worker: workerName || 'Unknown'
+              });
+          }
+        }
+      }
+
+      setDailyStats(prev => ({
+         scanned: prev.scanned + scannedThisScan,
+         passed: prev.passed + passedThisScan
+      }));
+      setDailyStats(prev => ({
+         scanned: prev.scanned + scannedThisScan,
+         passed: prev.passed + passedThisScan
+      }));
+
+      // 2. Persist detected species so WorkflowModule can pick it up on refocus
+      if (detectedSpecimens.length > 0) {
+        const primary = detectedSpecimens[0];
+        const info = SPECIES_INFO[primary.rawSpecies];
+        await AsyncStorage.setItem('last_detected_species', JSON.stringify({
+          species: primary.species,
+          commonName: info ? info.common : primary.species,
+        })).catch(() => {});
+      }
+
+      // 3. Save Image to Local Database via API
+      if (base64Image) {
+        const primary = detectedSpecimens[0];
+        const payload = {
+          annotated_image_base64: base64Image,
+          species: primary.species,
+          confidence: primary.confidence,
+          qa_status: primary.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'
+        };
+
+        const apiHost = await AsyncStorage.getItem('api_host');
+        if (apiHost) {
+          await fetch(`http://${apiHost}/save_scan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
+
+      setIsLoading(false);
+      setIsCooldown(true);
+      setTimeout(() => setIsCooldown(false), 3000);
+
+      // Show non-blocking toast instead of Alert
+      const passCount = detectedSpecimens.filter(s => s.qcStatus === 'pass').length;
+      const flaggedCount = detectedSpecimens.filter(s => s.qcStatus !== 'pass').length;
+      let msg = `✅ Saved! ${passCount} Pass`;
+      if (flaggedCount > 0) msg += `, ⚠️ ${flaggedCount} Flagged`;
+      
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 3000);
+
+    } catch (err) {
+      console.error("Error during save/sync:", err);
+      setIsLoading(false);
+      Alert.alert('Error', 'Failed to save or sync inventory.');
+    }
   };
 
   // ── Sync session log to Supabase ──
@@ -346,20 +861,16 @@ export default function YoloCameraModule({ navigation, route }) {
 
     try {
       if (!supabase) {
-        // Simulate a sync for offline mode
         await new Promise(r => setTimeout(r, 1800));
         setSyncStatus('success');
         return;
       }
 
-      // For each session entry, try to find the matching inventory row and increment stock
       const results = await Promise.all(
         sessionLog.map(async (entry) => {
           const speciesParts = entry.species.trim().split(' ');
           const genus = speciesParts[0] || '';
-          const species = speciesParts.slice(1).join(' ') || '';
 
-          // Find the row
           const { data: rows, error: fetchErr } = await supabase
             .from('inventory')
             .select('id, quantity, stock')
@@ -406,26 +917,105 @@ export default function YoloCameraModule({ navigation, route }) {
     );
   };
 
-  // ── Tapping detected specimen card — prompt to start counting ──
-  const handleSpecimenPress = () => {
-    if (!specimen || isCounting || countingDone) return;
+  // ── Tap specimen to start counting ──
+  const handleSpecimenPress = (idx) => {
+    if (isCounting || countingDone) return;
+    const specimen = specimens[idx];
+    if (!specimen) return;
     Alert.alert(
       'Start Counting?',
       `Begin tallying all "${specimen.species}" detections until you tap Stop Count?`,
       [
         { text: 'Not Now', style: 'cancel' },
-        { text: 'Start Counting', onPress: startCounting },
+        { text: 'Start Counting', onPress: () => startCounting(idx) },
       ]
     );
   };
 
-  // ── Stop counting and save to log (called from button) ──
   const handleStopCount = () => {
     stopCounting(true);
   };
 
+  const selectedSpecimen = selectedIdx !== null ? specimens[selectedIdx] : (specimens.length === 1 ? specimens[0] : null);
+
+  // Compute total parts count
+  const totalPartsCount = rawParts.length;
+
   return (
     <View style={styles.container}>
+      {/* ── Non-blocking Toast Notification ── */}
+      {toastMessage && (
+        <View style={{ position: 'absolute', top: insets.top + 10, alignSelf: 'center', backgroundColor: '#10b981', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, zIndex: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 }}>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{toastMessage}</Text>
+        </View>
+      )}
+
+      {/* ── Custom Scan Summary Modal ── */}
+      <Modal visible={!!scanSummaryData} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', backgroundColor: '#1e293b', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: '#334155', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
+            {scanSummaryData && (() => {
+              const specimens = scanSummaryData.specimens;
+              const passCount = specimens.filter(s => s.qcStatus === 'pass').length;
+              const flaggedItems = specimens.filter(s => s.qcStatus !== 'pass');
+              const itemWording = specimens.length === 1 ? 'specimen' : 'specimens';
+              
+              return (
+                <>
+                  <Text style={{ color: '#f8fafc', fontSize: 22, fontWeight: '700', marginBottom: 6, textAlign: 'center' }}>Scan Summary</Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Detected {specimens.length} {itemWording}</Text>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <CheckCircle color="#10b981" size={32} style={{ marginBottom: 8 }} />
+                      <Text style={{ color: '#10b981', fontSize: 20, fontWeight: 'bold' }}>{passCount}</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '600' }}>PASS</Text>
+                    </View>
+                    <View style={{ width: 1, backgroundColor: '#334155' }} />
+                    <View style={{ alignItems: 'center' }}>
+                      <AlertCircle color={flaggedItems.length > 0 ? "#ef4444" : "#64748b"} size={32} style={{ marginBottom: 8 }} />
+                      <Text style={{ color: flaggedItems.length > 0 ? "#ef4444" : "#64748b", fontSize: 20, fontWeight: 'bold' }}>{flaggedItems.length}</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 12, fontWeight: '600' }}>FLAGGED</Text>
+                    </View>
+                  </View>
+
+                  {flaggedItems.length > 0 && (
+                    <View style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
+                      <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '700', marginBottom: 8 }}>FLAGGED DETAILS:</Text>
+                      {flaggedItems.map((f, idx) => {
+                        const required = Object.keys(f.partsRequired || {});
+                        const found = Object.keys(f.partsFound || {});
+                        const missing = required.filter(p => !found.includes(p));
+                        return (
+                          <Text key={idx} style={{ color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>
+                            • <Text style={{ fontWeight: '600' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
+                          </Text>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <TouchableOpacity 
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#334155', alignItems: 'center' }}
+                      onPress={handleScanNext}
+                    >
+                      <Text style={{ color: '#f8fafc', fontSize: 16, fontWeight: '600' }}>Discard</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#3b82f6', alignItems: 'center', shadowColor: '#3b82f6', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 8 }}
+                      onPress={() => saveAndSyncScan(scanSummaryData.specimens, scanSummaryData.base64Image)}
+                    >
+                      <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Save & Sync</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
 
       {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -441,13 +1031,69 @@ export default function YoloCameraModule({ navigation, route }) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{stepTitle}</Text>
-          <Text style={styles.headerSub}>YOLO Specimen Scan</Text>
+          <Text style={styles.headerSub}>WISP-FLOW AI Scan</Text>
         </View>
-        {/* Tally badge in header top-right */}
-        <Animated.View style={[styles.tallyHeaderBadge, { transform: [{ scale: tallyScale }], opacity: isCounting ? 1 : 0 }]}>
-          <Text style={styles.tallyHeaderNum}>{tally}</Text>
-        </Animated.View>
+
+
+        {/* API status + settings button in header */}
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[
+              styles.apiStatusBadge,
+              apiStatus === 'connected' && styles.apiStatusConnected,
+              apiStatus === 'offline' && styles.apiStatusOffline,
+            ]}
+            onPress={() => setSettingsVisible(true)}
+            activeOpacity={0.7}
+          >
+            {apiStatus === 'checking' ? (
+              <ActivityIndicator size={10} color={SKY} />
+            ) : apiStatus === 'connected' ? (
+              <Wifi size={12} color="#10b981" />
+            ) : (
+              <WifiOff size={12} color="#94a3b8" />
+            )}
+            <Text style={[
+              styles.apiStatusText,
+              apiStatus === 'connected' && { color: '#10b981' },
+            ]}>
+              {apiStatus === 'checking' ? 'AI…' : apiStatus === 'connected' ? 'AI' : 'SIM'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Tally badge */}
+          {isCounting && (
+            <Animated.View style={[styles.tallyHeaderBadge, { transform: [{ scale: tallyScale }] }]}>
+              <Text style={styles.tallyHeaderNum}>{tally}</Text>
+            </Animated.View>
+          )}
+        </View>
       </View>
+
+      {/* ── Operator Bar ── */}
+      {workerName && (
+        <View style={styles.workerBar}>
+          <Text style={styles.workerBarName}>OPERATOR: {workerName.toUpperCase()}</Text>
+          <Text style={styles.workerBarStats}>
+            {dailyStats.scanned} scanned · {dailyStats.scanned > 0 ? Math.round((dailyStats.passed / dailyStats.scanned) * 100) : 0}% pass rate
+          </Text>
+        </View>
+      )}
+
+      {/* ── Re-scan Mode Banner ── */}
+      {scanMode === 'rescan' && (
+        <View style={styles.rescanBanner}>
+          <RefreshCw size={13} color="#c2410c" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rescanBannerTitle}>RE-SCAN MODE</Text>
+            {originalDefects && (
+              <Text style={styles.rescanBannerSub}>
+                Original defects: {Object.entries(originalDefects).map(([k, v]) => `${v} ${k}`).join(', ')}
+              </Text>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* ── Camera Viewport ── */}
       <View style={styles.cameraContainer}>
@@ -459,22 +1105,32 @@ export default function YoloCameraModule({ navigation, route }) {
           </View>
         ) : permission.granted ? (
           <>
-            <CameraView style={StyleSheet.absoluteFillObject} facing="back" />
-            
-            {/* Status badge pinned to top when not scanning */}
-            {!isScanning && (
-              <View style={styles.cameraOverlayTop}>
-                <View style={styles.glassBadge}>
-                  <Text style={styles.glassBadgeText}>CAMERA ONLINE</Text>
-                </View>
-              </View>
+            {annotatedImageBase64 && !isLoading ? (
+              <Animated.Image 
+                source={{ uri: `data:image/jpeg;base64,${annotatedImageBase64}` }} 
+                style={[StyleSheet.absoluteFillObject, { opacity: boundingBoxOpacity }]} 
+                resizeMode="cover" 
+              />
+            ) : capturedPhotoUri ? (
+              <Image 
+                source={{ uri: capturedPhotoUri }} 
+                style={StyleSheet.absoluteFillObject} 
+                resizeMode="cover" 
+              />
+            ) : (
+              <CameraView
+                ref={cameraRef}
+                style={StyleSheet.absoluteFillObject}
+                facing="back"
+              />
             )}
+
           </>
         ) : (
           <View style={StyleSheet.absoluteFillObject}>
             <View style={styles.cameraOverlay}>
               <View style={styles.glassBadge}>
-                <Text style={[styles.glassBadgeText, { color: '#fb7185' }]}>SIMULATOR / OFFLINE MODE</Text>
+                <Text style={[styles.glassBadgeText, { color: '#fb7185' }]}>SIMULATION MODE</Text>
               </View>
             </View>
           </View>
@@ -487,48 +1143,76 @@ export default function YoloCameraModule({ navigation, route }) {
           <View style={[styles.corner, styles.cornerBL]} />
           <View style={[styles.corner, styles.cornerBR]} />
 
-          {/* Bounding box overlay for realism */}
-          {specimen && !isLoading && (
+          {/* Render local bounding boxes ONLY for simulation mode */}
+          {source === 'simulation' && specimens.length > 0 && !isLoading && specimens.map((spec, idx) => (
             <Animated.View
+              key={spec.id || idx}
               style={[
                 styles.boundingBox,
                 {
-                  top: boxPosition.top,
-                  left: boxPosition.left,
-                  width: boxPosition.width,
-                  height: boxPosition.height,
+                  top: `${spec.box.y * 100}%`,
+                  left: `${spec.box.x * 100}%`,
+                  width: `${spec.box.w * 100}%`,
+                  height: `${spec.box.h * 100}%`,
                   opacity: boundingBoxOpacity,
-                  borderColor: specimen.qcStatus === 'flagged' ? '#ef4444' : '#10b981',
+                  borderColor: spec.qcStatus === 'flagged' ? '#ef4444' : '#10b981',
                 },
               ]}
             >
-              <View style={[styles.boxCorner, styles.boxCornerTL, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
-              <View style={[styles.boxCorner, styles.boxCornerTR, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
-              <View style={[styles.boxCorner, styles.boxCornerBL, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
-              <View style={[styles.boxCorner, styles.boxCornerBR, specimen.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
-              
-              <View style={[styles.boundingBoxLabel, specimen.qcStatus === 'flagged' && { backgroundColor: '#ef4444' }]}>
+              <View style={[styles.boxCorner, styles.boxCornerTL, spec.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerTR, spec.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerBL, spec.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+              <View style={[styles.boxCorner, styles.boxCornerBR, spec.qcStatus === 'flagged' && { borderColor: '#f87171' }]} />
+
+              <View style={[styles.boundingBoxLabel, spec.qcStatus === 'flagged' && { backgroundColor: '#ef4444' }]}>
                 <Text style={styles.boundingBoxText}>
-                  {specimen.species} ({(85 + Math.floor(Math.random() * 14))}%) - {specimen.qcStatus === 'flagged' ? 'FLAGGED' : 'PASS'}
+                  {spec.species} ({Math.round(spec.confidence * 100)}%) - {spec.qcStatus === 'flagged' ? 'FLAGGED' : 'PASS'}
                 </Text>
               </View>
             </Animated.View>
-          )}
+          ))}
+
+          {/* Render individual PART bounding boxes ONLY for simulation mode */}
+          {source === 'simulation' && rawParts.length > 0 && !isLoading && rawParts.map((part, idx) => (
+            <Animated.View
+              key={`part-${idx}`}
+              style={[
+                styles.partBox,
+                {
+                  top: `${part.box.y * 100}%`,
+                  left: `${part.box.x * 100}%`,
+                  width: `${part.box.w * 100}%`,
+                  height: `${part.box.h * 100}%`,
+                  opacity: boundingBoxOpacity,
+                  borderColor: PART_COLORS[part.name] || '#888',
+                },
+              ]}
+            >
+              <View style={[styles.partBoxLabel, { backgroundColor: PART_COLORS[part.name] || '#888' }]}>
+                <Text style={styles.partBoxText}>
+                  {part.name} {(part.confidence * 100).toFixed(0)}%
+                </Text>
+              </View>
+            </Animated.View>
+          ))}
 
           <Animated.View style={{ transform: [{ scale: pulseAnim }], alignItems: 'center', zIndex: 10 }}>
             {!isScanning && (
               <Camera size={52} color={SKY} style={{ marginBottom: 10 }} />
             )}
-            {/* Idle/loading/counting status — only shown when NOT in target-acquired state */}
             <Text style={[styles.cameraText, isScanning && styles.cameraTextActive]}>
               {isLoading
-                ? 'Scanning environment with YOLOv8...'
+                ? (apiStatus === 'connected' ? 'Analyzing frame with best.pt model...' : 'Running WISP-FLOW simulation...')
                 : isScanning
                   ? isCounting
-                    ? `Tracking ${specimen?.species ?? 'specimen'}…`
-                    : '' // target acquired pill shown separately below
+                    ? `Tracking ${selectedSpecimen?.species ?? 'specimen'}…`
+                    : scanError
+                      ? scanError
+                      : ''
                   : permission?.granted
-                    ? 'System ready. Press Start Scan.'
+                    ? (apiStatus === 'connected'
+                        ? 'AI Model connected. Press Start Scan.'
+                        : 'WISP-FLOW simulation ready. Press Start Scan.')
                     : 'Camera offline. Press Start Scan to run simulation.'}
             </Text>
             {!permission?.granted && !isScanning && (
@@ -540,13 +1224,17 @@ export default function YoloCameraModule({ navigation, route }) {
             )}
           </Animated.View>
 
-          {/* Specimen Detected Banner — pinned bottom of camera, fades away when counting starts */}
-          {specimen && !isLoading && !isCounting && (
+          {/* Specimen Detected Banner */}
+          {specimens.length > 0 && !isLoading && !isCounting && (
             <Animated.View style={[styles.specimenBanner, { opacity: bannerOpacity }]}>
               <View style={styles.specimenBannerDot} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.specimenBannerText}>
-                  Specimen Detected - Tap specimen below to count
+                  {specimens.length === 1
+                    ? `${specimens[0].species} — ${totalPartsCount} parts detected`
+                    : `${specimens.length} Specimens — ${totalPartsCount} parts`}
+                  {source === 'api' && ' (AI Model)'}
+                  {source === 'simulation' && ' (Simulation)'}
                 </Text>
               </View>
             </Animated.View>
@@ -561,13 +1249,29 @@ export default function YoloCameraModule({ navigation, route }) {
         {/* Controls */}
         <View style={styles.cameraControls}>
           {!isScanning ? (
-            <TouchableOpacity 
-              style={styles.startButton} 
-              onPress={handleStartScan}
-            >
-              <Camera size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.mainButtonText}>Start Scan</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.startButton, isCooldown && { backgroundColor: '#475569', borderColor: '#64748b' }]}
+                onPress={handleStartScan}
+                disabled={isCooldown}
+              >
+                <Camera size={18} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.mainButtonText}>{isCooldown ? 'Clear Table...' : 'Start Scan'}</Text>
+              </TouchableOpacity>
+              
+              {!isCooldown && (
+                <TouchableOpacity
+                  style={[styles.startButton, { backgroundColor: '#2B3441', paddingHorizontal: 20 }]}
+                  onPress={() => {
+                    setIsRepairMode(true);
+                    handleStartScan();
+                  }}
+                >
+                  <RefreshCw size={18} color="#f59e0b" style={{ marginRight: 8 }} />
+                  <Text style={styles.mainButtonText}>Re-Scan Defect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           ) : (
             <View style={styles.scanningControls}>
               {isCounting ? (
@@ -593,105 +1297,180 @@ export default function YoloCameraModule({ navigation, route }) {
       {/* ── Results Panel ── */}
       <View style={styles.resultsContainer}>
 
-        {/* Live Detection row */}
+        {/* Live Detection header */}
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsTitle}>Live Detection</Text>
-          <View style={[styles.detectionCount, !specimen && styles.detectionCountZero]}>
-            <Text style={styles.detectionCountText}>{specimen ? '1' : '0'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {source === 'api' && (
+              <View style={styles.aiSourceBadge}>
+                <Text style={styles.aiSourceText}>AI</Text>
+              </View>
+            )}
+            {source === 'simulation' && (
+              <View style={styles.simSourceBadge}>
+                <Text style={styles.simSourceText}>SIM</Text>
+              </View>
+            )}
+            <View style={[styles.detectionCount, specimens.length === 0 && styles.detectionCountZero]}>
+              <Text style={styles.detectionCountText}>{specimens.length}</Text>
+            </View>
           </View>
         </View>
 
         {isLoading ? (
           <View style={styles.detectionLoadingRow}>
             <ActivityIndicator size="small" color={SKY} />
-            <Text style={styles.emptyStateText}>Scanning for specimen…</Text>
+            <Text style={styles.emptyStateText}>
+              {apiStatus === 'connected' ? 'Sending frame to best.pt model…' : 'Running WISP-FLOW detection logic…'}
+            </Text>
           </View>
-        ) : specimen ? (
-          <TouchableOpacity
-            style={[
-              styles.detectionCard,
-              isCounting && styles.detectionCardCounting,
-              countingDone && !isCounting && styles.detectionCardDone,
-            ]}
-            onPress={handleSpecimenPress}
-            activeOpacity={(isCounting || countingDone) ? 1 : 0.75}
+        ) : specimens.length > 0 ? (
+          <ScrollView
+            style={styles.specimensScroll}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
           >
-            <View style={styles.detectionInfo}>
-              <View style={[styles.colorIndicator, {
-                backgroundColor: isCounting 
-                  ? '#f59e0b' 
-                  : specimen.qcStatus === 'flagged' 
-                    ? '#ef4444' 
-                    : '#10b981'
-              }]} />
-              <View style={styles.specimenTexts}>
-                <Text style={styles.specimenScientific}>{specimen.species}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Text style={styles.specimenCommon}>{specimen.commonName}</Text>
-                  <View style={[
-                    styles.qcBadge,
-                    specimen.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
-                  ]}>
-                    <Text style={[
-                      styles.qcBadgeText,
-                      specimen.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
-                    ]}>
-                      {specimen.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
-                    </Text>
+            {specimens.map((spec, idx) => {
+              const isSelected = selectedIdx === idx;
+              const isActive = isCounting && isSelected;
+              const isDone = countingDone && isSelected;
+
+              return (
+                <TouchableOpacity
+                  key={spec.id || idx}
+                  style={[
+                    styles.detectionCard,
+                    isActive && styles.detectionCardCounting,
+                    isDone && styles.detectionCardDone,
+                    specimens.length > 1 && { marginBottom: 6 },
+                  ]}
+                  onPress={() => handleSpecimenPress(idx)}
+                  activeOpacity={(isCounting || countingDone) ? 1 : 0.75}
+                >
+                  <View style={styles.detectionInfo}>
+                    <View style={[styles.colorIndicator, {
+                      backgroundColor: isActive
+                        ? '#f59e0b'
+                        : spec.qcStatus === 'flagged'
+                          ? '#ef4444'
+                          : '#10b981'
+                    }]} />
+                    <View style={styles.specimenTexts}>
+                      <Text style={styles.specimenScientific}>{spec.species}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {spec.commonName !== spec.species && (
+                          <Text style={styles.specimenCommon}>{spec.commonName}</Text>
+                        )}
+                        <View style={[
+                          styles.qcBadge,
+                          spec.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+                        ]}>
+                          <Text style={[
+                            styles.qcBadgeText,
+                            spec.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
+                          ]}>
+                            {spec.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Parts breakdown with color-coded pills */}
+                      {Object.keys(spec.partsFound).length > 0 && (
+                        <View style={styles.partsBreakdown}>
+                          {Object.entries(spec.partsFound).map(([partName, count]) => (
+                            <View
+                              key={partName}
+                              style={[styles.partPill, { borderColor: PART_COLORS[partName] || '#888' }]}
+                            >
+                              <View style={[styles.partPillDot, { backgroundColor: PART_COLORS[partName] || '#888' }]} />
+                              <Text style={[styles.partPillText, { color: PART_COLORS[partName] || '#888' }]}>
+                                {count} {partName}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Required vs found comparison */}
+                      {spec.partsRequired && Object.keys(spec.partsRequired).length > 0 && (
+                        <Text style={styles.requiredText}>
+                          Required: {Object.entries(spec.partsRequired).map(([k, v]) => `${v} ${k}`).join(', ')}
+                        </Text>
+                      )}
+
+                      {!isCounting && !countingDone && (
+                        <Text style={styles.tapHint}>Tap to start counting</Text>
+                      )}
+                      {isDone && (
+                        <Text style={[styles.tapHint, spec.qcStatus === 'flagged' ? { color: '#ef4444' } : { color: '#10b981' }]}>
+                          {spec.qcStatus === 'flagged' ? `⚠ Logged ${tally} to session (Flagged)` : `✓ Logged ${tally} to session`}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                </View>
-                {!isCounting && !countingDone && (
-                  <Text style={styles.tapHint}>Tap to start counting</Text>
-                )}
-                {countingDone && (
-                  <Text style={[styles.tapHint, specimen.qcStatus === 'flagged' ? { color: '#ef4444' } : { color: '#10b981' }]}>
-                    {specimen.qcStatus === 'flagged' ? `⚠ Logged ${tally} to session (Flagged)` : `✓ Logged ${tally} to session`}
-                  </Text>
-                )}
-              </View>
-            </View>
-            <View style={styles.rightMeta}>
-              {isCounting ? (
-                <Animated.View style={[styles.tallyBadge, { transform: [{ scale: tallyScale }] }]}>
-                  <Hash size={12} color={SKY} style={{ marginBottom: 1 }} />
-                  <Text style={styles.tallyNum}>{tally}</Text>
-                  <Text style={styles.tallyLabel}>counted</Text>
-                </Animated.View>
-              ) : countingDone ? (
-                <View style={styles.doneBadge}>
-                  <CheckCircle size={14} color="#10b981" />
-                  <Text style={styles.doneText}>{tally}</Text>
-                </View>
-              ) : (
-                <View style={styles.confidenceBadge}>
-                  <Text style={styles.confidenceText}>
-                    {(85 + Math.floor(Math.random() * 14))}%
-                  </Text>
-                </View>
-              )}
-              {source === 'fallback' && (
-                <Text style={styles.sourceTag}>Offline</Text>
-              )}
-              {source === 'supabase' && (
-                <Text style={[styles.sourceTag, styles.sourceTagLive]}>Live DB</Text>
-              )}
-            </View>
-          </TouchableOpacity>
+                  <View style={styles.rightMeta}>
+                    {isActive ? (
+                      <Animated.View style={[styles.tallyBadge, { transform: [{ scale: tallyScale }] }]}>
+                        <Hash size={12} color={SKY} style={{ marginBottom: 1 }} />
+                        <Text style={styles.tallyNum}>{tally}</Text>
+                        <Text style={styles.tallyLabel}>counted</Text>
+                      </Animated.View>
+                    ) : isDone ? (
+                      <View style={styles.doneBadge}>
+                        <CheckCircle size={14} color="#10b981" />
+                        <Text style={styles.doneText}>{tally}</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.confidenceBadge}>
+                        <Text style={styles.confidenceText}>
+                          {Math.round(spec.confidence * 100)}%
+                        </Text>
+                      </View>
+                    )}
+                    {source === 'simulation' && (
+                      <Text style={styles.sourceTag}>Sim</Text>
+                    )}
+                    {source === 'api' && (
+                      <Text style={[styles.sourceTag, styles.sourceTagAi]}>AI Model</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         ) : (
           <View style={styles.emptyState}>
             <AlertCircle size={28} color={isScanning ? SKY : '#475569'} />
             <Text style={styles.emptyStateText}>
-              {isScanning ? 'Scanning environment…' : 'Press Start Scan to detect a specimen'}
+              {scanError
+                ? scanError
+                : isScanning
+                  ? 'Running WISP-FLOW detection…'
+                  : 'Press Start Scan to detect specimens'}
             </Text>
           </View>
         )}
 
+        {/* ── Add to Batch / Confirm Re-Scan (batch mode only) ── */}
+        {batchId && specimens.length > 0 && !isLoading && (
+          <TouchableOpacity
+            style={[styles.addToBatchBtn, { marginBottom: Math.max(insets.bottom, 12) }]}
+            onPress={handleAddToBatch}
+            activeOpacity={0.85}
+          >
+            <CheckCircle size={15} color="#fff" />
+            <Text style={styles.addToBatchBtnText}>
+              {scanMode === 'rescan' ? 'Confirm Re-Scan' : 'Add to Batch'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Counting live summary */}
-        {isCounting && specimen && (
+        {isCounting && selectedSpecimen && (
           <View style={styles.countingSummaryRow}>
             <View style={styles.countingDot} />
             <Text style={styles.countingSummaryText}>
-              Counting <Text style={styles.countingSummaryBold}>{specimen.species}</Text> — {tally} detected so far
+              Counting <Text style={styles.countingSummaryBold}>{selectedSpecimen.species}</Text> — {tally} detected so far
             </Text>
           </View>
         )}
@@ -700,7 +1479,6 @@ export default function YoloCameraModule({ navigation, route }) {
         {sessionLog.length > 0 && (
           <View style={styles.sessionLogContainer}>
 
-            {/* Session log header */}
             <View style={styles.sessionLogHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={styles.sessionLogTitle}>Session Log</Text>
@@ -713,7 +1491,6 @@ export default function YoloCameraModule({ navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            {/* Log entries */}
             <ScrollView
               style={styles.sessionLogScroll}
               nestedScrollEnabled
@@ -729,7 +1506,7 @@ export default function YoloCameraModule({ navigation, route }) {
                 >
                   <View style={styles.sessionEntryLeft}>
                     <View style={[
-                      styles.sessionEntryDot, 
+                      styles.sessionEntryDot,
                       idx === 0 && { backgroundColor: entry.qcStatus === 'flagged' ? '#ef4444' : '#10b981' }
                     ]} />
                     <View>
@@ -750,12 +1527,31 @@ export default function YoloCameraModule({ navigation, route }) {
                           </View>
                         )}
                       </View>
+
+                      {/* Show parts found in session log */}
+                      {entry.partsFound && Object.keys(entry.partsFound).length > 0 && (
+                        <View style={[styles.partsBreakdown, { marginTop: 3 }]}>
+                          {Object.entries(entry.partsFound).map(([partName, count]) => (
+                            <View
+                              key={partName}
+                              style={[styles.partPillMini, { borderColor: PART_COLORS[partName] || '#888' }]}
+                            >
+                              <Text style={[styles.partPillTextMini, { color: PART_COLORS[partName] || '#888' }]}>
+                                {count} {partName}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
                   </View>
                   <View style={styles.sessionEntryRight}>
                     <Text style={styles.sessionEntryCount}>+{entry.count}</Text>
-                    {entry.source === 'supabase' && (
-                      <Text style={[styles.sourceTag, styles.sourceTagLive, { fontSize: 8 }]}>DB</Text>
+                    {entry.source === 'api' && (
+                      <Text style={[styles.sourceTag, styles.sourceTagAi, { fontSize: 8 }]}>AI</Text>
+                    )}
+                    {entry.source === 'simulation' && (
+                      <Text style={[styles.sourceTag, { fontSize: 8 }]}>SIM</Text>
                     )}
                   </View>
                 </View>
@@ -806,6 +1602,9 @@ export default function YoloCameraModule({ navigation, route }) {
         )}
 
       </View>
+
+      {/* ── API Settings Modal ── */}
+      <ApiSettingsModal visible={settingsVisible} onClose={handleSettingsClose} />
     </View>
   );
 }
@@ -852,6 +1651,35 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  apiStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  apiStatusConnected: {
+    borderColor: 'rgba(16,185,129,0.35)',
+    backgroundColor: 'rgba(16,185,129,0.08)',
+  },
+  apiStatusOffline: {
+    borderColor: 'rgba(148,163,184,0.2)',
+  },
+  apiStatusText: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   tallyHeaderBadge: {
     width: 40,
     height: 40,
@@ -866,9 +1694,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 
+  // ── Operator Bar ──
+  workerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  workerBarName: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  workerBarStats: {
+    color: SKY,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+
   // ── Camera ──
   cameraContainer: {
-    flex: 2,
+    flex: 3,
     backgroundColor: '#000000',
     position: 'relative',
   },
@@ -898,15 +1749,6 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     top: '50%',
     borderRadius: 2,
-  },
-  countingRing: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: '#f59e0b',
-    opacity: 0.35,
   },
   corner: {
     position: 'absolute',
@@ -1000,6 +1842,34 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  aiSourceBadge: {
+    backgroundColor: 'rgba(37,99,235,0.15)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(37,99,235,0.3)',
+  },
+  aiSourceText: {
+    color: '#60a5fa',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  simSourceBadge: {
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.3)',
+  },
+  simSourceText: {
+    color: '#f59e0b',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
   detectionCount: {
     backgroundColor: '#2B3441',
     width: 26,
@@ -1025,6 +1895,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 10,
     paddingHorizontal: 4,
+  },
+  specimensScroll: {
+    maxHeight: 190,
   },
 
   // ── Detection Card ──
@@ -1089,6 +1962,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+
+  // ── Parts breakdown with color-coded pills ──
+  partsBreakdown: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 5,
+  },
+  partPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  partPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  partPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  partPillMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 0.5,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  partPillTextMini: {
+    fontSize: 8,
+    fontWeight: '600',
+  },
+  requiredText: {
+    color: '#475569',
+    fontSize: 9,
+    fontWeight: '500',
+    marginTop: 3,
+    fontStyle: 'italic',
+  },
   tapHint: {
     color: '#475569',
     fontSize: 10,
@@ -1151,9 +2071,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
   },
-  sourceTagLive: {
-    color: SKY,
-    borderColor: 'rgba(184,212,232,0.3)',
+  sourceTagAi: {
+    color: '#60a5fa',
+    borderColor: 'rgba(96,165,250,0.3)',
+    backgroundColor: 'rgba(37,99,235,0.08)',
   },
 
   // ── Counting summary ──
@@ -1333,47 +2254,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Camera Permission & Realism Overlay Styles ──
-  permissionContainer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0f172a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    zIndex: 100,
-  },
-  permissionTitle: {
-    color: '#f8fafc',
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  permissionDesc: {
-    color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  permissionButton: {
-    backgroundColor: NAVY,
-    borderColor: SKY,
-    borderWidth: 2,
-    borderRadius: 24,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-  },
-  permissionButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  permissionText: {
-    color: '#94a3b8',
-    marginTop: 12,
-    fontSize: 14,
-  },
+  // ── Camera Permission & Overlay Styles ──
   cameraOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15, 23, 42, 0.65)',
@@ -1402,16 +2283,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.5,
   },
-  disabledButton: {
-    opacity: 0.5,
-    backgroundColor: '#334155',
-    borderColor: '#475569',
-  },
 
   // ── Specimen Detected Banner ──
   specimenBanner: {
     position: 'absolute',
-    bottom: 78,        // just above camera controls row
+    bottom: 78,
     left: 16,
     right: 16,
     flexDirection: 'row',
@@ -1437,44 +2313,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.2,
   },
-  specimenBannerSub: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 1,
-  },
 
-  // ── Target Acquired pill (top-right, out of center) ──
-  targetAcquiredPill: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.4)',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 6,
-    zIndex: 25,
-  },
-  targetAcquiredDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10b981',
-  },
-  targetAcquiredText: {
-    color: '#34d399',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-
-  // ── Bounding Box Realism Styles ──
+  // ── Parent Species Bounding Box ──
   boundingBox: {
     position: 'absolute',
     borderWidth: 2,
@@ -1506,6 +2346,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
+
+  // ── Part Bounding Box ──
+  partBox: {
+    position: 'absolute',
+    borderWidth: 1.5,
+    borderRadius: 3,
+    zIndex: 25,
+  },
+  partBoxLabel: {
+    position: 'absolute',
+    top: -16,
+    left: -1,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
+  },
+  partBoxText: {
+    color: '#000000',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+
+  // ── QC Badges ──
   qcBadge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1542,5 +2405,48 @@ const styles = StyleSheet.create({
   },
   sessionLogEntryLatestFlagged: {
     backgroundColor: 'rgba(239,68,68,0.05)',
+  },
+
+  // ── Re-scan mode banner ──
+  rescanBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fff7ed',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fdba74',
+  },
+  rescanBannerTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#c2410c',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  rescanBannerSub: {
+    fontSize: 11,
+    color: '#92400e',
+    fontWeight: '500',
+    marginTop: 1,
+  },
+
+  // ── Add to Batch button ──
+  addToBatchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#059669',
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  addToBatchBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

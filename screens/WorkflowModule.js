@@ -1,595 +1,457 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  TouchableOpacity, 
-  Modal, 
-  TextInput, 
-  Alert, 
-  KeyboardAvoidingView,
-  Platform,
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
   Animated,
-  LayoutAnimation,
-  UIManager,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
-import { Play, CheckCircle, Clock, Plus, X, Sparkles, Package, Bell, Lock } from 'lucide-react-native';
-import { fetchProductsCatalog } from '../src/supabaseClient';
-import { COLORS, SHADOW_SM, SHADOW_MD } from '../theme';
+import { Bell, Plus, ChevronRight, RotateCcw, Trash2 } from 'lucide-react-native';
+import { COLORS, SHADOW_SM } from '../theme';
 
-// Enable LayoutAnimation on Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+const generateId = () =>
+  Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+
+// After 2 rescans (3 total attempts) → escalate
+const MAX_RESCANS = 2;
 
 const ALERTS_PREVIEW = [
   { id: '1', title: 'Specimen Flagged in QC', type: 'critical' },
   { id: '2', title: 'Log Rejected by Manager', type: 'warning' },
-  { id: '3', title: 'Inventory Synced', type: 'success' },
+  { id: '3', title: 'Inventory Synced',        type: 'success'  },
 ];
 
-const PRESET_PRODUCTS = [
-  { species: 'Danaus plexippus', commonName: 'Monarch Butterfly' },
-  { species: 'Morpho peleides', commonName: 'Blue Morpho' },
-  { species: 'Heliconius charithonia', commonName: 'Zebra Longwing' },
-  { species: 'Graphium sarpedon', commonName: 'Common Bluebottle' },
-  { species: 'Papilio palinurus', commonName: 'Emerald Swallowtail' },
-  { species: 'Actias selene', commonName: 'Indian Moon Moth' },
-  { species: 'Attacus atlas', commonName: 'Atlas Moth' },
-  { species: 'Caligo eurilochus', commonName: 'Forest Giant Owl' }
-];
+const STATUS_CONFIG = {
+  pass:            { label: 'PASS',      bg: '#d1fae5', text: '#065f46' },
+  flagged:         { label: 'FLAGGED',   bg: '#fee2e2', text: '#991b1b' },
+  discarded:       { label: 'DISCARDED', bg: '#f1f5f9', text: '#64748b' },
+  escalated:       { label: 'ESCALATED', bg: '#fff7ed', text: '#c2410c' },
+  pending_manager: { label: 'PENDING',   bg: '#ede9fe', text: '#6d28d9' },
+};
 
-// Initial step definitions — always starts at Initial QC
-const INITIAL_STEPS = () => ([
-  { id: 1, title: 'Initial Quality Control', status: 'active',  time: 'In Progress' },
-  { id: 2, title: 'Final Quality Control',   status: 'pending', time: '--:--' },
-  { id: 3, title: 'Packaging',               status: 'pending', time: '--:--' },
-]);
+const BATCH_STATUS = {
+  pending_approval: { label: 'Pending Approval', color: '#6d28d9', bg: '#ede9fe' },
+  approved:         { label: 'Approved',          color: '#065f46', bg: '#d1fae5' },
+  rejected:         { label: 'Rejected',          color: '#991b1b', bg: '#fee2e2' },
+};
 
 export default function WorkflowModule({ navigation, route }) {
   const isFocused = useIsFocused();
-  const screenFadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
 
+  const [currentSpecies, setCurrentSpecies] = useState({ species: 'Awaiting scan…', commonName: '' });
+  const [activeBatch,    setActiveBatch]    = useState(null);
+  const [recentBatches,  setRecentBatches]  = useState([]);
+
+  // ── Fade in + load all persisted data on focus ──
   useEffect(() => {
-    if (isFocused) {
-      screenFadeAnim.setValue(0);
-      Animated.timing(screenFadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      screenFadeAnim.setValue(0);
-    }
-  }, [isFocused, screenFadeAnim]);
+    if (!isFocused) { fadeAnim.setValue(0); return; }
+    fadeAnim.setValue(0);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [batchId, setBatchId] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState(null);
-
-  const [products, setProducts] = useState(PRESET_PRODUCTS);
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const [dbStatus, setDbStatus] = useState('checking');
-
-  const [activeBatch, setActiveBatch] = useState({
-    id: '#BT-9921',
-    species: 'Morpho peleides',
-    commonName: 'Blue Morpho',
-    status: 'In Progress'
-  });
-
-  // Always start at Initial QC
-  const [steps, setSteps] = useState(INITIAL_STEPS());
-
-  // Per-step specimen counts received from YoloScan
-  // { stepId: { count: number, specimenName: string } | null }
-  const [stepCounts, setStepCounts] = useState({ 1: null, 2: null, 3: null });
-
-  // Animated values for each step card press
-  const stepScales = useRef({
-    1: new Animated.Value(1),
-    2: new Animated.Value(1),
-    3: new Animated.Value(1),
-  }).current;
-
-  // ── Receive scan results navigated back from YoloScan ──
-  useEffect(() => {
-    const scanResult = route?.params?.scanResult;
-    if (scanResult) {
-      const { stepId, count, specimenName } = scanResult;
-      setStepCounts(prev => ({ ...prev, [stepId]: { count, specimenName } }));
-      // Clear param so it doesn't fire again on re-focus
-      navigation.setParams({ scanResult: undefined });
-    }
-  }, [route?.params?.scanResult]);
-
-  // ── Load products on mount ──
-  useEffect(() => {
-    async function loadProducts() {
-      setIsLoadingProducts(true);
+    const load = async () => {
       try {
-        const catalog = await fetchProductsCatalog();
-        if (catalog && catalog.length > 0) {
-          setProducts(catalog);
-          setDbStatus('connected_live');
-        } else if (catalog && catalog.length === 0) {
-          setDbStatus('connected_empty');
-        } else {
-          setDbStatus('offline');
+        const pairs = await AsyncStorage.multiGet([
+          'last_detected_species',
+          'active_batch',
+          'recent_batches',
+          'pending_specimen_result',
+        ]);
+        const [speciesRaw, batchRaw, historyRaw, pendingRaw] = pairs.map(p => p[1]);
+
+        if (speciesRaw) { try { setCurrentSpecies(JSON.parse(speciesRaw)); } catch {} }
+        if (historyRaw) { try { setRecentBatches(JSON.parse(historyRaw)); }  catch {} }
+
+        let batch = null;
+        try { batch = batchRaw ? JSON.parse(batchRaw) : null; } catch {}
+
+        if (pendingRaw) {
+          await AsyncStorage.removeItem('pending_specimen_result');
+          try {
+            const result = JSON.parse(pendingRaw);
+            if (batch && result.batchId === batch.id) {
+              batch = applyResultToBatch(batch, result);
+              await AsyncStorage.setItem('active_batch', JSON.stringify(batch));
+            }
+          } catch {}
         }
-      } catch (err) {
-        console.error('Error fetching Supabase products:', err);
-        setDbStatus('offline');
-      } finally {
-        setIsLoadingProducts(false);
-      }
+
+        setActiveBatch(batch);
+      } catch {}
+    };
+
+    load();
+  }, [isFocused]);
+
+  // ── Apply a scan result to a batch (pure — returns new batch object) ──
+  const applyResultToBatch = (batch, result) => {
+    if (result.isRescan && result.specimenId) {
+      const updatedSpecimens = batch.specimens.map(s => {
+        if (s.id !== result.specimenId) return s;
+        const newRescanCount = s.rescan_count + 1;
+        const shouldEscalate = result.status === 'flagged' && newRescanCount >= MAX_RESCANS;
+        return {
+          ...s,
+          status:          shouldEscalate ? 'escalated' : result.status,
+          rescan_count:    newRescanCount,
+          last_scanned_at: new Date().toISOString(),
+        };
+      });
+      return { ...batch, specimens: updatedSpecimens };
     }
-    loadProducts();
-  }, []);
 
-  // ── Press animation for step cards ──
-  const animatePressIn = (stepId) => {
-    Animated.spring(stepScales[stepId], {
-      toValue: 0.97,
-      useNativeDriver: true,
-      speed: 50,
-      bounciness: 4,
-    }).start();
+    const newSpecimen = {
+      id:               generateId(),
+      status:           result.status,
+      species:          result.speciesDisplay || result.species,
+      confidence:       result.confidence || 0,
+      parts_found:      result.partsFound   || {},
+      parts_required:   result.partsRequired || {},
+      species_mismatch: result.species_mismatch || false,
+      rescan_count:     0,
+      discard_reason:   null,
+      discard_notes:    null,
+      scanned_at:       result.timestamp || new Date().toISOString(),
+      last_scanned_at:  result.timestamp || new Date().toISOString(),
+    };
+    return { ...batch, specimens: [...batch.specimens, newSpecimen] };
   };
 
-  const animatePressOut = (stepId) => {
-    Animated.spring(stepScales[stepId], {
-      toValue: 1,
-      useNativeDriver: true,
-      speed: 30,
-      bounciness: 6,
-    }).start();
-  };
+  // ── Persist active batch whenever it changes ──
+  useEffect(() => {
+    if (activeBatch === null) {
+      AsyncStorage.removeItem('active_batch').catch(() => {});
+    } else {
+      AsyncStorage.setItem('active_batch', JSON.stringify(activeBatch)).catch(() => {});
+    }
+  }, [activeBatch]);
 
-  // ── Open new batch modal ──
-  const handleOpenModal = () => {
-    const randomId = `#BT-${Math.floor(1000 + Math.random() * 9000)}`;
-    setBatchId(randomId);
-    setSelectedProduct(products[0] || PRESET_PRODUCTS[0]);
-    setModalVisible(true);
-  };
-
-  // ── Create a new batch, reset to Initial QC ──
-  const handleCreateBatch = () => {
-    if (!batchId.trim()) {
-      Alert.alert('Missing Info', 'Please enter a Batch ID.');
+  // ── Start a new batch ──
+  const handleNewBatch = () => {
+    if (activeBatch?.specimens?.length > 0) {
+      Alert.alert('Active Batch', 'Finish the current batch before starting a new one.');
       return;
     }
-    if (!selectedProduct) {
-      Alert.alert('Missing Info', 'Please select a butterfly species.');
-      return;
-    }
-
-    LayoutAnimation.configureNext({
-      duration: 350,
-      create: { type: 'easeInEaseOut', property: 'opacity' },
-      update: { type: 'spring', springDamping: 0.75 },
-    });
-
     setActiveBatch({
-      id: batchId.trim(),
-      species: selectedProduct.species,
-      commonName: selectedProduct.commonName,
-      status: 'In Progress'
+      id:          generateId(),
+      createdAt:   new Date().toISOString(),
+      species:     currentSpecies.species,
+      commonName:  currentSpecies.commonName,
+      specimens:   [],
     });
-
-    // Always reset to Initial QC first
-    setSteps(INITIAL_STEPS());
-    setStepCounts({ 1: null, 2: null, 3: null });
-    setModalVisible(false);
   };
 
-  // ── Complete a step with smooth layout animation ──
-  const handleCompleteStep = (stepId) => {
-    const now = new Date();
-    const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    LayoutAnimation.configureNext({
-      duration: 400,
-      create: { type: 'easeInEaseOut', property: 'opacity' },
-      update: { type: 'spring', springDamping: 0.75 },
+  // ── Navigate to scanner for a new specimen ──
+  const handleScanSpecimen = () => {
+    if (!activeBatch) return;
+    navigation.navigate('YoloScan', {
+      batchId:      activeBatch.id,
+      batchSpecies: activeBatch.species,
+      mode:         'new',
+      stepId:       1,
+      stepTitle:    'Initial Quality Control',
     });
-
-    const updatedSteps = steps.map((step, index) => {
-      if (step.id === stepId) {
-        return { ...step, status: 'completed', time: formattedTime };
-      }
-      const prevStep = steps[index - 1];
-      if (prevStep && prevStep.id === stepId) {
-        return { ...step, status: 'active', time: 'In Progress' };
-      }
-      return step;
-    });
-
-    setSteps(updatedSteps);
-
-    const wasLastStep = steps[steps.length - 1].id === stepId;
-    if (wasLastStep) {
-      setActiveBatch(prev => ({ ...prev, status: 'Completed' }));
-      Alert.alert('Batch Completed', `Batch ${activeBatch.id} has been fully packaged and completed!`);
-    }
   };
 
-  // ── Check if a step's prerequisite is satisfied ──
-  const isStepUnlocked = (step) => {
-    if (step.id === 1) return true; // Initial QC always accessible
-    const prereqStep = steps.find(s => s.id === step.id - 1);
-    return prereqStep?.status === 'completed';
+  // ── Navigate to scanner in re-scan mode ──
+  const handleRescan = (specimen) => {
+    if (!activeBatch) return;
+    navigation.navigate('YoloScan', {
+      batchId:        activeBatch.id,
+      mode:           'rescan',
+      specimenId:     specimen.id,
+      stepId:         1,
+      stepTitle:      'Re-Scan',
+      originalDefects: specimen.parts_required,
+      rescansCount:   specimen.rescan_count,
+    });
   };
 
-  // ── Navigate to YOLO scan, blocking if prerequisite not complete ──
-  const handleOpenScan = (step) => {
-    if (!isStepUnlocked(step)) {
-      const prereqStep = steps.find(s => s.id === step.id - 1);
-      Alert.alert(
-        '🔒 Step Locked',
-        `Complete "${prereqStep?.title}" before accessing "${step.title}".\n\nOpening YOLO Scan for the required step.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Scan Prerequisite',
-            onPress: () => {
-              navigation && navigation.navigate('YoloScan', {
-                stepId: prereqStep.id,
-                stepTitle: prereqStep.title,
-              });
-            },
-          },
-        ]
-      );
+  // ── Discard a specimen with reason ──
+  const handleDiscard = (specimen) => {
+    Alert.alert('Discard Specimen', 'Select a reason:', [
+      { text: 'Physically Damaged', onPress: () => applyDiscard(specimen, 'Physically Damaged') },
+      { text: 'Missing Parts',      onPress: () => applyDiscard(specimen, 'Missing Parts')      },
+      { text: 'Other',              onPress: () => applyDiscard(specimen, 'Other')              },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const applyDiscard = (specimen, reason) => {
+    setActiveBatch(prev => ({
+      ...prev,
+      specimens: prev.specimens.map(s =>
+        s.id === specimen.id ? { ...s, status: 'discarded', discard_reason: reason } : s
+      ),
+    }));
+  };
+
+  // ── Finish batch → go to summary screen ──
+  const handleFinishBatch = () => {
+    if (!activeBatch || activeBatch.specimens.length === 0) {
+      Alert.alert('No Specimens', 'Scan at least one specimen before finishing the batch.');
       return;
     }
-    animatePressIn(step.id);
-    setTimeout(() => {
-      animatePressOut(step.id);
-      setTimeout(() => {
-        navigation && navigation.navigate('YoloScan', {
-          stepId: step.id,
-          stepTitle: step.title,
-        });
-      }, 180);
-    }, 80);
+    navigation.navigate('BatchSummary', { batch: activeBatch });
+  };
+
+  // ── Called by BatchSummary after manager submission ──
+  const submitBatch = async (submittedBatch) => {
+    const finalized = {
+      ...submittedBatch,
+      status:      'pending_approval',
+      submittedAt: new Date().toISOString(),
+    };
+    const updated = [finalized, ...recentBatches].slice(0, 10);
+    setRecentBatches(updated);
+    setActiveBatch(null);
+    await AsyncStorage.setItem('recent_batches', JSON.stringify(updated)).catch(() => {});
+  };
+
+  // ── Computed batch stats ──
+  const stats = activeBatch ? {
+    pass:      activeBatch.specimens.filter(s => s.status === 'pass').length,
+    flagged:   activeBatch.specimens.filter(s => s.status === 'flagged').length,
+    escalated: activeBatch.specimens.filter(s => s.status === 'escalated').length,
+    discarded: activeBatch.specimens.filter(s => s.status === 'discarded').length,
+  } : null;
+
+  const fmtTime = iso =>
+    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const fmtDate = iso => {
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + fmtTime(iso);
   };
 
   return (
-    <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+    <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
       <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-
-        {/* ── Alerts Greeting Banner ── */}
-        <TouchableOpacity
-          style={styles.alertsBanner}
-          onPress={() => navigation && navigation.navigate('StaffAlertsNotifications')}
-          activeOpacity={0.8}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.alertsBannerLeft}>
-            <View style={styles.alertsBell}>
-              <Bell size={18} color="#2B3441" />
-              <View style={styles.alertsBadgeDot} />
+
+          {/* ── Alerts Banner ── */}
+          <TouchableOpacity
+            style={styles.alertsBanner}
+            onPress={() => navigation?.navigate('StaffAlertsNotifications')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.alertsBannerLeft}>
+              <View style={styles.alertsBell}>
+                <Bell size={18} color="#2B3441" />
+                <View style={styles.alertsBadgeDot} />
+              </View>
+              <View>
+                <Text style={styles.alertsBannerTitle}>Alerts</Text>
+                <Text style={styles.alertsBannerSub}>{ALERTS_PREVIEW.length} notifications pending</Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.alertsBannerTitle}>Alerts</Text>
-              <Text style={styles.alertsBannerSub}>{ALERTS_PREVIEW.length} notifications pending</Text>
-            </View>
-          </View>
-          <View style={styles.alertsTagRow}>
-            {ALERTS_PREVIEW.slice(0, 2).map(a => (
-              <View
-                key={a.id}
-                style={[
+            <View style={styles.alertsTagRow}>
+              {ALERTS_PREVIEW.slice(0, 2).map(a => (
+                <View key={a.id} style={[
                   styles.alertsTypeTag,
                   a.type === 'critical' && styles.alertsTagCritical,
                   a.type === 'warning'  && styles.alertsTagWarning,
                   a.type === 'success'  && styles.alertsTagSuccess,
-                ]}
-              >
-                <Text style={[
-                  styles.alertsTagText,
-                  a.type === 'critical' && { color: '#D94F4F' },
-                  a.type === 'warning'  && { color: '#B45309' },
-                  a.type === 'success'  && { color: '#065f46' },
-                ]} numberOfLines={1}>{a.title}</Text>
-              </View>
-            ))}
-          </View>
-        </TouchableOpacity>
-
-        {/* Active Batch Summary Card */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerInfo}>
-            <View>
-              <Text style={styles.batchLabel}>
-                {activeBatch.status === 'Completed' ? 'Last Completed Batch' : 'Active Batch'}
-              </Text>
-              <Text style={styles.batchId}>{activeBatch.id}</Text>
-            </View>
-            <View style={[
-              styles.statusBadge,
-              activeBatch.status === 'Completed' ? styles.statusBadgeSuccess : styles.statusBadgeActive
-            ]}>
-              <Text style={[
-                styles.statusBadgeText,
-                activeBatch.status === 'Completed' ? styles.statusBadgeTextSuccess : styles.statusBadgeTextActive
-              ]}>
-                {activeBatch.status}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.detailsRow}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Species</Text>
-              <Text style={styles.speciesValue}>{activeBatch.species}</Text>
-              <Text style={styles.commonNameValue}>{activeBatch.commonName}</Text>
-            </View>
-          </View>
-
-          {activeBatch.status === 'Completed' && (
-            <TouchableOpacity style={styles.startNewButton} onPress={handleOpenModal}>
-              <Plus size={16} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={styles.startNewButtonText}>Start New Batch</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Steps Timeline Header */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Workflow Progress</Text>
-          {activeBatch.status !== 'Completed' && (
-            <TouchableOpacity style={styles.addBatchBtnHeader} onPress={handleOpenModal}>
-              <Plus size={16} color="#3b82f6" style={{ marginRight: 4 }} />
-              <Text style={styles.addBatchBtnHeaderText}>New Batch</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Steps Timeline */}
-        <View style={styles.timeline}>
-          {steps.map((step, index) => {
-            const countData = stepCounts[step.id];
-            return (
-              <View key={step.id} style={styles.stepContainer}>
-                {/* Dot + line */}
-                <View style={styles.stepIndicator}>
-                  <View style={[
-                    styles.dot,
-                    step.status === 'completed' && styles.dotCompleted,
-                    step.status === 'active'    && styles.dotActive,
-                  ]}>
-                    {step.status === 'completed' ? (
-                      <CheckCircle size={12} color="#ffffff" />
-                    ) : step.status === 'active' ? (
-                      <Play size={10} color="#ffffff" style={{ marginLeft: 2 }} />
-                    ) : (
-                      <Clock size={12} color="#94a3b8" />
-                    )}
-                  </View>
-                  {index < steps.length - 1 && (
-                    <View style={[
-                      styles.line,
-                      step.status === 'completed' && styles.lineCompleted
-                    ]} />
-                  )}
+                ]}>
+                  <Text style={[
+                    styles.alertsTagText,
+                    a.type === 'critical' && { color: '#D94F4F' },
+                    a.type === 'warning'  && { color: '#B45309' },
+                    a.type === 'success'  && { color: '#065f46' },
+                  ]} numberOfLines={1}>{a.title}</Text>
                 </View>
-
-                {/* Step Card — animated press */}
-                {(() => {
-                  const unlocked = isStepUnlocked(step);
-                  return (
-                    <Animated.View style={{ flex: 1, transform: [{ scale: stepScales[step.id] }] }}>
-                      <TouchableOpacity
-                        style={[
-                          styles.stepCard,
-                          step.status === 'active' && styles.stepCardActive,
-                          !unlocked && styles.stepCardLocked,
-                        ]}
-                        onPressIn={() => unlocked && animatePressIn(step.id)}
-                        onPressOut={() => unlocked && animatePressOut(step.id)}
-                        onPress={() => handleOpenScan(step)}
-                        activeOpacity={unlocked ? 1 : 0.6}
-                      >
-                        <View style={styles.stepRowMain}>
-                          <View style={styles.stepInfoContainer}>
-                            <Text style={[
-                              styles.stepTitle,
-                              step.status === 'active'  && styles.stepTitleActive,
-                              step.status === 'pending' && styles.stepTitlePending,
-                              !unlocked && styles.stepTitleLocked,
-                            ]}>
-                              {step.title}
-                            </Text>
-                            <Text style={styles.stepTime}>
-                              {!unlocked ? 'Complete previous step first' : step.time}
-                            </Text>
-                          </View>
-
-                          {/* Lock icon for blocked steps */}
-                          {!unlocked ? (
-                            <View style={styles.lockBadge}>
-                              <Lock size={14} color="#94a3b8" />
-                            </View>
-                          ) : countData !== null && countData !== undefined ? (
-                            <View style={styles.countBadge}>
-                              <Text style={styles.countBadgeNum}>{countData.count}</Text>
-                              <Text style={styles.countBadgeLabel} numberOfLines={1}>
-                                {countData.specimenName
-                                  ? countData.specimenName.split(' ').slice(0, 1).join('')
-                                  : 'pcs'}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-
-                        {step.status === 'active' && unlocked && (
-                          <TouchableOpacity
-                            style={styles.actionButton}
-                            onPress={(e) => {
-                              e.stopPropagation && e.stopPropagation();
-                              handleCompleteStep(step.id);
-                            }}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.actionButtonText}>Mark Complete</Text>
-                          </TouchableOpacity>
-                        )}
-                      </TouchableOpacity>
-                    </Animated.View>
-                  );
-                })()}
-              </View>
-            );
-          })}
-        </View>
-      </ScrollView>
-
-      {/* Creation Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalContent}>
-            
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={20} color="#3b82f6" />
-                <Text style={styles.modalTitle}>Create New Batch</Text>
-              </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeButton}>
-                <X size={20} color="#64748b" />
-              </TouchableOpacity>
+              ))}
             </View>
+          </TouchableOpacity>
 
-            <ScrollView style={styles.modalForm} keyboardShouldPersistTaps="handled">
-              
-              {/* Batch ID Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Batch ID</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={batchId}
-                  onChangeText={setBatchId}
-                  placeholder="e.g. #BT-1029"
-                  placeholderTextColor="#94a3b8"
-                />
+          {/* ── Active Batch or Start Prompt ── */}
+          {activeBatch ? (
+            <>
+              {/* Batch info card */}
+              <View style={styles.batchCard}>
+                <Text style={styles.batchCardLabel}>ACTIVE BATCH</Text>
+                <Text style={styles.batchCardSpecies}>{activeBatch.species}</Text>
+                {activeBatch.commonName ? (
+                  <Text style={styles.batchCardCommon}>{activeBatch.commonName}</Text>
+                ) : null}
+                <Text style={styles.batchCardTime}>Started {fmtTime(activeBatch.createdAt)}</Text>
+
+                <View style={styles.statsRow}>
+                  <View style={[styles.statChip, { backgroundColor: '#d1fae5' }]}>
+                    <Text style={[styles.statChipNum,   { color: '#065f46' }]}>{stats.pass}</Text>
+                    <Text style={[styles.statChipLabel, { color: '#065f46' }]}>PASS</Text>
+                  </View>
+                  <View style={[styles.statChip, { backgroundColor: '#fee2e2' }]}>
+                    <Text style={[styles.statChipNum,   { color: '#991b1b' }]}>{stats.flagged}</Text>
+                    <Text style={[styles.statChipLabel, { color: '#991b1b' }]}>FLAGGED</Text>
+                  </View>
+                  <View style={[styles.statChip, { backgroundColor: '#fff7ed' }]}>
+                    <Text style={[styles.statChipNum,   { color: '#c2410c' }]}>{stats.escalated}</Text>
+                    <Text style={[styles.statChipLabel, { color: '#c2410c' }]}>ESCALATED</Text>
+                  </View>
+                  <View style={[styles.statChip, { backgroundColor: '#f1f5f9' }]}>
+                    <Text style={[styles.statChipNum,   { color: '#64748b' }]}>{stats.discarded}</Text>
+                    <Text style={[styles.statChipLabel, { color: '#64748b' }]}>DISCARD</Text>
+                  </View>
+                </View>
               </View>
 
-              {/* Species Selector */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Select Product Species</Text>
-                <View style={styles.speciesGrid}>
-                  {products.map((prod) => {
-                    const isSelected = selectedProduct?.species === prod.species;
+              {/* Scan specimen button */}
+              <TouchableOpacity style={styles.scanBtn} onPress={handleScanSpecimen} activeOpacity={0.85}>
+                <Plus size={16} color="#fff" />
+                <Text style={styles.scanBtnText}>Scan Specimen</Text>
+              </TouchableOpacity>
+
+              {/* Specimen list */}
+              {activeBatch.specimens.length > 0 && (
+                <View style={styles.specimensSection}>
+                  <Text style={styles.specimensLabel}>
+                    SPECIMENS · {activeBatch.specimens.length}
+                  </Text>
+
+                  {activeBatch.specimens.map((s, i) => {
+                    const cfg       = STATUS_CONFIG[s.status] || STATUS_CONFIG.flagged;
+                    const canRescan = s.status === 'flagged' && s.rescan_count < MAX_RESCANS;
+                    const canDiscard = s.status === 'flagged' || s.status === 'escalated';
+
                     return (
-                      <TouchableOpacity
-                        key={prod.species}
-                        style={[
-                          styles.speciesCard,
-                          isSelected && styles.speciesCardSelected
-                        ]}
-                        onPress={() => setSelectedProduct(prod)}
-                      >
-                        <View style={styles.speciesCardHeader}>
-                          <Package size={14} color={isSelected ? '#3b82f6' : '#64748b'} />
-                          <View style={[
-                            styles.radioCircle,
-                            isSelected && styles.radioCircleSelected
-                          ]}>
-                            {isSelected && <View style={styles.radioInner} />}
+                      <View key={s.id} style={styles.specimenCard}>
+                        <View style={styles.specimenRow}>
+                          <View style={styles.specimenNum}>
+                            <Text style={styles.specimenNumText}>{i + 1}</Text>
+                          </View>
+
+                          <View style={styles.specimenMeta}>
+                            <Text style={styles.specimenSpecies} numberOfLines={1}>{s.species}</Text>
+                            <Text style={styles.specimenDetail}>
+                              {Math.round(s.confidence * 100)}% conf
+                              {' · '}
+                              {fmtTime(s.last_scanned_at || s.scanned_at)}
+                              {s.rescan_count > 0
+                                ? `  ·  Rescan ${s.rescan_count}/${MAX_RESCANS}`
+                                : ''}
+                            </Text>
+                            {s.species_mismatch && (
+                              <Text style={styles.mismatchNote}>
+                                ⚠ Species mismatch — batch is for {activeBatch.species}
+                              </Text>
+                            )}
+                            {s.status === 'escalated' && (
+                              <Text style={styles.escalationNote}>
+                                Manager has been notified · Pending decision
+                              </Text>
+                            )}
+                            {s.status === 'discarded' && s.discard_reason && (
+                              <Text style={styles.discardNote}>Reason: {s.discard_reason}</Text>
+                            )}
+                          </View>
+
+                          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+                            <Text style={[styles.statusBadgeText, { color: cfg.text }]}>
+                              {cfg.label}
+                            </Text>
                           </View>
                         </View>
-                        <Text style={[
-                          styles.speciesScientific,
-                          isSelected && styles.speciesScientificSelected
-                        ]}>
-                          {prod.species}
-                        </Text>
-                        <Text style={styles.speciesCommon}>
-                          {prod.commonName}
-                        </Text>
-                      </TouchableOpacity>
+
+                        {(canRescan || canDiscard) && (
+                          <View style={styles.specimenActions}>
+                            {canRescan && (
+                              <TouchableOpacity
+                                style={styles.actionRescan}
+                                onPress={() => handleRescan(s)}
+                                activeOpacity={0.8}
+                              >
+                                <RotateCcw size={12} color={COLORS.primary} />
+                                <Text style={styles.actionRescanText}>Re-Scan</Text>
+                              </TouchableOpacity>
+                            )}
+                            {canDiscard && (
+                              <TouchableOpacity
+                                style={styles.actionDiscard}
+                                onPress={() => handleDiscard(s)}
+                                activeOpacity={0.8}
+                              >
+                                <Trash2 size={12} color="#dc2626" />
+                                <Text style={styles.actionDiscardText}>Discard</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
                     );
                   })}
                 </View>
+              )}
+
+              {/* Finish batch */}
+              <TouchableOpacity style={styles.finishBtn} onPress={handleFinishBatch} activeOpacity={0.85}>
+                <Text style={styles.finishBtnText}>Finish Batch</Text>
+                <ChevronRight size={16} color="#fff" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            /* No active batch — start prompt */
+            <TouchableOpacity style={styles.newBatchCard} onPress={handleNewBatch} activeOpacity={0.85}>
+              <View style={styles.newBatchIconWrap}>
+                <Plus size={28} color={COLORS.primary} />
               </View>
+              <Text style={styles.newBatchTitle}>Start New Batch</Text>
+              <Text style={styles.newBatchSub}>
+                {currentSpecies.species !== 'Awaiting scan…'
+                  ? currentSpecies.species +
+                    (currentSpecies.commonName ? ` · ${currentSpecies.commonName}` : '')
+                  : 'Open the scanner first to detect a species'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
-              {/* Supabase Connection Status Notice */}
-              {dbStatus === 'connected_live' && (
-                <View style={[styles.supabaseNoteBox, styles.supabaseNoteBoxLive]}>
-                  <Text style={[styles.supabaseNoteTitle, styles.supabaseNoteTitleLive]}>✓ Supabase Connected</Text>
-                  <Text style={[styles.supabaseNoteText, styles.supabaseNoteTextLive]}>
-                    Synchronized with live database catalog! Loaded {products.length} products.
-                  </Text>
-                </View>
-              )}
-              {dbStatus === 'connected_empty' && (
-                <View style={[styles.supabaseNoteBox, styles.supabaseNoteBoxEmpty]}>
-                  <Text style={[styles.supabaseNoteTitle, styles.supabaseNoteBoxEmptyTitle]}>⚠ Supabase Connected (Empty)</Text>
-                  <Text style={[styles.supabaseNoteText, styles.supabaseNoteBoxEmptyText]}>
-                    Connected successfully, but the 'inventory' table is empty. Using offline presets.
-                  </Text>
-                </View>
-              )}
-              {(dbStatus === 'offline' || dbStatus === 'checking') && (
-                <View style={[styles.supabaseNoteBox, styles.supabaseNoteBoxOffline]}>
-                  <Text style={[styles.supabaseNoteTitle, styles.supabaseNoteBoxOfflineTitle]}>✗ Supabase Offline</Text>
-                  <Text style={[styles.supabaseNoteText, styles.supabaseNoteBoxOfflineText]}>
-                    Using offline preset products as fallback. Configure your API credentials in src/supabaseClient.js to enable sync.
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
+          {/* ── Recent Batches ── */}
+          {recentBatches.length > 0 && (
+            <View style={styles.historySection}>
+              <Text style={styles.historyLabel}>RECENT BATCHES</Text>
 
-            {/* Modal Actions */}
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.cancelBtn} 
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.submitBtn} 
-                onPress={handleCreateBatch}
-              >
-                <Text style={styles.submitBtnText}>Start Workflow</Text>
-              </TouchableOpacity>
+              {recentBatches.slice(0, 5).map(b => {
+                const cfg       = BATCH_STATUS[b.status] || BATCH_STATUS.pending_approval;
+                const passCount = b.specimens?.filter(s => s.status === 'pass').length || 0;
+                const total     = b.specimens?.length || 0;
+
+                return (
+                  <View key={b.id} style={styles.historyCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.historySpecies} numberOfLines={1}>{b.species}</Text>
+                      <Text style={styles.historyMeta}>
+                        {fmtDate(b.submittedAt)} · {passCount}/{total} passed
+                      </Text>
+                    </View>
+                    <View style={[styles.historyBadge, { backgroundColor: cfg.bg }]}>
+                      <Text style={[styles.historyBadgeText, { color: cfg.color }]}>
+                        {cfg.label}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
+          )}
 
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
+        </ScrollView>
       </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.pageBg,
-  },
-  scrollContent: {
-    padding: 16,
-  },
-  // ── Alerts Banner — ICPI card style ──
+  container:     { flex: 1, backgroundColor: COLORS.pageBg },
+  scrollContent: { padding: 16, paddingBottom: 48 },
+
+  // ── Alerts Banner ──
   alertsBanner: {
     backgroundColor: COLORS.cardBg,
     borderRadius: 10,
@@ -607,8 +469,7 @@ const styles = StyleSheet.create({
   },
   alertsBell: {
     position: 'relative',
-    width: 34,
-    height: 34,
+    width: 34, height: 34,
     borderRadius: 9,
     backgroundColor: COLORS.inputBg,
     justifyContent: 'center',
@@ -616,446 +477,187 @@ const styles = StyleSheet.create({
   },
   alertsBadgeDot: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 7,
-    height: 7,
+    top: 6, right: 6,
+    width: 7, height: 7,
     borderRadius: 3.5,
     backgroundColor: COLORS.errorRed,
     borderWidth: 1,
     borderColor: COLORS.white,
   },
-  alertsBannerTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.textDark,
-  },
-  alertsBannerSub: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    marginTop: 1,
-  },
-  alertsTagRow: {
-    flexDirection: 'row',
-    gap: 5,
-    flexWrap: 'wrap',
-  },
-  alertsTypeTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    backgroundColor: COLORS.inputBg,
-  },
+  alertsBannerTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textDark },
+  alertsBannerSub:   { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  alertsTagRow:      { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
+  alertsTypeTag:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: COLORS.inputBg },
   alertsTagCritical: { backgroundColor: COLORS.errorBg },
   alertsTagWarning:  { backgroundColor: COLORS.warningBg },
   alertsTagSuccess:  { backgroundColor: COLORS.successBg },
-  alertsTagText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-  },
+  alertsTagText:     { fontSize: 10, fontWeight: '600', color: COLORS.textMuted },
 
-  // ── Header Card — ICPI white card ──
-  headerCard: {
+  // ── Active Batch Card ──
+  batchCard: {
     backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 14,
+    padding: 20,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     ...SHADOW_SM,
   },
-  headerInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  batchLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 3,
-  },
-  batchId: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.textDark,
-    letterSpacing: 0.3,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  statusBadgeActive:  { backgroundColor: COLORS.primaryMuted },
-  statusBadgeSuccess: { backgroundColor: COLORS.successBg },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
-  statusBadgeTextActive:  { color: COLORS.primary },
-  statusBadgeTextSuccess: { color: '#065F46' },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.pageBg,
-    marginBottom: 10,
-  },
-  detailsRow: { flexDirection: 'row', gap: 20 },
-  detailItem: {},
-  detailLabel: {
-    fontSize: 10,
-    color: COLORS.textLight,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 3,
-  },
-  speciesValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.textDark,
-    fontStyle: 'italic',
-  },
-  commonNameValue: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  startNewButton: {
+  batchCardLabel:   { fontSize: 10, fontWeight: '700', color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+  batchCardSpecies: { fontSize: 24, fontWeight: '800', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 4 },
+  batchCardCommon:  { fontSize: 14, color: COLORS.textMuted, fontWeight: '500', marginBottom: 6 },
+  batchCardTime:    { fontSize: 11, color: COLORS.textLight, marginBottom: 16 },
+
+  statsRow:       { flexDirection: 'row', gap: 8 },
+  statChip:       { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
+  statChipNum:    { fontSize: 20, fontWeight: '800', lineHeight: 24 },
+  statChipLabel:  { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+
+  // ── Scan Button ──
+  scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: 11,
-    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 13,
+    marginBottom: 16,
+    gap: 8,
   },
-  startNewButtonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 13,
-  },
+  scanBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  // ── Section Header ──
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 14,
+  // ── Specimen List ──
+  specimensSection: { marginBottom: 16 },
+  specimensLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: COLORS.textDark,
-    letterSpacing: 0.2,
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
   },
-  addBatchBtnHeader: {
+  specimenCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOW_SM,
+  },
+  specimenRow:    { flexDirection: 'row', alignItems: 'center' },
+  specimenNum: {
+    width: 26, height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.inputBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  specimenNumText:  { fontSize: 11, fontWeight: '700', color: COLORS.textMid },
+  specimenMeta:     { flex: 1 },
+  specimenSpecies:  { fontSize: 13, fontWeight: '700', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 3 },
+  specimenDetail:   { fontSize: 11, color: COLORS.textLight, fontWeight: '500' },
+  mismatchNote:     { fontSize: 10, color: '#b45309', fontWeight: '600', marginTop: 4 },
+  escalationNote:   { fontSize: 10, color: '#c2410c', fontWeight: '600', marginTop: 4 },
+  discardNote:      { fontSize: 10, color: '#64748b', fontWeight: '500', marginTop: 4 },
+
+  statusBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginLeft: 8, alignSelf: 'flex-start' },
+  statusBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  specimenActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  actionRescan: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: COLORS.primaryMuted,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 7,
     borderWidth: 1,
     borderColor: COLORS.primaryLight,
+    backgroundColor: COLORS.primaryMuted,
   },
-  addBatchBtnHeaderText: {
-    color: COLORS.primary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-
-  // ── Timeline ──
-  timeline: {
-    gap: 4,
-  },
-  stepContainer: {
+  actionRescanText:  { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  actionDiscard: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  stepIndicator: {
     alignItems: 'center',
-    marginRight: 10,
-    paddingTop: 18,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
   },
-  dot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.borderLight,
+  actionDiscardText: { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+
+  // ── Finish Batch ──
+  finishBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.headerBg,
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginBottom: 24,
+    gap: 8,
+  },
+  finishBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // ── No Active Batch ──
+  newBatchCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 14,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
+    borderStyle: 'dashed',
+    marginBottom: 24,
+    ...SHADOW_SM,
+  },
+  newBatchIconWrap: {
+    width: 60, height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primaryMuted,
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 14,
   },
-  dotCompleted: { backgroundColor: COLORS.successGreen },
-  dotActive:    { backgroundColor: COLORS.primary },
-  line: {
-    width: 2,
-    flex: 1,
-    minHeight: 32,
-    backgroundColor: '#e2e8f0',
-    marginTop: 4,
-    borderRadius: 1,
-  },
-  lineCompleted: { backgroundColor: '#10b981' },
+  newBatchTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textDark, marginBottom: 6 },
+  newBatchSub:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
 
-  // ── Step Card ──
-  stepCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
+  // ── Recent Batches History ──
+  historySection: { marginBottom: 8 },
+  historyLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  historyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: COLORS.borderLight,
     ...SHADOW_SM,
-    marginBottom: 4,
   },
-  stepCardActive: {
-    borderColor: COLORS.primaryLight,
-    borderWidth: 1.5,
-    backgroundColor: COLORS.primaryMuted,
-  },
-  stepCardLocked: {
-    backgroundColor: COLORS.pageBg,
-    borderColor: COLORS.borderLight,
-    opacity: 0.7,
-  },
-  stepTitleLocked: {
-    color: COLORS.textLight,
-  },
-  lockBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: COLORS.inputBg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  stepRowMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepInfoContainer: {
-    flex: 1,
-  },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMid,
-    marginBottom: 3,
-  },
-  stepTitleActive: {
-    color: COLORS.textDark,
-    fontWeight: '700',
-  },
-  stepTitlePending: {
-    color: COLORS.textLight,
-  },
-  stepTime: {
-    fontSize: 11,
-    color: COLORS.textLight,
-    fontWeight: '500',
-  },
-
-  // ── Count Badge ──
-  countBadge: {
-    alignItems: 'center',
-    backgroundColor: COLORS.headerBg,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginLeft: 8,
-    minWidth: 44,
-  },
-  countBadgeNum: {
-    color: COLORS.white,
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  countBadgeLabel: {
-    color: COLORS.textLight,
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    marginTop: 1,
-  },
-
-  actionButton: {
-    marginTop: 10,
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 12,
-    letterSpacing: 0.2,
-  },
-
-  // ── Modal ──
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.cardBg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '88%',
-    paddingTop: 6,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.pageBg,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.textDark,
-  },
-  closeButton: {
-    padding: 4,
-    borderRadius: 8,
-    backgroundColor: COLORS.inputBg,
-  },
-  modalForm: {
-    padding: 18,
-  },
-  inputGroup: {
-    marginBottom: 18,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textMid,
-    marginBottom: 7,
-  },
-  textInput: {
-    backgroundColor: COLORS.pageBg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: COLORS.textDark,
-    fontWeight: '500',
-  },
-  speciesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  speciesCard: {
-    width: '47%',
-    backgroundColor: COLORS.pageBg,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  speciesCardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryMuted,
-  },
-  speciesCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  radioCircle: {
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: COLORS.borderMid,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  radioCircleSelected: { borderColor: COLORS.primary },
-  radioInner: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
-  },
-  speciesScientific: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    fontStyle: 'italic',
-    marginBottom: 2,
-  },
-  speciesScientificSelected: { color: COLORS.primary },
-  speciesCommon: {
-    fontSize: 10,
-    color: COLORS.textLight,
-    fontWeight: '500',
-  },
-  supabaseNoteBox: {
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 14,
-    borderWidth: 1,
-  },
-  supabaseNoteBoxLive:    { backgroundColor: COLORS.successBg, borderColor: COLORS.successBorder },
-  supabaseNoteBoxEmpty:   { backgroundColor: COLORS.warningBg, borderColor: COLORS.warningBorder },
-  supabaseNoteBoxOffline: { backgroundColor: COLORS.errorBg,   borderColor: COLORS.errorBorder },
-  supabaseNoteTitle: { fontSize: 12, fontWeight: '700', marginBottom: 3 },
-  supabaseNoteTitleLive:       { color: '#065F46' },
-  supabaseNoteBoxEmptyTitle:   { color: '#92400E' },
-  supabaseNoteBoxOfflineTitle: { color: '#991B1B' },
-  supabaseNoteText: { fontSize: 11, lineHeight: 17 },
-  supabaseNoteTextLive:       { color: COLORS.successGreen },
-  supabaseNoteBoxEmptyText:   { color: COLORS.warningAmber },
-  supabaseNoteBoxOfflineText: { color: COLORS.errorRed },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: 18,
-    paddingTop: 0,
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: COLORS.inputBg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  cancelBtnText: {
-    color: COLORS.textMuted,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  submitBtn: {
-    flex: 2,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-  },
-  submitBtnText: {
-    color: COLORS.white,
-    fontWeight: '700',
-    fontSize: 14,
-  },
+  historySpecies:   { fontSize: 13, fontWeight: '700', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 3 },
+  historyMeta:      { fontSize: 11, color: COLORS.textLight },
+  historyBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginLeft: 10 },
+  historyBadgeText: { fontSize: 10, fontWeight: '700' },
 });
