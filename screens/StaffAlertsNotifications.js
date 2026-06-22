@@ -1,151 +1,137 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  LayoutAnimation,
+  ActivityIndicator,
   Platform,
-  UIManager
+  UIManager,
 } from 'react-native';
-import { ArrowLeft, Bell, X, ShieldAlert, AlertCircle, RefreshCw, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, Bell, X, ShieldAlert, AlertCircle, CheckCircle2, Info, RefreshCw, WifiOff } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SHADOW_SM } from '../theme';
+import { useFocusEffect } from '@react-navigation/native';
+import { fetchStaffAlerts, dismissStaffAlert, dismissAllStaffAlerts } from '../src/services/supabaseService';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const initialAlerts = [
-  {
-    id: '1',
-    title: 'Specimen Flagged in QC',
-    description: 'Batch #BT-9921 specimen 14 failed viability verification and has been flagged for destruction.',
-    timestamp: '10 mins ago',
-    type: 'critical',
-    icon: ShieldAlert,
-    iconColor: COLORS.errorRed,
-  },
-  {
-    id: '2',
-    title: 'Log Rejected by Manager',
-    description: 'Stage 4 assembly log submitted by ID EMP-1033 has been sent back for temperature validation correction.',
-    timestamp: '42 mins ago',
-    type: 'warning',
-    icon: AlertCircle,
-    iconColor: COLORS.warningAmber,
-  },
-  {
-    id: '3',
-    title: 'Inventory Synced',
-    description: 'Central database inventory count synchronized successfully with regional storage facility A.',
-    timestamp: '2 hours ago',
-    type: 'success',
-    icon: CheckCircle2,
-    iconColor: COLORS.successGreen,
-  },
-  {
-    id: '4',
-    title: 'Specimen Flagged in QC',
-    description: 'Batch #BT-9921 specimen 08 flagged due to chamber humidity drift anomaly. Re-testing scheduled.',
-    timestamp: '4 hours ago',
-    type: 'critical',
-    icon: ShieldAlert,
-    iconColor: COLORS.errorRed,
-  },
-  {
-    id: '5',
-    title: 'Log Rejected by Manager',
-    description: 'Assembly line B batch checklist rejected: missing secondary supervisor electronic signature.',
-    timestamp: 'Yesterday',
-    type: 'warning',
-    icon: AlertCircle,
-    iconColor: COLORS.warningAmber,
-  },
-  {
-    id: '6',
-    title: 'Inventory Synced',
-    description: 'Local batch logs exported to production reporting ledger. All 12 items verified.',
-    timestamp: 'Yesterday',
-    type: 'success',
-    icon: CheckCircle2,
-    iconColor: COLORS.successGreen,
-  },
-];
+const SEVERITY_CONFIG = {
+  critical: { Icon: ShieldAlert,  iconColor: '#EF4444', borderColor: '#EF4444', bg: 'rgba(239,68,68,0.04)'  },
+  warning:  { Icon: AlertCircle,  iconColor: '#F59E0B', borderColor: '#F59E0B', bg: 'rgba(245,158,11,0.04)' },
+  info:     { Icon: Info,         iconColor: '#5B21D9', borderColor: '#5B21D9', bg: 'rgba(91,33,217,0.04)'  },
+  system:   { Icon: CheckCircle2, iconColor: '#10B981', borderColor: '#10B981', bg: 'rgba(16,185,129,0.04)' },
+};
+
+function timeAgo(isoString) {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins  < 1)   return 'Just now';
+  if (mins  < 60)  return `${mins} min${mins > 1 ? 's' : ''} ago`;
+  if (hours < 24)  return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  if (days  < 7)   return `${days} day${days > 1 ? 's' : ''} ago`;
+  return new Date(isoString).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
 
 export default function StaffAlertsNotifications({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [alerts, setAlerts] = useState(initialAlerts);
+  const [alerts,      setAlerts]      = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [fetchError,  setFetchError]  = useState(false);
 
-  const dismissAlert = (id) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setAlerts(alerts.filter(alert => alert.id !== id));
+  const loadAlerts = useCallback(async () => {
+    setLoading(true);
+    setFetchError(false);
+    try {
+      const data = await fetchStaffAlerts();
+      setAlerts(data);
+    } catch (e) {
+      console.warn('loadAlerts error:', e);
+      setFetchError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadAlerts(); }, [loadAlerts]));
+
+  const dismissAlert = async (id) => {
+    setAlerts(prev => prev.filter(a => a.id !== id));
+    await dismissStaffAlert(id);
   };
 
-  const clearAllAlerts = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const clearAllAlerts = async () => {
+    const ids = alerts.map(a => a.id);
     setAlerts([]);
-  };
-
-  const resetList = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setAlerts(initialAlerts);
+    await dismissAllStaffAlerts(ids);
   };
 
   return (
     <View style={styles.container}>
-      {/* ── Dark Navy Header — matches ICPI admin header ── */}
+
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={20} color={COLORS.textOnDark} />
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+            <ArrowLeft size={20} color="#111827" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Alerts</Text>
+          <Text style={styles.headerTitle}>ALERTS</Text>
         </View>
 
-        {alerts.length > 0 && (
-          <TouchableOpacity onPress={clearAllAlerts} style={styles.clearAllButton}>
-            <Text style={styles.clearAllText}>Dismiss All</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={loadAlerts} style={styles.refreshButton} activeOpacity={0.7}>
+            <RefreshCw size={14} color="#5B21D9" />
           </TouchableOpacity>
-        )}
+          {alerts.length > 0 && (
+            <TouchableOpacity onPress={clearAllAlerts} style={styles.clearAllButton} activeOpacity={0.7}>
+              <Text style={styles.clearAllText}>DISMISS ALL</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {alerts.length > 0 ? (
+      {loading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="large" color="#5B21D9" />
+          <Text style={styles.centerStateText}>Loading alerts…</Text>
+        </View>
+      ) : fetchError ? (
+        <View style={styles.centerState}>
+          <WifiOff size={36} color="#EF4444" />
+          <Text style={[styles.centerStateText, { color: '#EF4444', marginTop: 12 }]}>Could not load alerts</Text>
+          <TouchableOpacity onPress={loadAlerts} style={{ marginTop: 16, backgroundColor: '#5B21D9', paddingHorizontal: 20, paddingVertical: 10 }} activeOpacity={0.8}>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 12, letterSpacing: 2 }}>RETRY</Text>
+          </TouchableOpacity>
+        </View>
+      ) : alerts.length > 0 ? (
         <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.sectionDivider}>
+            <Text style={styles.sectionDividerText}>[ ACTIVE ALERTS · {alerts.length} ]</Text>
+            <View style={styles.sectionDividerLine} />
+          </View>
+
           {alerts.map((alert) => {
-            const Icon = alert.icon;
-
-            // Left-border colour mirrors ICPI's status indicators
-            let borderColor = COLORS.successGreen;
-            let bgUrgency   = 'rgba(16,185,129,0.025)';
-            if (alert.type === 'critical') {
-              borderColor = COLORS.errorRed;
-              bgUrgency   = 'rgba(239,68,68,0.025)';
-            } else if (alert.type === 'warning') {
-              borderColor = COLORS.warningAmber;
-              bgUrgency   = 'rgba(245,158,11,0.025)';
-            }
-
+            const cfg = SEVERITY_CONFIG[alert.severity] || SEVERITY_CONFIG.info;
+            const { Icon } = cfg;
             return (
               <View
                 key={alert.id}
-                style={[styles.alertCard, { borderLeftColor: borderColor, backgroundColor: bgUrgency }]}
+                style={[styles.alertCard, { borderLeftColor: cfg.borderColor, backgroundColor: cfg.bg }]}
               >
                 <View style={styles.cardMain}>
                   <View style={styles.iconWrapper}>
-                    <Icon size={18} color={alert.iconColor} />
+                    <Icon size={18} color={cfg.iconColor} />
                   </View>
                   <View style={styles.textWrapper}>
                     <View style={styles.titleRow}>
                       <Text style={styles.cardTitle}>{alert.title}</Text>
-                      <Text style={styles.timestamp}>{alert.timestamp}</Text>
+                      <Text style={styles.timestamp}>{timeAgo(alert.created_at)}</Text>
                     </View>
-                    <Text style={styles.cardDescription}>{alert.description}</Text>
+                    <Text style={styles.cardDescription}>{alert.message}</Text>
                   </View>
                 </View>
 
@@ -154,7 +140,7 @@ export default function StaffAlertsNotifications({ navigation }) {
                   onPress={() => dismissAlert(alert.id)}
                   activeOpacity={0.7}
                 >
-                  <X size={14} color={COLORS.textMuted} />
+                  <X size={14} color="#9CA3AF" />
                 </TouchableOpacity>
               </View>
             );
@@ -163,17 +149,12 @@ export default function StaffAlertsNotifications({ navigation }) {
       ) : (
         <View style={styles.emptyContainer}>
           <View style={styles.emptyIconWrapper}>
-            <Bell size={42} color={COLORS.textLight} />
+            <Bell size={42} color="#7C3AED" />
           </View>
           <Text style={styles.emptyTitle}>All caught up!</Text>
           <Text style={styles.emptySubtitle}>
-            There are no pending alerts or push notifications requiring your review.
+            There are no pending alerts or notifications requiring your review.
           </Text>
-
-          <TouchableOpacity style={styles.resetButton} onPress={resetList} activeOpacity={0.8}>
-            <RefreshCw size={15} color={COLORS.white} style={{ marginRight: 7 }} />
-            <Text style={styles.resetButtonText}>Repopulate Alerts</Text>
-          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -181,78 +162,62 @@ export default function StaffAlertsNotifications({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.pageBg,
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
 
-  // ── Header ──────────────────────────────────────────────────
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.headerBg,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.headerBorder,
+    borderBottomColor: '#E5E7EB',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   backButton: {
-    padding: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 7,
+    padding: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  headerTitle: {
-    color: COLORS.textOnDark,
-    fontSize: 16,
-    fontWeight: '700',
+  headerTitle: { color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
+  refreshButton: {
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   clearAllButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 7,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#5B21D9',
   },
-  clearAllText: {
-    color: COLORS.textOnDark,
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  clearAllText: { color: '#5B21D9', fontSize: 9, fontWeight: '800', letterSpacing: 2.5, textTransform: 'uppercase' },
 
   scrollContainer: { flex: 1 },
-  scrollContent: { padding: 14, paddingBottom: 32 },
+  scrollContent:   { padding: 14, paddingBottom: 32 },
 
-  // ── Alert card — ICPI card style + coloured left border ───────
+  sectionDivider: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
+  sectionDividerText: { fontSize: 9, color: '#5B21D9', fontWeight: '700', letterSpacing: 2.5 },
+  sectionDividerLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+
   alertCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: '#E5E7EB',
     borderLeftWidth: 4,
-    ...SHADOW_SM,
     position: 'relative',
   },
-  cardMain: {
-    flex: 1,
-    flexDirection: 'row',
-    paddingRight: 22,
-  },
-  iconWrapper: {
-    marginRight: 10,
-    marginTop: 1,
-  },
+  cardMain:    { flex: 1, flexDirection: 'row', paddingRight: 22 },
+  iconWrapper: { marginRight: 10, marginTop: 1 },
   textWrapper: { flex: 1 },
   titleRow: {
     flexDirection: 'row',
@@ -262,77 +227,31 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     gap: 6,
   },
-  cardTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.textDark,
-  },
-  timestamp: {
-    fontSize: 11,
-    color: COLORS.textMuted,
-    fontWeight: '500',
-  },
-  cardDescription: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    lineHeight: 17,
-  },
+  cardTitle:       { fontSize: 13, fontWeight: '700', color: '#111827' },
+  timestamp:       { fontSize: 9, color: '#6B7280', fontWeight: '600', letterSpacing: 1.5, textTransform: 'uppercase' },
+  cardDescription: { fontSize: 12, color: '#6B7280', lineHeight: 17 },
   dismissButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 12, right: 12,
     padding: 4,
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
 
-  // ── Empty state ───────────────────────────────────────────────
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
+  centerState:     { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  centerStateText: { color: '#6B7280', fontSize: 13, fontWeight: '500' },
+
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyIconWrapper: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: COLORS.inputBg,
+    width: 72, height: 72,
+    backgroundColor: '#EDE9FE',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: '#5B21D9',
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.textDark,
-    marginBottom: 7,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 19,
-    marginBottom: 22,
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 8,
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  resetButtonText: {
-    color: COLORS.white,
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  emptyTitle:    { fontSize: 17, fontWeight: '800', color: '#111827', marginBottom: 7, letterSpacing: 1, textTransform: 'uppercase' },
+  emptySubtitle: { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 19 },
 });

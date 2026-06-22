@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+﻿import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,32 +10,50 @@ import {
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Bell, Plus, ChevronRight, RotateCcw, Trash2 } from 'lucide-react-native';
-import { COLORS, SHADOW_SM } from '../theme';
+import { fmtTime, fmtDate } from '../src/utils/format';
 import useBatch, { MAX_RESCANS } from '../src/hooks/useBatch';
+import { fetchStaffAlerts } from '../src/services/supabaseService';
 
-const ALERTS_PREVIEW = [
-  { id: '1', title: 'Specimen Flagged in QC', type: 'critical' },
-  { id: '2', title: 'Log Rejected by Manager', type: 'warning' },
-  { id: '3', title: 'Inventory Synced',        type: 'success'  },
-];
+const B = {
+  bg:           '#F5F5F7',
+  bgEl:         '#FFFFFF',
+  bgCard:       '#FFFFFF',
+  border:       '#E5E7EB',
+  borderActive: '#5B21D9',
+  accent:       '#5B21D9',
+  accentDim:    '#7C3AED',
+  accentText:   '#FFFFFF',
+  textPri:      '#111827',
+  textMuted:    '#6B7280',
+  error:        '#EF4444',
+  errorBg:      'rgba(239,68,68,0.08)',
+  success:      '#10B981',
+  successBg:    'rgba(16,185,129,0.10)',
+  warning:      '#F59E0B',
+  warningBg:    'rgba(245,158,11,0.10)',
+  white:        '#FFFFFF',
+};
+
 
 const STATUS_CONFIG = {
-  pass:            { label: 'PASS',      bg: '#d1fae5', text: '#065f46' },
-  flagged:         { label: 'FLAGGED',   bg: '#fee2e2', text: '#991b1b' },
-  discarded:       { label: 'DISCARDED', bg: '#f1f5f9', text: '#64748b' },
-  escalated:       { label: 'ESCALATED', bg: '#fff7ed', text: '#c2410c' },
-  pending_manager: { label: 'PENDING',   bg: '#ede9fe', text: '#6d28d9' },
+  pass:            { label: 'PASS',      bg: 'rgba(16,185,129,0.12)',  border: '#10B981', text: '#10B981' },
+  flagged:         { label: 'FLAGGED',   bg: 'rgba(239,68,68,0.12)',   border: '#EF4444', text: '#EF4444' },
+  discarded:       { label: 'DISCARDED', bg: 'rgba(156,163,175,0.12)', border: '#9CA3AF', text: '#9CA3AF' },
+  escalated:       { label: 'ESCALATED', bg: 'rgba(245,158,11,0.12)',  border: '#F59E0B', text: '#F59E0B' },
+  pending_manager: { label: 'PENDING',   bg: 'rgba(245,158,11,0.12)',  border: '#F59E0B', text: '#F59E0B' },
 };
 
 const BATCH_STATUS = {
-  pending_approval: { label: 'Pending Approval', color: '#6d28d9', bg: '#ede9fe' },
-  approved:         { label: 'Approved',          color: '#065f46', bg: '#d1fae5' },
-  rejected:         { label: 'Rejected',          color: '#991b1b', bg: '#fee2e2' },
+  pending_approval: { label: 'PENDING',   border: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  text: '#F59E0B' },
+  approved:         { label: 'APPROVED',  border: '#10B981', bg: 'rgba(16,185,129,0.12)',  text: '#10B981' },
+  rejected:         { label: 'REJECTED',  border: '#EF4444', bg: 'rgba(239,68,68,0.12)',   text: '#EF4444' },
+  needs_rescan:     { label: 'RE-SCAN',   border: '#F59E0B', bg: 'rgba(245,158,11,0.12)',  text: '#F59E0B' },
 };
 
 export default function WorkflowModule({ navigation, route }) {
   const isFocused = useIsFocused();
   const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const [alertsPreview, setAlertsPreview] = useState([]);
 
   const {
     activeBatch,
@@ -43,6 +61,7 @@ export default function WorkflowModule({ navigation, route }) {
     currentSpecies,
     stats,
     startNewBatch,
+    startBatchForSpecies,
     applyDiscard,
     submitBatch,
   } = useBatch();
@@ -54,10 +73,25 @@ export default function WorkflowModule({ navigation, route }) {
     Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
   }, [isFocused]);
 
-  // ── Start a new batch (guard handled in hook call site) ──
+  // Load real alerts preview on focus
+  useEffect(() => {
+    if (!isFocused) return;
+    (async () => {
+      try {
+        const data = await fetchStaffAlerts();
+        setAlertsPreview(data.slice(0, 3));
+      } catch {}
+    })();
+  }, [isFocused]);
+
+  // ── Start a new batch ──
   const handleNewBatch = () => {
-    if (activeBatch?.specimens?.length > 0) {
+    if (activeBatch) {
       Alert.alert('Active Batch', 'Finish the current batch before starting a new one.');
+      return;
+    }
+    if (currentSpecies.species === 'Awaiting scan…') {
+      Alert.alert('No Species Detected', 'Scan a specimen first so the system can identify the species before creating a batch.');
       return;
     }
     startNewBatch();
@@ -75,7 +109,7 @@ export default function WorkflowModule({ navigation, route }) {
     });
   };
 
-  // ── Navigate to scanner in re-scan mode ──
+  // ── Navigate to scanner in re-scan mode (from active batch specimen) ──
   const handleRescan = (specimen) => {
     if (!activeBatch) return;
     navigation.navigate('YoloScan', {
@@ -86,6 +120,22 @@ export default function WorkflowModule({ navigation, route }) {
       stepTitle:      'Re-Scan',
       originalDefects: specimen.parts_required,
       rescansCount:   specimen.rescan_count,
+    });
+  };
+
+  // ── Re-scan from a completed recent batch ──
+  const handleRescanBatch = (b) => {
+    if (activeBatch?.specimens?.length > 0) {
+      Alert.alert('Active Batch', 'Finish the current batch before starting a re-scan.');
+      return;
+    }
+    const newBatchId = startBatchForSpecies(b.species, b.commonName);
+    navigation.navigate('YoloScan', {
+      batchId:      newBatchId,
+      batchSpecies: b.species,
+      mode:         'rescan',
+      stepId:       1,
+      stepTitle:    'Re-Scan',
     });
   };
 
@@ -108,14 +158,6 @@ export default function WorkflowModule({ navigation, route }) {
     navigation.navigate('BatchSummary', { batch: activeBatch });
   };
 
-  const fmtTime = iso =>
-    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const fmtDate = iso => {
-    const d = new Date(iso);
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ' + fmtTime(iso);
-  };
-
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
       <View style={styles.container}>
@@ -126,33 +168,37 @@ export default function WorkflowModule({ navigation, route }) {
 
           {/* ── Alerts Banner ── */}
           <TouchableOpacity
-            style={styles.alertsBanner}
-            onPress={() => navigation?.navigate('StaffAlertsNotifications')}
+            style={[styles.alertsBanner, alertsPreview.length === 0 && styles.alertsBannerNeutral]}
+            onPress={() => navigation?.getParent()?.navigate('StaffAlertsNotifications')}
             activeOpacity={0.8}
           >
             <View style={styles.alertsBannerLeft}>
               <View style={styles.alertsBell}>
-                <Bell size={18} color="#2B3441" />
-                <View style={styles.alertsBadgeDot} />
+                <Bell size={18} color={alertsPreview.length > 0 ? B.accent : B.textMuted} />
+                {alertsPreview.length > 0 && <View style={styles.alertsBadgeDot} />}
               </View>
               <View>
-                <Text style={styles.alertsBannerTitle}>Alerts</Text>
-                <Text style={styles.alertsBannerSub}>{ALERTS_PREVIEW.length} notifications pending</Text>
+                <Text style={[styles.alertsBannerTitle, alertsPreview.length === 0 && { color: B.textMuted }]}>ALERTS</Text>
+                <Text style={styles.alertsBannerSub}>
+                  {alertsPreview.length > 0
+                    ? `${alertsPreview.length} notification${alertsPreview.length !== 1 ? 's' : ''} pending`
+                    : 'No new notifications'}
+                </Text>
               </View>
             </View>
             <View style={styles.alertsTagRow}>
-              {ALERTS_PREVIEW.slice(0, 2).map(a => (
+              {alertsPreview.slice(0, 2).map(a => (
                 <View key={a.id} style={[
                   styles.alertsTypeTag,
-                  a.type === 'critical' && styles.alertsTagCritical,
-                  a.type === 'warning'  && styles.alertsTagWarning,
-                  a.type === 'success'  && styles.alertsTagSuccess,
+                  a.severity === 'critical' && styles.alertsTagCritical,
+                  a.severity === 'warning'  && styles.alertsTagWarning,
+                  a.severity === 'info'     && styles.alertsTagSuccess,
                 ]}>
                   <Text style={[
                     styles.alertsTagText,
-                    a.type === 'critical' && { color: '#D94F4F' },
-                    a.type === 'warning'  && { color: '#B45309' },
-                    a.type === 'success'  && { color: '#065f46' },
+                    a.severity === 'critical' && { color: B.error },
+                    a.severity === 'warning'  && { color: B.warning },
+                    a.severity === 'info'     && { color: B.accent },
                   ]} numberOfLines={1}>{a.title}</Text>
                 </View>
               ))}
@@ -162,9 +208,14 @@ export default function WorkflowModule({ navigation, route }) {
           {/* ── Active Batch or Start Prompt ── */}
           {activeBatch ? (
             <>
+              {/* Section header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                <Text style={styles.sectionLabel}>[ ACTIVE BATCH ]</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+              </View>
+
               {/* Batch info card */}
               <View style={styles.batchCard}>
-                <Text style={styles.batchCardLabel}>ACTIVE BATCH</Text>
                 <Text style={styles.batchCardSpecies}>{activeBatch.species}</Text>
                 {activeBatch.commonName ? (
                   <Text style={styles.batchCardCommon}>{activeBatch.commonName}</Text>
@@ -172,37 +223,38 @@ export default function WorkflowModule({ navigation, route }) {
                 <Text style={styles.batchCardTime}>Started {fmtTime(activeBatch.createdAt)}</Text>
 
                 <View style={styles.statsRow}>
-                  <View style={[styles.statChip, { backgroundColor: '#d1fae5' }]}>
-                    <Text style={[styles.statChipNum,   { color: '#065f46' }]}>{stats.pass}</Text>
-                    <Text style={[styles.statChipLabel, { color: '#065f46' }]}>PASS</Text>
+                  <View style={[styles.statChip, { backgroundColor: 'rgba(16,185,129,0.12)', borderColor: '#10B981' }]}>
+                    <Text style={[styles.statChipNum, { color: B.success }]}>{stats.pass}</Text>
+                    <Text style={[styles.statChipLabel, { color: B.success }]}>PASS</Text>
                   </View>
-                  <View style={[styles.statChip, { backgroundColor: '#fee2e2' }]}>
-                    <Text style={[styles.statChipNum,   { color: '#991b1b' }]}>{stats.flagged}</Text>
-                    <Text style={[styles.statChipLabel, { color: '#991b1b' }]}>FLAGGED</Text>
+                  <View style={[styles.statChip, { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: '#EF4444' }]}>
+                    <Text style={[styles.statChipNum, { color: B.error }]}>{stats.flagged}</Text>
+                    <Text style={[styles.statChipLabel, { color: B.error }]}>FLAGGED</Text>
                   </View>
-                  <View style={[styles.statChip, { backgroundColor: '#fff7ed' }]}>
-                    <Text style={[styles.statChipNum,   { color: '#c2410c' }]}>{stats.escalated}</Text>
-                    <Text style={[styles.statChipLabel, { color: '#c2410c' }]}>ESCALATED</Text>
+                  <View style={[styles.statChip, { backgroundColor: 'rgba(245,158,11,0.12)', borderColor: '#F59E0B' }]}>
+                    <Text style={[styles.statChipNum, { color: B.warning }]}>{stats.escalated}</Text>
+                    <Text style={[styles.statChipLabel, { color: B.warning }]}>ESCALATED</Text>
                   </View>
-                  <View style={[styles.statChip, { backgroundColor: '#f1f5f9' }]}>
-                    <Text style={[styles.statChipNum,   { color: '#64748b' }]}>{stats.discarded}</Text>
-                    <Text style={[styles.statChipLabel, { color: '#64748b' }]}>DISCARD</Text>
+                  <View style={[styles.statChip, { backgroundColor: 'rgba(143,164,184,0.12)', borderColor: '#5B21D9' }]}>
+                    <Text style={[styles.statChipNum, { color: B.accent }]}>{stats.discarded}</Text>
+                    <Text style={[styles.statChipLabel, { color: B.accent }]}>DISCARD</Text>
                   </View>
                 </View>
               </View>
 
               {/* Scan specimen button */}
               <TouchableOpacity style={styles.scanBtn} onPress={handleScanSpecimen} activeOpacity={0.85}>
-                <Plus size={16} color="#fff" />
-                <Text style={styles.scanBtnText}>Scan Specimen</Text>
+                <Plus size={16} color={B.bg} />
+                <Text style={styles.scanBtnText}>SCAN SPECIMEN</Text>
               </TouchableOpacity>
 
               {/* Specimen list */}
               {activeBatch.specimens.length > 0 && (
                 <View style={styles.specimensSection}>
-                  <Text style={styles.specimensLabel}>
-                    SPECIMENS · {activeBatch.specimens.length}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                    <Text style={styles.sectionLabel}>[ SPECIMENS · {activeBatch.specimens.length} ]</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+                  </View>
 
                   {activeBatch.specimens.map((s, i) => {
                     const cfg       = STATUS_CONFIG[s.status] || STATUS_CONFIG.flagged;
@@ -241,7 +293,7 @@ export default function WorkflowModule({ navigation, route }) {
                             )}
                           </View>
 
-                          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+                          <View style={[styles.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
                             <Text style={[styles.statusBadgeText, { color: cfg.text }]}>
                               {cfg.label}
                             </Text>
@@ -256,8 +308,8 @@ export default function WorkflowModule({ navigation, route }) {
                                 onPress={() => handleRescan(s)}
                                 activeOpacity={0.8}
                               >
-                                <RotateCcw size={12} color={COLORS.primary} />
-                                <Text style={styles.actionRescanText}>Re-Scan</Text>
+                                <RotateCcw size={12} color={B.accent} />
+                                <Text style={styles.actionRescanText}>RE-SCAN</Text>
                               </TouchableOpacity>
                             )}
                             {canDiscard && (
@@ -266,8 +318,8 @@ export default function WorkflowModule({ navigation, route }) {
                                 onPress={() => handleDiscard(s)}
                                 activeOpacity={0.8}
                               >
-                                <Trash2 size={12} color="#dc2626" />
-                                <Text style={styles.actionDiscardText}>Discard</Text>
+                                <Trash2 size={12} color={B.error} />
+                                <Text style={styles.actionDiscardText}>DISCARD</Text>
                               </TouchableOpacity>
                             )}
                           </View>
@@ -280,17 +332,17 @@ export default function WorkflowModule({ navigation, route }) {
 
               {/* Finish batch */}
               <TouchableOpacity style={styles.finishBtn} onPress={handleFinishBatch} activeOpacity={0.85}>
-                <Text style={styles.finishBtnText}>Finish Batch</Text>
-                <ChevronRight size={16} color="#fff" />
+                <Text style={styles.finishBtnText}>FINISH BATCH</Text>
+                <ChevronRight size={16} color={B.bg} />
               </TouchableOpacity>
             </>
           ) : (
             /* No active batch — start prompt */
             <TouchableOpacity style={styles.newBatchCard} onPress={handleNewBatch} activeOpacity={0.85}>
               <View style={styles.newBatchIconWrap}>
-                <Plus size={28} color={COLORS.primary} />
+                <Plus size={28} color={B.accent} />
               </View>
-              <Text style={styles.newBatchTitle}>Start New Batch</Text>
+              <Text style={styles.newBatchTitle}>START NEW BATCH</Text>
               <Text style={styles.newBatchSub}>
                 {currentSpecies.species !== 'Awaiting scan…'
                   ? currentSpecies.species +
@@ -303,7 +355,10 @@ export default function WorkflowModule({ navigation, route }) {
           {/* ── Recent Batches ── */}
           {recentBatches.length > 0 && (
             <View style={styles.historySection}>
-              <Text style={styles.historyLabel}>RECENT BATCHES</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                <Text style={styles.sectionLabel}>[ RECENT BATCHES ]</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+              </View>
 
               {recentBatches.slice(0, 5).map(b => {
                 const cfg       = BATCH_STATUS[b.status] || BATCH_STATUS.pending_approval;
@@ -311,19 +366,24 @@ export default function WorkflowModule({ navigation, route }) {
                 const total     = b.specimens?.length || 0;
 
                 return (
-                  <View key={b.id} style={styles.historyCard}>
+                  <TouchableOpacity
+                    key={b.id}
+                    style={styles.historyCard}
+                    onPress={() => handleRescanBatch(b)}
+                    activeOpacity={0.7}
+                  >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.historySpecies} numberOfLines={1}>{b.species}</Text>
                       <Text style={styles.historyMeta}>
-                        {fmtDate(b.submittedAt)} · {passCount}/{total} passed
+                        {fmtDate(b.submittedAt)} · {passCount}/{total} passed · Tap to re-scan
                       </Text>
                     </View>
-                    <View style={[styles.historyBadge, { backgroundColor: cfg.bg }]}>
-                      <Text style={[styles.historyBadgeText, { color: cfg.color }]}>
+                    <View style={[styles.historyBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                      <Text style={[styles.historyBadgeText, { color: cfg.text }]}>
                         {cfg.label}
                       </Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -336,18 +396,31 @@ export default function WorkflowModule({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container:     { flex: 1, backgroundColor: COLORS.pageBg },
+  container:     { flex: 1, backgroundColor: B.bg },
   scrollContent: { padding: 16, paddingBottom: 48 },
+
+  sectionLabel: {
+    fontSize: 9,
+    color: B.accent,
+    fontWeight: '700',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+  },
 
   // ── Alerts Banner ──
   alertsBanner: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 12,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: B.border,
+    borderLeftWidth: 4,
+    borderLeftColor: B.accent,
+  },
+  alertsBannerNeutral: {
+    borderLeftColor: B.border,
+    opacity: 0.7,
   },
   alertsBannerLeft: {
     flexDirection: 'row',
@@ -358,8 +431,10 @@ const styles = StyleSheet.create({
   alertsBell: {
     position: 'relative',
     width: 34, height: 34,
-    borderRadius: 9,
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -367,91 +442,82 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 6, right: 6,
     width: 7, height: 7,
-    borderRadius: 3.5,
-    backgroundColor: COLORS.errorRed,
+    borderRadius: 0,
+    backgroundColor: B.error,
     borderWidth: 1,
-    borderColor: COLORS.white,
+    borderColor: B.bgCard,
   },
-  alertsBannerTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textDark },
-  alertsBannerSub:   { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  alertsBannerTitle: { fontSize: 13, fontWeight: '800', color: B.textPri, letterSpacing: 1.5 },
+  alertsBannerSub:   { fontSize: 11, color: B.textMuted, marginTop: 1 },
   alertsTagRow:      { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
-  alertsTypeTag:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: COLORS.inputBg },
-  alertsTagCritical: { backgroundColor: COLORS.errorBg },
-  alertsTagWarning:  { backgroundColor: COLORS.warningBg },
-  alertsTagSuccess:  { backgroundColor: COLORS.successBg },
-  alertsTagText:     { fontSize: 10, fontWeight: '600', color: COLORS.textMuted },
+  alertsTypeTag:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 0, borderWidth: 1, borderColor: B.border, backgroundColor: B.bgEl },
+  alertsTagCritical: { backgroundColor: B.errorBg, borderColor: B.error },
+  alertsTagWarning:  { backgroundColor: B.warningBg, borderColor: B.warning },
+  alertsTagSuccess:  { backgroundColor: B.successBg, borderColor: B.success },
+  alertsTagText:     { fontSize: 10, fontWeight: '600', color: B.textMuted },
 
   // ── Active Batch Card ──
   batchCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 14,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 20,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderWidth: 2,
+    borderColor: B.accent,
   },
-  batchCardLabel:   { fontSize: 10, fontWeight: '700', color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-  batchCardSpecies: { fontSize: 24, fontWeight: '800', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 4 },
-  batchCardCommon:  { fontSize: 14, color: COLORS.textMuted, fontWeight: '500', marginBottom: 6 },
-  batchCardTime:    { fontSize: 11, color: COLORS.textLight, marginBottom: 16 },
+  batchCardSpecies: { fontSize: 22, fontWeight: '800', color: B.textPri, fontStyle: 'italic', marginBottom: 4 },
+  batchCardCommon:  { fontSize: 13, color: B.textMuted, fontWeight: '500', marginBottom: 6 },
+  batchCardTime:    { fontSize: 11, color: B.accentDim, marginBottom: 16 },
 
-  statsRow:       { flexDirection: 'row', gap: 8 },
-  statChip:       { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
-  statChipNum:    { fontSize: 20, fontWeight: '800', lineHeight: 24 },
-  statChipLabel:  { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  statsRow:      { flexDirection: 'row', gap: 6 },
+  statChip:      { flex: 1, borderRadius: 0, borderWidth: 1, paddingVertical: 8, alignItems: 'center' },
+  statChipNum:   { fontSize: 20, fontWeight: '800', lineHeight: 24 },
+  statChipLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 },
 
   // ── Scan Button ──
   scanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    borderRadius: 10,
-    paddingVertical: 13,
+    backgroundColor: B.accent,
+    borderRadius: 0,
+    paddingVertical: 15,
     marginBottom: 16,
     gap: 8,
   },
-  scanBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  scanBtnText: { color: B.bg, fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase' },
 
   // ── Specimen List ──
   specimensSection: { marginBottom: 16 },
-  specimensLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
   specimenCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: B.border,
   },
   specimenRow:    { flexDirection: 'row', alignItems: 'center' },
   specimenNum: {
     width: 26, height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
-  specimenNumText:  { fontSize: 11, fontWeight: '700', color: COLORS.textMid },
+  specimenNumText:  { fontSize: 11, fontWeight: '700', color: B.accent },
   specimenMeta:     { flex: 1 },
-  specimenSpecies:  { fontSize: 13, fontWeight: '700', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 3 },
-  specimenDetail:   { fontSize: 11, color: COLORS.textLight, fontWeight: '500' },
-  mismatchNote:     { fontSize: 10, color: '#b45309', fontWeight: '600', marginTop: 4 },
-  escalationNote:   { fontSize: 10, color: '#c2410c', fontWeight: '600', marginTop: 4 },
-  discardNote:      { fontSize: 10, color: '#64748b', fontWeight: '500', marginTop: 4 },
+  specimenSpecies:  { fontSize: 13, fontWeight: '700', color: B.textPri, fontStyle: 'italic', marginBottom: 3 },
+  specimenDetail:   { fontSize: 11, color: B.textMuted, fontWeight: '500' },
+  mismatchNote:     { fontSize: 10, color: B.warning, fontWeight: '600', marginTop: 4 },
+  escalationNote:   { fontSize: 10, color: B.warning, fontWeight: '600', marginTop: 4 },
+  discardNote:      { fontSize: 10, color: B.textMuted, fontWeight: '500', marginTop: 4 },
 
-  statusBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginLeft: 8, alignSelf: 'flex-start' },
-  statusBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  statusBadge:     { borderRadius: 0, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 4, marginLeft: 8, alignSelf: 'flex-start' },
+  statusBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
 
   specimenActions: {
     flexDirection: 'row',
@@ -459,93 +525,85 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: B.border,
   },
   actionRescan: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 7,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: COLORS.primaryLight,
-    backgroundColor: COLORS.primaryMuted,
+    borderColor: B.accent,
+    backgroundColor: 'rgba(143,164,184,0.08)',
   },
-  actionRescanText:  { fontSize: 12, fontWeight: '700', color: COLORS.primary },
+  actionRescanText:  { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5, textTransform: 'uppercase' },
   actionDiscard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 7,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: '#fecaca',
-    backgroundColor: '#fff1f2',
+    borderColor: B.error,
+    backgroundColor: B.errorBg,
   },
-  actionDiscardText: { fontSize: 12, fontWeight: '700', color: '#dc2626' },
+  actionDiscardText: { fontSize: 11, fontWeight: '800', color: B.error, letterSpacing: 1.5, textTransform: 'uppercase' },
 
   // ── Finish Batch ──
   finishBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.headerBg,
-    borderRadius: 10,
-    paddingVertical: 14,
+    backgroundColor: B.success,
+    borderRadius: 0,
+    paddingVertical: 15,
     marginBottom: 24,
     gap: 8,
   },
-  finishBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  finishBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase' },
 
   // ── No Active Batch ──
   newBatchCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 14,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.borderLight,
+    borderWidth: 1,
+    borderColor: B.borderActive,
     borderStyle: 'dashed',
     marginBottom: 24,
-    ...SHADOW_SM,
   },
   newBatchIconWrap: {
-    width: 60, height: 60,
-    borderRadius: 30,
-    backgroundColor: COLORS.primaryMuted,
+    width: 56, height: 56,
+    borderRadius: 0,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,
   },
-  newBatchTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textDark, marginBottom: 6 },
-  newBatchSub:   { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', fontStyle: 'italic' },
+  newBatchTitle: { fontSize: 15, fontWeight: '800', color: B.textPri, marginBottom: 6, letterSpacing: 2, textTransform: 'uppercase' },
+  newBatchSub:   { fontSize: 12, color: B.textMuted, textAlign: 'center', fontStyle: 'italic' },
 
   // ── Recent Batches History ──
   historySection: { marginBottom: 8 },
-  historyLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
-  },
   historyCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: B.border,
   },
-  historySpecies:   { fontSize: 13, fontWeight: '700', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 3 },
-  historyMeta:      { fontSize: 11, color: COLORS.textLight },
-  historyBadge:     { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginLeft: 10 },
-  historyBadgeText: { fontSize: 10, fontWeight: '700' },
+  historySpecies:   { fontSize: 13, fontWeight: '700', color: B.textPri, fontStyle: 'italic', marginBottom: 3 },
+  historyMeta:      { fontSize: 11, color: B.textMuted },
+  historyBadge:     { borderRadius: 0, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5, marginLeft: 10 },
+  historyBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
 });

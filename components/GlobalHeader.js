@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { LogOut, Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,10 +59,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.headerBg,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.headerBorder,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
+    elevation: 2,
+    shadowColor: '#111827',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
     shadowRadius: 4,
   },
   leftSection: {
@@ -79,18 +79,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandText: {
-    color: COLORS.textOnDark,
+    color: '#5B21D9',
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.2,
   },
   brandDash: {
-    color: COLORS.textLight,
+    color: '#9CA3AF',
     fontWeight: '300',
     fontSize: 16,
   },
   brandSubtext: {
-    color: COLORS.textOnDark,
+    color: '#5B21D9',
     fontWeight: '700',
     fontSize: 16,
     letterSpacing: 0.2,
@@ -101,9 +101,9 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: 7,
-    backgroundColor: 'rgba(255, 255, 255, 0.07)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: '#E5E7EB',
   },
 });

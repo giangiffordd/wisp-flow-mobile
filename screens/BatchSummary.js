@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,15 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CheckCircle, AlertTriangle, Trash2, AlertCircle, ChevronLeft, Send } from 'lucide-react-native';
-import { COLORS, SHADOW_SM } from '../theme';
+import { fmtTime } from '../src/utils/format';
+import { submitBatchToStorage } from '../src/hooks/useBatch';
 
 const STATUS_CONFIG = {
-  pass:      { label: 'PASS',      bg: '#d1fae5', text: '#065f46', Icon: CheckCircle  },
-  flagged:   { label: 'FLAGGED',   bg: '#fee2e2', text: '#991b1b', Icon: AlertTriangle },
-  discarded: { label: 'DISCARDED', bg: '#f1f5f9', text: '#64748b', Icon: Trash2        },
-  escalated: { label: 'ESCALATED', bg: '#fff7ed', text: '#c2410c', Icon: AlertCircle   },
+  pass:      { label: 'PASS',      bg: 'rgba(16,185,129,0.12)',  border: '#10B981', text: '#10B981', Icon: CheckCircle  },
+  flagged:   { label: 'FLAGGED',   bg: 'rgba(239,68,68,0.12)',   border: '#EF4444', text: '#EF4444', Icon: AlertTriangle },
+  discarded: { label: 'DISCARDED', bg: 'rgba(143,164,184,0.12)', border: '#5B21D9', text: '#5B21D9', Icon: Trash2        },
+  escalated: { label: 'ESCALATED', bg: 'rgba(245,158,11,0.12)',  border: '#F59E0B', text: '#F59E0B', Icon: AlertCircle   },
 };
 
 export default function BatchSummary({ navigation, route }) {
@@ -32,9 +32,6 @@ export default function BatchSummary({ navigation, route }) {
     escalated: specimens.filter(s => s.status === 'escalated').length,
   };
 
-  const fmtTime = iso =>
-    new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
   const handleSubmit = () => {
     Alert.alert(
       'Submit Batch',
@@ -49,22 +46,7 @@ export default function BatchSummary({ navigation, route }) {
   const confirmSubmit = async () => {
     setSubmitting(true);
     try {
-      const finalized = {
-        ...batch,
-        status:      'pending_approval',
-        submittedAt: new Date().toISOString(),
-      };
-
-      const raw = await AsyncStorage.getItem('recent_batches').catch(() => null);
-      const existing = raw ? JSON.parse(raw) : [];
-      const updated  = [finalized, ...existing].slice(0, 10);
-
-      await Promise.all([
-        AsyncStorage.setItem('recent_batches', JSON.stringify(updated)),
-        AsyncStorage.removeItem('active_batch'),
-      ]);
-
-      // Navigate back to the Workflow tab with a clean state
+      await submitBatchToStorage(batch);
       navigation.navigate('MainTabs', { screen: 'Workflow' });
     } catch {
       Alert.alert('Error', 'Failed to submit batch. Please try again.');
@@ -75,10 +57,11 @@ export default function BatchSummary({ navigation, route }) {
 
   return (
     <View style={styles.container}>
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <ChevronLeft size={20} color={COLORS.textDark} />
+          <ChevronLeft size={20} color="#111827" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Batch Summary</Text>
@@ -90,7 +73,7 @@ export default function BatchSummary({ navigation, route }) {
 
         {/* Species Info */}
         <View style={styles.speciesCard}>
-          <Text style={styles.speciesLabel}>SPECIES</Text>
+          <Text style={styles.speciesLabel}>[ SPECIES ]</Text>
           <Text style={styles.speciesName}>{batch.species}</Text>
           {batch.commonName ? (
             <Text style={styles.speciesCommon}>{batch.commonName}</Text>
@@ -99,27 +82,27 @@ export default function BatchSummary({ navigation, route }) {
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { borderColor: '#86efac' }]}>
-            <Text style={[styles.statNum, { color: '#065f46' }]}>{stats.pass}</Text>
-            <Text style={[styles.statLabel, { color: '#065f46' }]}>PASS</Text>
+          <View style={[styles.statCard, { borderColor: '#10B981' }]}>
+            <Text style={[styles.statNum, { color: '#10B981' }]}>{stats.pass}</Text>
+            <Text style={[styles.statLabel, { color: '#10B981' }]}>PASS</Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#fca5a5' }]}>
-            <Text style={[styles.statNum, { color: '#991b1b' }]}>{stats.flagged}</Text>
-            <Text style={[styles.statLabel, { color: '#991b1b' }]}>FLAGGED</Text>
+          <View style={[styles.statCard, { borderColor: '#EF4444' }]}>
+            <Text style={[styles.statNum, { color: '#EF4444' }]}>{stats.flagged}</Text>
+            <Text style={[styles.statLabel, { color: '#EF4444' }]}>FLAGGED</Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#fdba74' }]}>
-            <Text style={[styles.statNum, { color: '#c2410c' }]}>{stats.escalated}</Text>
-            <Text style={[styles.statLabel, { color: '#c2410c' }]}>ESCALATED</Text>
+          <View style={[styles.statCard, { borderColor: '#F59E0B' }]}>
+            <Text style={[styles.statNum, { color: '#F59E0B' }]}>{stats.escalated}</Text>
+            <Text style={[styles.statLabel, { color: '#F59E0B' }]}>ESCALATED</Text>
           </View>
-          <View style={[styles.statCard, { borderColor: '#cbd5e1' }]}>
-            <Text style={[styles.statNum, { color: '#64748b' }]}>{stats.discarded}</Text>
-            <Text style={[styles.statLabel, { color: '#64748b' }]}>DISCARDED</Text>
+          <View style={[styles.statCard, { borderColor: '#5B21D9' }]}>
+            <Text style={[styles.statNum, { color: '#5B21D9' }]}>{stats.discarded}</Text>
+            <Text style={[styles.statLabel, { color: '#5B21D9' }]}>DISCARDED</Text>
           </View>
         </View>
 
         {/* Manager note */}
         <View style={styles.managerNote}>
-          <AlertCircle size={14} color="#6d28d9" style={{ marginTop: 1 }} />
+          <AlertCircle size={14} color="#5B21D9" style={{ marginTop: 1 }} />
           <Text style={styles.managerNoteText}>
             A manager will review all specimens before this batch is committed to the database.
             Escalated items will also be resolved by the manager.
@@ -127,7 +110,10 @@ export default function BatchSummary({ navigation, route }) {
         </View>
 
         {/* Specimen Breakdown */}
-        <Text style={styles.sectionLabel}>ALL SPECIMENS · {stats.total}</Text>
+        <View style={styles.sectionDivider}>
+          <Text style={styles.sectionDividerText}>[ ALL SPECIMENS · {stats.total} ]</Text>
+          <View style={styles.sectionDividerLine} />
+        </View>
 
         {specimens.map((s, i) => {
           const cfg = STATUS_CONFIG[s.status] || STATUS_CONFIG.flagged;
@@ -149,13 +135,13 @@ export default function BatchSummary({ navigation, route }) {
                     <Text style={styles.specimenNote}>Reason: {s.discard_reason}</Text>
                   )}
                   {s.status === 'escalated' && (
-                    <Text style={[styles.specimenNote, { color: '#c2410c' }]}>
+                    <Text style={[styles.specimenNote, { color: '#F59E0B' }]}>
                       Pending manager decision
                     </Text>
                   )}
                 </View>
 
-                <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+                <View style={[styles.statusBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
                   <Icon size={10} color={cfg.text} />
                   <Text style={[styles.statusBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
                 </View>
@@ -175,9 +161,9 @@ export default function BatchSummary({ navigation, route }) {
           activeOpacity={0.85}
           disabled={submitting}
         >
-          <Send size={16} color="#fff" />
+          <Send size={16} color="#FFFFFF" />
           <Text style={styles.submitBtnText}>
-            {submitting ? 'Submitting…' : 'Submit for Manager Approval'}
+            {submitting ? 'SUBMITTING…' : 'SUBMIT FOR MANAGER APPROVAL'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -186,45 +172,47 @@ export default function BatchSummary({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.pageBg },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
 
   // ── Header ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingTop: 52,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderBottomColor: '#E5E7EB',
     gap: 12,
   },
   backBtn: {
     width: 36, height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 8,
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textDark },
-  headerSub:   { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
+  headerTitle: { fontSize: 14, fontWeight: '800', color: '#111827', letterSpacing: 2, textTransform: 'uppercase' },
+  headerSub:   { fontSize: 11, color: '#6B7280', marginTop: 1 },
 
   scrollContent: { padding: 16 },
 
   // ── Species Card ──
   speciesCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
     padding: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: '#E5E7EB',
   },
-  speciesLabel:  { fontSize: 10, fontWeight: '700', color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  speciesName:   { fontSize: 22, fontWeight: '800', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 4 },
-  speciesCommon: { fontSize: 13, color: COLORS.textMuted, fontWeight: '500' },
+  speciesLabel:  { fontSize: 9, fontWeight: '700', color: '#7C3AED', textTransform: 'uppercase', letterSpacing: 2.5, marginBottom: 8 },
+  speciesName:   { fontSize: 22, fontWeight: '800', color: '#111827', fontStyle: 'italic', marginBottom: 4 },
+  speciesCommon: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
 
   // ── Stats Grid ──
   statsGrid: {
@@ -234,96 +222,106 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
     borderWidth: 1,
     paddingVertical: 12,
     alignItems: 'center',
-    ...SHADOW_SM,
   },
   statNum:   { fontSize: 28, fontWeight: '800', lineHeight: 32 },
-  statLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 3 },
+  statLabel: { fontSize: 8, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 3 },
 
   // ── Manager Note ──
   managerNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    backgroundColor: '#ede9fe',
-    borderRadius: 10,
+    backgroundColor: 'rgba(143,164,184,0.06)',
+    borderRadius: 0,
     padding: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#ddd6fe',
+    borderColor: '#5B21D9',
   },
-  managerNoteText: { flex: 1, fontSize: 12, color: '#6d28d9', fontWeight: '500', lineHeight: 18 },
+  managerNoteText: { flex: 1, fontSize: 12, color: '#5B21D9', fontWeight: '500', lineHeight: 18 },
 
-  // ── Section Label ──
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+  // ── Section Divider ──
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 10,
+    gap: 8,
+  },
+  sectionDividerText: {
+    fontSize: 9,
+    color: '#5B21D9',
+    fontWeight: '700',
+    letterSpacing: 2.5,
+  },
+  sectionDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
   },
 
   // ── Specimen Cards ──
   specimenCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: '#E5E7EB',
   },
   specimenRow:      { flexDirection: 'row', alignItems: 'center' },
   specimenIndex: {
     width: 26, height: 26,
-    borderRadius: 13,
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
   },
-  specimenIndexText: { fontSize: 11, fontWeight: '700', color: COLORS.textMid },
+  specimenIndexText: { fontSize: 11, fontWeight: '700', color: '#5B21D9' },
   specimenInfo:      { flex: 1 },
-  specimenSpecies:   { fontSize: 13, fontWeight: '700', color: COLORS.textDark, fontStyle: 'italic', marginBottom: 3 },
-  specimenMeta:      { fontSize: 11, color: COLORS.textLight, fontWeight: '500' },
-  specimenNote:      { fontSize: 10, color: '#64748b', marginTop: 3, fontWeight: '500' },
+  specimenSpecies:   { fontSize: 13, fontWeight: '700', color: '#111827', fontStyle: 'italic', marginBottom: 3 },
+  specimenMeta:      { fontSize: 11, color: '#6B7280', fontWeight: '500' },
+  specimenNote:      { fontSize: 10, color: '#6B7280', marginTop: 3, fontWeight: '500' },
 
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 6,
+    borderRadius: 0,
+    borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginLeft: 8,
     alignSelf: 'flex-start',
   },
-  statusBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
+  statusBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
 
   // ── Footer Submit ──
   footer: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: '#FFFFFF',
     padding: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
-    borderTopColor: COLORS.borderLight,
+    borderTopColor: '#E5E7EB',
   },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
+    backgroundColor: '#5B21D9',
+    borderRadius: 0,
     paddingVertical: 15,
     gap: 10,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  submitBtnText: { color: '#F5F5F7', fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase' },
 });

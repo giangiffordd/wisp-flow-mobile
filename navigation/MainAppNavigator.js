@@ -1,20 +1,36 @@
-import React from 'react';
-import { Platform } from 'react-native';
+﻿import React from 'react';
+import { Platform, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Activity, ClipboardList, Package, Layers } from 'lucide-react-native';
-import { COLORS } from '../theme';
 
 import WorkflowModule from '../screens/WorkflowModule';
 import TaskHistoryPendingLogs from '../screens/TaskHistoryPendingLogs';
 import MobileInventoryViewer from '../screens/MobileInventoryViewer';
 import ProductionStagesScreen from '../screens/ProductionStagesScreen';
 import GlobalHeader from '../components/GlobalHeader';
+import { clearWorkerSession } from '../src/services/workerSession';
 
 const Tab = createBottomTabNavigator();
 
 export default function MainAppNavigator({ navigation }) {
-  const handleLogout = () => navigation.replace('Login');
+  const handleLogout = () => {
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            await clearWorkerSession();
+            navigation.replace('Login');
+          },
+        },
+      ]
+    );
+  };
   const handleBell   = () => navigation.navigate('StaffAlertsNotifications');
   const insets = useSafeAreaInsets();
 
@@ -34,19 +50,18 @@ export default function MainAppNavigator({ navigation }) {
           if (route.name === 'History')    return <ClipboardList size={size} color={color} />;
           if (route.name === 'Inventory')  return <Package       size={size} color={color} />;
         },
-        // Active tab uses ICPI primary blue, inactive uses muted
-        tabBarActiveTintColor:   COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textLight,
+        tabBarActiveTintColor:   '#5B21D9',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
-          backgroundColor: COLORS.cardBg,
+          backgroundColor: '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: COLORS.borderLight,
+          borderTopColor: '#E5E7EB',
           paddingBottom: bottomPadding,
           paddingTop: 8,
           height: tabBarHeight,
-          elevation: 8,
-          shadowColor: COLORS.textDark,
-          shadowOffset: { width: 0, height: -3 },
+          elevation: 4,
+          shadowColor: '#111827',
+          shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.06,
           shadowRadius: 8,
         },
@@ -66,7 +81,7 @@ export default function MainAppNavigator({ navigation }) {
     >
       <Tab.Screen name="Workflow"  component={WorkflowModule}          options={{ tabBarLabel: 'Workflow' }} />
       <Tab.Screen name="Stages"    component={ProductionStagesScreen}  options={{ tabBarLabel: 'Stages' }} />
-      <Tab.Screen name="History"   component={TaskHistoryPendingLogs}  options={{ tabBarLabel: 'Task History' }} />
+      <Tab.Screen name="History"   component={TaskHistoryPendingLogs}  options={{ tabBarLabel: 'History' }} />
       <Tab.Screen name="Inventory" component={MobileInventoryViewer}   options={{ tabBarLabel: 'Inventory' }} />
     </Tab.Navigator>
   );

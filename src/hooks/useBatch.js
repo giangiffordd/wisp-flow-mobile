@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
-import { submitScanBatch } from '../services/supabaseService';
+import { submitScanBatch, fetchBatchStatuses } from '../services/supabaseService';
+import { getWorkerSession } from '../services/workerSession';
 
 // ===== AI GENERATED: useBatch =====
 // Purpose: Encapsulates all batch lifecycle state and AsyncStorage persistence
@@ -14,6 +15,43 @@ import { submitScanBatch } from '../services/supabaseService';
 // 4. Expose action functions for components to call
 
 export const MAX_RESCANS = 2;
+
+/**
+ * @function submitBatchToStorage
+ * @description Standalone (no React state) — finalizes a batch, persists to AsyncStorage
+ * and fires Supabase sync. Safe to call from any screen without instantiating the hook.
+ */
+export async function submitBatchToStorage(batch) {
+  const session    = await getWorkerSession();
+  const workerName = session?.name        || 'Worker';
+  const prefix     = session?.employee_id || 'default';
+
+  const finalized = {
+    ...batch,
+    status:      'pending_approval',
+    submittedAt: new Date().toISOString(),
+    workerName,
+  };
+
+  const raw      = await AsyncStorage.getItem(`${prefix}_recent_batches`).catch(() => null);
+  const existing = raw ? JSON.parse(raw) : [];
+  const updated  = [finalized, ...existing].slice(0, 10);
+
+  await AsyncStorage.setItem(`${prefix}_recent_batches`, JSON.stringify(updated));
+  await AsyncStorage.removeItem(`${prefix}_active_batch`);
+
+  submitScanBatch({
+    species:         finalized.species,
+    species_display: finalized.commonName || finalized.species,
+    stage_number:    finalized.stageNumber || 9,
+    stage_name:      finalized.stageName   || 'Quality Control',
+    specimens:       finalized.specimens,
+    total_scanned:   finalized.specimens.length,
+    pass_count:      finalized.specimens.filter(s => s.status === 'pass').length,
+    flagged_count:   finalized.specimens.filter(s => s.status === 'flagged' || s.status === 'escalated').length,
+    worker_name:     workerName,
+  }).catch(() => {});
+}
 
 /**
  * @function generateId
@@ -71,6 +109,7 @@ export function applyResultToBatch(currentBatch, scanResult) {
  */
 export default function useBatch() {
   const isFocused = useIsFocused();
+  const workerPrefixRef = useRef('default');
 
   const [currentSpecies, setCurrentSpecies] = useState({ species: 'Awaiting scan…', commonName: '' });
   const [activeBatch,    setActiveBatch]    = useState(null);
@@ -82,10 +121,14 @@ export default function useBatch() {
 
     const loadPersistedState = async () => {
       try {
+        const session = await getWorkerSession();
+        const prefix = session?.employee_id || 'default';
+        workerPrefixRef.current = prefix;
+
         const storagePairs = await AsyncStorage.multiGet([
           'last_detected_species',
-          'active_batch',
-          'recent_batches',
+          `${prefix}_active_batch`,
+          `${prefix}_recent_batches`,
           'pending_specimen_result',
         ]);
         const [speciesRaw, batchRaw, historyRaw, pendingRaw] = storagePairs.map(pair => pair[1]);
@@ -102,24 +145,67 @@ export default function useBatch() {
             const pendingResult = JSON.parse(pendingRaw);
             if (restoredBatch && pendingResult.batchId === restoredBatch.id) {
               restoredBatch = applyResultToBatch(restoredBatch, pendingResult);
-              await AsyncStorage.setItem('active_batch', JSON.stringify(restoredBatch));
+              await AsyncStorage.setItem(`${prefix}_active_batch`, JSON.stringify(restoredBatch));
             }
           } catch {}
         }
 
         setActiveBatch(restoredBatch);
+
+        // Sync approval statuses from Supabase for pending batches
+        let localBatches = historyRaw ? JSON.parse(historyRaw) : [];
+        const pendingBatches = localBatches.filter(b => b.status === 'pending_approval' && b.supabaseId);
+        if (pendingBatches.length > 0) {
+          const updated = await fetchBatchStatuses(pendingBatches.map(b => b.supabaseId));
+          let changed = false;
+          let newRescanTasks = [];
+
+          localBatches = localBatches.map(batch => {
+            const remote = updated.find(r => r.id === batch.supabaseId);
+            if (!remote || remote.status === batch.status) return batch;
+
+            changed = true;
+            const updatedBatch = { ...batch, status: remote.status };
+
+            // On approval: flagged specimens → new rescan task
+            if (remote.status === 'approved') {
+              const flagged = (remote.specimens || batch.specimens || [])
+                .filter(s => s.status === 'flagged' || s.status === 'escalated');
+              if (flagged.length > 0) {
+                newRescanTasks.push({
+                  id: generateId(),
+                  species: batch.species,
+                  commonName: batch.commonName,
+                  specimens: flagged.map(s => ({ ...s, status: 'flagged', rescan_count: (s.rescan_count || 0) })),
+                  status: 'needs_rescan',
+                  createdAt: new Date().toISOString(),
+                  submittedAt: null,
+                  originalBatchId: batch.id,
+                });
+              }
+            }
+            return updatedBatch;
+          });
+
+          if (changed || newRescanTasks.length > 0) {
+            const merged = [...newRescanTasks, ...localBatches].slice(0, 20);
+            setRecentBatches(merged);
+            await AsyncStorage.setItem(`${prefix}_recent_batches`, JSON.stringify(merged)).catch(() => {});
+          }
+        }
       } catch {}
     };
 
     loadPersistedState();
   }, [isFocused]);
 
-  // Persist activeBatch whenever it changes
+  // Persist activeBatch whenever it changes (keyed by worker)
   useEffect(() => {
+    const key = `${workerPrefixRef.current}_active_batch`;
     if (activeBatch === null) {
-      AsyncStorage.removeItem('active_batch').catch(() => {});
+      AsyncStorage.removeItem(key).catch(() => {});
     } else {
-      AsyncStorage.setItem('active_batch', JSON.stringify(activeBatch)).catch(() => {});
+      AsyncStorage.setItem(key, JSON.stringify(activeBatch)).catch(() => {});
     }
   }, [activeBatch]);
 
@@ -136,6 +222,18 @@ export default function useBatch() {
       commonName: currentSpecies.commonName,
       specimens: [],
     });
+  }
+
+  function startBatchForSpecies(speciesName, commonName) {
+    const newId = generateId();
+    setActiveBatch({
+      id:        newId,
+      createdAt: new Date().toISOString(),
+      species:   speciesName,
+      commonName: commonName || speciesName,
+      specimens: [],
+    });
+    return newId;
   }
 
   /**
@@ -161,29 +259,45 @@ export default function useBatch() {
    * @returns {Promise<void>}
    */
   async function submitBatch(submittedBatch) {
+    const session = await getWorkerSession();
+    const workerName = session?.name || 'Worker';
+    const prefix = session?.employee_id || 'default';
+
     const finalizedBatch = {
       ...submittedBatch,
       status:      'pending_approval',
       submittedAt: new Date().toISOString(),
+      workerName,
     };
     const updatedHistory = [finalizedBatch, ...recentBatches].slice(0, 10);
     setRecentBatches(updatedHistory);
     setActiveBatch(null);
-    await AsyncStorage.setItem('recent_batches', JSON.stringify(updatedHistory)).catch(() => {});
+    await AsyncStorage.setItem(`${prefix}_recent_batches`, JSON.stringify(updatedHistory)).catch(() => {});
 
-    // Sync to Supabase (fire-and-forget — does not block the UI)
+    // Sync to Supabase and store returned ID for status polling
     const passCount    = finalizedBatch.specimens.filter(s => s.status === 'pass').length;
     const flaggedCount = finalizedBatch.specimens.filter(s => s.status === 'flagged' || s.status === 'escalated').length;
     submitScanBatch({
-      species:        finalizedBatch.species,
+      species:         finalizedBatch.species,
       species_display: finalizedBatch.commonName || finalizedBatch.species,
-      stage_number:   finalizedBatch.stageNumber || 9,
-      stage_name:     finalizedBatch.stageName   || 'Quality Control',
-      specimens:      finalizedBatch.specimens,
-      total_scanned:  finalizedBatch.specimens.length,
-      pass_count:     passCount,
-      flagged_count:  flaggedCount,
-      worker_name:    'Worker',
+      stage_number:    finalizedBatch.stageNumber || 9,
+      stage_name:      finalizedBatch.stageName   || 'Quality Control',
+      specimens:       finalizedBatch.specimens,
+      total_scanned:   finalizedBatch.specimens.length,
+      pass_count:      passCount,
+      flagged_count:   flaggedCount,
+      worker_name:     workerName,
+    }).then(result => {
+      if (result?.id) {
+        // Attach the Supabase row ID so we can poll for approval status later
+        setRecentBatches(prev => {
+          const patched = prev.map(b =>
+            b.id === finalizedBatch.id ? { ...b, supabaseId: result.id } : b
+          );
+          AsyncStorage.setItem(`${prefix}_recent_batches`, JSON.stringify(patched)).catch(() => {});
+          return patched;
+        });
+      }
     }).catch(() => {});
   }
 
@@ -200,6 +314,7 @@ export default function useBatch() {
     currentSpecies,
     stats,
     startNewBatch,
+    startBatchForSpecies,
     applyDiscard,
     submitBatch,
   };

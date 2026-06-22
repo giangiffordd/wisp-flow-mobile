@@ -103,8 +103,55 @@ export async function fetchProductsCatalog() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  Worker Auth — validates via server-side RPC (PIN never exposed)
+// ─────────────────────────────────────────────────────────────────
+
+export async function savePushToken(workerId, token) {
+  if (!supabase || !workerId || !token) return;
+  try {
+    await supabase
+      .from('workers')
+      .update({ push_token: token })
+      .eq('id', workerId);
+  } catch (e) {
+    console.error('savePushToken exception:', e);
+  }
+}
+
+export async function loginWorker(employeeId, pin) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase.rpc('login_worker', {
+      p_employee_id: employeeId,
+      p_pin: pin,
+    });
+    if (error) { console.error('loginWorker error:', error.message); return null; }
+    if (!data || data.length === 0) return null;
+    return data[0]; // { id, name, employee_id, role }
+  } catch (e) {
+    console.error('loginWorker exception:', e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Scan Batches — YoLo QC results saved for web dashboard approval
 // ─────────────────────────────────────────────────────────────────
+
+export async function fetchBatchStatuses(supabaseIds) {
+  if (!supabase || !supabaseIds?.length) return [];
+  try {
+    const { data, error } = await supabase
+      .from('scan_batches')
+      .select('id, status, specimens')
+      .in('id', supabaseIds);
+    if (error) { console.error('fetchBatchStatuses error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('fetchBatchStatuses exception:', e);
+    return [];
+  }
+}
 
 export async function submitScanBatch(batchData) {
   if (!supabase) return null;
@@ -138,12 +185,14 @@ export async function submitScanBatch(batchData) {
 //  Production Batches — 12-stage lifecycle tracking
 // ─────────────────────────────────────────────────────────────────
 
-export async function createProductionBatch(batchName, species) {
+export async function createProductionBatch(batchName, species, orderId = null, quantityPlanned = 0) {
   if (!supabase) return null;
   try {
+    const payload = { batch_name: batchName, species, current_stage: 1, status: 'in_progress', quantity_planned: quantityPlanned };
+    if (orderId) payload.order_id = orderId;
     const { data, error } = await supabase
       .from('production_batches')
-      .insert({ batch_name: batchName, species, current_stage: 1, status: 'in_progress' })
+      .insert(payload)
       .select()
       .single();
     if (error) { console.error('createProductionBatch error:', error.message); return null; }
@@ -198,6 +247,123 @@ export async function addStageLog(batchId, stageNumber, stageName, logText, work
   } catch (e) {
     console.error('addStageLog exception:', e);
     return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Orders — B&B purchase orders driving production
+// ─────────────────────────────────────────────────────────────────
+
+export async function createOrder({ orderNumber, species, quantity, notes = null, clientName = 'Bits and Bugs' }) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .insert({ order_number: orderNumber, client_name: clientName, species, quantity, notes, status: 'pending' })
+      .select()
+      .single();
+    if (error) { console.error('createOrder error:', error.message); return null; }
+    return data;
+  } catch (e) {
+    console.error('createOrder exception:', e);
+    return null;
+  }
+}
+
+export async function fetchOrders() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, production_batches(id, batch_name, current_stage, status, quantity_planned, created_at)')
+      .order('created_at', { ascending: false });
+    if (error) { console.error('fetchOrders error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('fetchOrders exception:', e);
+    return [];
+  }
+}
+
+export async function fetchOrderById(orderId) {
+  if (!supabase || !orderId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, production_batches(id, batch_name, current_stage, status, quantity_planned, created_at)')
+      .eq('id', orderId)
+      .single();
+    if (error) { console.error('fetchOrderById error:', error.message); return null; }
+    return data;
+  } catch (e) {
+    console.error('fetchOrderById exception:', e);
+    return null;
+  }
+}
+
+export async function updateOrderStatus(orderId, status) {
+  if (!supabase || !orderId) return false;
+  try {
+    const { error } = await supabase
+      .from('orders')
+      .update({ status })
+      .eq('id', orderId);
+    if (error) { console.error('updateOrderStatus error:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('updateOrderStatus exception:', e);
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Staff Alerts — manager-to-worker notifications
+// ─────────────────────────────────────────────────────────────────
+
+export async function fetchStaffAlerts() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('alerts')
+      .select('id, title, message, type, severity, created_at')
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) { console.warn('fetchStaffAlerts:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.warn('fetchStaffAlerts exception:', e);
+    return [];
+  }
+}
+
+export async function dismissStaffAlert(alertId) {
+  if (!supabase || !alertId) return false;
+  try {
+    const { error } = await supabase
+      .from('alerts')
+      .update({ is_read: true })
+      .eq('id', alertId);
+    if (error) { console.warn('dismissStaffAlert:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.warn('dismissStaffAlert exception:', e);
+    return false;
+  }
+}
+
+export async function dismissAllStaffAlerts(alertIds = []) {
+  if (!supabase || alertIds.length === 0) return false;
+  try {
+    const { error } = await supabase
+      .from('alerts')
+      .update({ is_read: true })
+      .in('id', alertIds);
+    if (error) { console.warn('dismissAllStaffAlerts:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.warn('dismissAllStaffAlerts exception:', e);
+    return false;
   }
 }
 

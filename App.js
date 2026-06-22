@@ -1,9 +1,19 @@
+import "./global.css";
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { GluestackUIProvider } from "@gluestack-ui/themed";
+import { config } from "@gluestack-ui/config";
 import * as Notifications from 'expo-notifications';
+import * as SplashScreen from 'expo-splash-screen';
+import { Platform } from 'react-native';
+import { getWorkerSession } from './src/services/workerSession';
+import { savePushToken } from './src/services/supabaseService';
+
+// Hold the splash screen until login-bg is ready
+SplashScreen.preventAutoHideAsync();
 
 // Show notifications as alerts even while app is foregrounded
 Notifications.setNotificationHandler({
@@ -25,15 +35,37 @@ import StaffAlertsNotifications from './screens/StaffAlertsNotifications';
 import ProcessFlowchart from './screens/ProcessFlowchart';
 import MobileInventoryViewer from './screens/MobileInventoryViewer';
 import TaskHistoryPendingLogs from './screens/TaskHistoryPendingLogs';
+import OrderDetailScreen from './screens/OrderDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   useEffect(() => {
-    Notifications.requestPermissionsAsync();
+    registerPushToken();
   }, []);
 
+  async function registerPushToken() {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') return;
+
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+      });
+    }
+
+    const tokenData = await Notifications.getExpoPushTokenAsync().catch(() => null);
+    if (!tokenData?.data) return;
+
+    const session = await getWorkerSession();
+    if (session?.id) {
+      await savePushToken(session.id, tokenData.data);
+    }
+  }
+
   return (
+    <GluestackUIProvider config={config}>
     <SafeAreaProvider>
       <StatusBar style="light" />
       <NavigationContainer>
@@ -46,9 +78,11 @@ export default function App() {
           <Stack.Screen name="MobileInventoryViewer" component={MobileInventoryViewer} />
           <Stack.Screen name="TaskHistoryPendingLogs" component={TaskHistoryPendingLogs} />
           <Stack.Screen name="YoloScan"      component={YoloCameraModule} />
-          <Stack.Screen name="BatchSummary" component={BatchSummary}      />
+          <Stack.Screen name="BatchSummary"  component={BatchSummary}      />
+          <Stack.Screen name="OrderDetail"   component={OrderDetailScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
+    </GluestackUIProvider>
   );
 }

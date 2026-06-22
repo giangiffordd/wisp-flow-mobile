@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -28,9 +29,32 @@ import {
   Clock,
   MapPin,
   Hash,
+  Shield,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react-native';
 import { supabase } from '../src/services/supabaseService';
-import { COLORS, SHADOW_SM } from '../theme';
+
+// ── Design tokens ──────────────────────────────────────────────
+const B = {
+  bg:           '#F5F5F7',
+  bgEl:         '#FFFFFF',
+  bgCard:       '#FFFFFF',
+  border:       '#E5E7EB',
+  borderActive: '#5B21D9',
+  accent:       '#5B21D9',
+  accentDim:    '#7C3AED',
+  accentText:   '#FFFFFF',
+  textPri:      '#111827',
+  textMuted:    '#6B7280',
+  error:        '#EF4444',
+  errorBg:      'rgba(239,68,68,0.08)',
+  success:      '#10B981',
+  successBg:    'rgba(16,185,129,0.10)',
+  warning:      '#F59E0B',
+  warningBg:    'rgba(245,158,11,0.10)',
+  white:        '#FFFFFF',
+};
 
 // ── Fallback data ──────────────────────────────────────────────
 const initialInventory = [
@@ -48,30 +72,30 @@ const initialInventory = [
 const getStockLevel = (stock) => {
   if (stock === 0) return {
     label: 'Out of Stock',
-    color: COLORS.errorRed,
-    bgColor: COLORS.errorBg,
-    borderColor: COLORS.errorBorder,
+    color: B.error,
+    bgColor: B.errorBg,
+    borderColor: B.error,
     type: 'out',
   };
   if (stock >= 1 && stock <= 19) return {
     label: 'Low',
-    color: COLORS.errorRed,
-    bgColor: COLORS.errorBg,
-    borderColor: COLORS.errorBorder,
+    color: B.error,
+    bgColor: B.errorBg,
+    borderColor: B.error,
     type: 'low',
   };
   if (stock >= 20 && stock <= 49) return {
     label: 'Medium Stock',
-    color: COLORS.warningAmber,
-    bgColor: COLORS.warningBg,
-    borderColor: COLORS.warningBorder,
+    color: B.warning,
+    bgColor: B.warningBg,
+    borderColor: B.warning,
     type: 'medium',
   };
   return {
     label: 'In Stock',
-    color: COLORS.successGreen,
-    bgColor: COLORS.successBg,
-    borderColor: COLORS.successBorder,
+    color: B.success,
+    bgColor: B.successBg,
+    borderColor: B.success,
     type: 'high',
   };
 };
@@ -88,6 +112,81 @@ const formatUpdatedAt = (isoString) => {
     return isoString;
   }
 };
+
+// ── Levenshtein distance for "did you mean?" ──────────────────
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
+}
+
+function findClosestSpecies(query, inventory) {
+  if (!query || query.length < 4 || inventory.length === 0) return null;
+  const q = query.toLowerCase();
+  let best = null, bestDist = Infinity;
+  for (const item of inventory) {
+    const d = Math.min(
+      levenshtein(q, item.species.toLowerCase()),
+      levenshtein(q, item.commonName.toLowerCase())
+    );
+    if (d < bestDist) { bestDist = d; best = item; }
+  }
+  return bestDist <= 3 ? best : null;
+}
+
+// ── Skeleton card shown while loading ─────────────────────────
+const SkeletonCard = () => {
+  const pulse = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+  return (
+    <Animated.View style={[skeletonStyles.card, { opacity: pulse }]}>
+      <View style={skeletonStyles.row}>
+        <View style={skeletonStyles.iconBox} />
+        <View style={{ flex: 1, gap: 6 }}>
+          <View style={skeletonStyles.lineWide} />
+          <View style={skeletonStyles.lineNarrow} />
+        </View>
+        <View style={skeletonStyles.badge} />
+      </View>
+      <View style={skeletonStyles.bar} />
+    </Animated.View>
+  );
+};
+
+const skeletonStyles = StyleSheet.create({
+  card: {
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: B.border,
+    padding: 14,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    gap: 12,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconBox: { width: 36, height: 36, borderRadius: 0, backgroundColor: B.border },
+  lineWide: { height: 10, borderRadius: 0, backgroundColor: B.border, width: '70%' },
+  lineNarrow: { height: 8, borderRadius: 0, backgroundColor: B.bgEl, width: '45%' },
+  badge: { width: 52, height: 20, borderRadius: 0, backgroundColor: B.border },
+  bar: { height: 3, borderRadius: 0, backgroundColor: B.border, width: '100%' },
+});
 
 export default function MobileInventoryViewer({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -112,6 +211,7 @@ export default function MobileInventoryViewer({ navigation, route }) {
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [inventory, setInventory] = useState(initialInventory);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [dbStatus, setDbStatus] = useState('checking');
   const [expandedId, setExpandedId] = useState(null);
   const debounceRef = useRef(null);
@@ -124,20 +224,21 @@ export default function MobileInventoryViewer({ navigation, route }) {
 
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
-  useEffect(() => {
-    async function loadInventory() {
-      if (!supabase) { setDbStatus('offline'); return; }
-      setIsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('inventory')
-          .select('*')
-          .order('genus', { ascending: true });
+  const loadInventory = useCallback(async () => {
+    if (!supabase) { setDbStatus('offline'); setFetchError(true); return; }
+    setIsLoading(true);
+    setFetchError(false);
+    try {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .order('genus', { ascending: true });
 
-        if (error) {
-          console.error('Supabase query error:', error);
-          setDbStatus('offline');
-        } else if (data && data.length > 0) {
+      if (error) {
+        console.error('Supabase query error:', error);
+        setDbStatus('offline');
+        setFetchError(true);
+      } else if (data && data.length > 0) {
           const formatted = data.map((item, index) => {
             const get = (key) => Object.keys(item).find(k => k.toLowerCase() === key.toLowerCase());
             const genusKey = get('genus');
@@ -178,15 +279,16 @@ export default function MobileInventoryViewer({ navigation, route }) {
         } else {
           setDbStatus('connected_empty');
         }
-      } catch (err) {
-        console.error('Exception loading inventory:', err);
-        setDbStatus('offline');
-      } finally {
-        setIsLoading(false);
-      }
+    } catch (err) {
+      console.error('Exception loading inventory:', err);
+      setDbStatus('offline');
+      setFetchError(true);
+    } finally {
+      setIsLoading(false);
     }
-    loadInventory();
   }, []);
+
+  useEffect(() => { loadInventory(); }, [loadInventory]);
 
   const totalItems = inventory.length;
   const lowStockCount = useMemo(() => inventory.filter(item => item.stock < 20).length, [inventory]);
@@ -216,27 +318,36 @@ export default function MobileInventoryViewer({ navigation, route }) {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* ── Header — dark navy matches ICPI admin header ── */}
+
+        {/* ── Header ── */}
         {route?.name !== 'Inventory' && (
           <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
             <View style={styles.headerLeft}>
               <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-                <ArrowLeft size={20} color={COLORS.textOnDark} />
+                <ArrowLeft size={20} color={B.textPri} />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Warehouse Inventory</Text>
+              <Text style={styles.headerTitle}>[ WAREHOUSE INVENTORY ]</Text>
               {dbStatus === 'connected_empty' && (
-                <View style={[styles.statusPill, { backgroundColor: 'rgba(234,179,8,0.2)' }]}>
-                  <Text style={styles.statusPillText}>Empty</Text>
+                <View style={[styles.statusPill, { backgroundColor: B.warningBg, borderColor: B.warning, borderWidth: 1 }]}>
+                  <Text style={[styles.statusPillText, { color: B.warning }]}>EMPTY</Text>
                 </View>
               )}
               {dbStatus === 'offline' && (
-                <View style={[styles.statusPill, { backgroundColor: 'rgba(239,68,68,0.2)' }]}>
-                  <Text style={styles.statusPillText}>Offline</Text>
+                <View style={[styles.statusPill, { backgroundColor: B.errorBg, borderColor: B.error, borderWidth: 1 }]}>
+                  <Text style={[styles.statusPillText, { color: B.error }]}>OFFLINE</Text>
                 </View>
               )}
             </View>
-            <TouchableOpacity style={styles.filterMenuButton}>
-              <SlidersHorizontal size={17} color={COLORS.textLight} />
+            <TouchableOpacity
+              style={styles.filterMenuButton}
+              onPress={() => {
+                const cycle = ['ALL', 'HIGH', 'MEDIUM', 'LOW_OUT'];
+                const next = cycle[(cycle.indexOf(activeFilter) + 1) % cycle.length];
+                setActiveFilter(next);
+              }}
+              activeOpacity={0.7}
+            >
+              <SlidersHorizontal size={17} color={B.accentDim} />
             </TouchableOpacity>
           </View>
         )}
@@ -244,11 +355,11 @@ export default function MobileInventoryViewer({ navigation, route }) {
         {/* ── Search Bar ── */}
         <View style={styles.searchBarContainer}>
           <View style={styles.searchFieldWrapper}>
-            <Search size={16} color={COLORS.textLight} style={styles.searchIcon} />
+            <Search size={16} color={B.accentDim} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by name, ID, or species"
-              placeholderTextColor={COLORS.textLight}
+              placeholderTextColor={B.textMuted}
               value={searchQuery}
               onChangeText={handleSearchChange}
               autoCapitalize="none"
@@ -256,44 +367,44 @@ export default function MobileInventoryViewer({ navigation, route }) {
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
-                <X size={14} color={COLORS.textMuted} />
+                <X size={14} color={B.textMuted} />
               </TouchableOpacity>
             )}
           </View>
           {route?.name === 'Inventory' && (
             <TouchableOpacity style={styles.filterMenuButtonInline} activeOpacity={0.7}>
-              <SlidersHorizontal size={17} color={COLORS.textMid} />
+              <SlidersHorizontal size={17} color={B.accentDim} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* ── Summary strip — mirrors ICPI spreadsheet row header ── */}
+        {/* ── Summary strip ── */}
         <View style={styles.dashboardSummary}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Specimens</Text>
+            <Text style={styles.summaryLabel}>[ TOTAL SPECIMENS ]</Text>
             <Text style={styles.summaryValue}>{totalItems}</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Low / Out Alert</Text>
-            <Text style={[styles.summaryValue, lowStockCount > 0 && { color: COLORS.errorRed }]}>
+            <Text style={styles.summaryLabel}>[ LOW / OUT ALERT ]</Text>
+            <Text style={[styles.summaryValue, lowStockCount > 0 && { color: B.error }]}>
               {lowStockCount}
             </Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Source</Text>
+            <Text style={styles.summaryLabel}>[ SOURCE ]</Text>
             <Text style={[styles.summaryValue, { fontSize: 11, marginTop: 2 }]}>
-              {dbStatus === 'connected_live' ? '🟢 Supabase' : dbStatus === 'offline' ? '🔴 Offline' : '⏳ Checking'}
+              {dbStatus === 'connected_live' ? 'Supabase' : dbStatus === 'offline' ? 'Offline' : 'Checking…'}
             </Text>
           </View>
         </View>
 
-        {/* ── Filter tabs — same pill pattern as ICPI "All Families / All Statuses" ── */}
+        {/* ── Filter tabs ── */}
         <View style={styles.tabContainer}>
           {[
-            { key: 'ALL', label: 'All Items' },
-            { key: 'HIGH', label: 'High (50+)' },
-            { key: 'MEDIUM', label: 'Med (20–49)' },
-            { key: 'LOW_OUT', label: `Low / Out (${lowStockCount})` },
+            { key: 'ALL', label: 'ALL' },
+            { key: 'HIGH', label: 'HIGH 50+' },
+            { key: 'MEDIUM', label: 'MED 20-49' },
+            { key: 'LOW_OUT', label: `LOW/OUT (${lowStockCount})` },
           ].map(tab => (
             <TouchableOpacity
               key={tab.key}
@@ -309,9 +420,20 @@ export default function MobileInventoryViewer({ navigation, route }) {
 
         {/* ── Inventory List ── */}
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginBottom: 10 }} />
-            <Text style={styles.loadingText}>Fetching inventory from Supabase…</Text>
+          <View style={{ flex: 1, paddingTop: 12 }}>
+            {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+          </View>
+        ) : fetchError ? (
+          <View style={styles.errorContainer}>
+            <WifiOff size={44} color={B.error} style={{ marginBottom: 14 }} />
+            <Text style={styles.errorTitle}>Couldn't Load Inventory</Text>
+            <Text style={styles.errorSubtitle}>
+              Unable to reach Supabase. Check your connection and try again.
+            </Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadInventory} activeOpacity={0.8}>
+              <RefreshCw size={14} color={B.bg} style={{ marginRight: 6 }} />
+              <Text style={styles.retryButtonText}>RETRY</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -324,16 +446,54 @@ export default function MobileInventoryViewer({ navigation, route }) {
             maxToRenderPerBatch={10}
             windowSize={5}
             removeClippedSubviews
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Search size={32} color={COLORS.borderMid} style={{ marginBottom: 10 }} />
-                <Text style={styles.emptyTitle}>No Matching Inventory</Text>
-                <Text style={styles.emptySubtitle}>Try refining your query or resetting the filter tabs.</Text>
-              </View>
-            }
+            ListEmptyComponent={(() => {
+              const suggestion = debouncedQuery
+                ? findClosestSpecies(debouncedQuery, inventory)
+                : null;
+              return (
+                <View style={styles.emptyContainer}>
+                  <Search size={32} color={B.accentDim} style={{ marginBottom: 10 }} />
+                  <Text style={styles.emptyTitle}>No Matching Inventory</Text>
+                  {suggestion ? (
+                    <>
+                      <Text style={styles.emptySubtitle}>
+                        No results for "{debouncedQuery}".
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.suggestionRow}
+                        onPress={() => { setSearchQuery(suggestion.species); setDebouncedQuery(suggestion.species); }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.suggestionText}>
+                          Did you mean{' '}
+                          <Text style={styles.suggestionLink}>{suggestion.species}</Text>
+                          {'?'}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={styles.emptySubtitle}>
+                      Try refining your query or resetting the filter tabs.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
             renderItem={({ item }) => (
               <InventoryItem item={item} isExpanded={expandedId === item.id} onToggle={toggleExpand} />
             )}
+            ListFooterComponent={
+              <TouchableOpacity
+                style={styles.privacyRow}
+                onPress={() => WebBrowser.openBrowserAsync(
+                  'https://app.termly.io/policy-viewer/policy.html?policyUUID=1c0a8365-0ccf-4ffc-8f40-ee580a479fb3'
+                )}
+                activeOpacity={0.6}
+              >
+                <Shield size={12} color={B.textMuted} />
+                <Text style={styles.privacyText}>Privacy Policy</Text>
+              </TouchableOpacity>
+            }
           />
         )}
       </KeyboardAvoidingView>
@@ -341,7 +501,7 @@ export default function MobileInventoryViewer({ navigation, route }) {
   );
 }
 
-// ── Memoized inventory row — ICPI-style table/card hybrid ──────
+// ── Memoized inventory row ──────────────────────────────────────
 const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
   const level = getStockLevel(item.stock);
   const maxRange = 150;
@@ -370,8 +530,8 @@ const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
             <Text style={[styles.badgeText, { color: level.color }]}>{level.label}</Text>
           </View>
           {isExpanded
-            ? <ChevronUp size={13} color={COLORS.textMuted} />
-            : <ChevronDown size={13} color={COLORS.textLight} />}
+            ? <ChevronUp size={13} color={B.accent} />
+            : <ChevronDown size={13} color={B.accentDim} />}
         </View>
       </View>
 
@@ -391,11 +551,11 @@ const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
       {/* Location row */}
       <View style={styles.cardFooter}>
         <View style={styles.locBadge}>
-          <Package size={11} color={COLORS.textMuted} style={{ marginRight: 3 }} />
+          <Package size={11} color={B.accentDim} style={{ marginRight: 3 }} />
           <Text style={styles.locText}>Bin: {item.bin}</Text>
         </View>
         <View style={styles.locBadge}>
-          <Info size={11} color={COLORS.textMuted} style={{ marginRight: 3 }} />
+          <Info size={11} color={B.accentDim} style={{ marginRight: 3 }} />
           <Text style={styles.locText}>Shelf: {item.shelf}</Text>
         </View>
       </View>
@@ -404,33 +564,36 @@ const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
       {isExpanded && (
         <View style={styles.detailPanel}>
           <View style={styles.detailPanelDivider} />
-          <Text style={styles.detailPanelTitle}>Specimen Details</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+            <Text style={{ fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 2.5 }}>[ SPECIMEN DETAILS ]</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+          </View>
 
           <View style={styles.detailRow}>
-            <Clock size={12} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+            <Clock size={12} color={B.accentDim} style={{ marginRight: 8 }} />
             <View>
-              <Text style={styles.detailLabel}>Last Updated</Text>
+              <Text style={styles.detailLabel}>[ LAST UPDATED ]</Text>
               <Text style={styles.detailValue}>{formatUpdatedAt(item.updatedAt)}</Text>
             </View>
           </View>
           <View style={styles.detailRow}>
-            <MapPin size={12} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+            <MapPin size={12} color={B.accentDim} style={{ marginRight: 8 }} />
             <View>
-              <Text style={styles.detailLabel}>Warehouse Location</Text>
+              <Text style={styles.detailLabel}>[ WAREHOUSE LOCATION ]</Text>
               <Text style={styles.detailValue}>Bin {item.bin} — Shelf {item.shelf}</Text>
             </View>
           </View>
           <View style={styles.detailRow}>
-            <Hash size={12} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+            <Hash size={12} color={B.accentDim} style={{ marginRight: 8 }} />
             <View>
-              <Text style={styles.detailLabel}>Record ID</Text>
+              <Text style={styles.detailLabel}>[ RECORD ID ]</Text>
               <Text style={styles.detailValue}>{item.id}</Text>
             </View>
           </View>
           <View style={styles.detailRow}>
-            <Package size={12} color={COLORS.textMuted} style={{ marginRight: 8 }} />
+            <Package size={12} color={B.accentDim} style={{ marginRight: 8 }} />
             <View>
-              <Text style={styles.detailLabel}>Current Stock Status</Text>
+              <Text style={styles.detailLabel}>[ CURRENT STOCK STATUS ]</Text>
               <Text style={[styles.detailValue, { color: level.color, fontWeight: '700' }]}>
                 {level.label} — {item.stock} units remaining
               </Text>
@@ -445,7 +608,7 @@ const InventoryItem = memo(({ item, isExpanded, onToggle }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: B.bg,
   },
 
   // ── Header ──────────────────────────────────────────────────
@@ -453,11 +616,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.headerBg,
+    backgroundColor: B.bgEl,
     paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.headerBorder,
+    borderBottomColor: B.border,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -465,31 +628,37 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   backButton: {
-    padding: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 7,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
+    borderRadius: 0,
+    padding: 8,
   },
   headerTitle: {
-    color: COLORS.textOnDark,
-    fontSize: 16,
-    fontWeight: '700',
+    color: B.textPri,
+    fontWeight: '800',
+    letterSpacing: 2,
+    fontSize: 14,
+    textTransform: 'uppercase',
   },
   statusPill: {
     paddingHorizontal: 7,
     paddingVertical: 2,
-    borderRadius: 5,
+    borderRadius: 0,
     marginLeft: 4,
   },
   statusPillText: {
-    color: COLORS.textOnDark,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
+    letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
   filterMenuButton: {
-    padding: 6,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 7,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
+    borderRadius: 0,
+    padding: 8,
   },
 
   // ── Search ───────────────────────────────────────────────────
@@ -498,19 +667,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: B.bgEl,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderBottomColor: B.border,
     gap: 8,
   },
   searchFieldWrapper: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
+    backgroundColor: B.bg,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: B.border,
     paddingHorizontal: 10,
     height: 40,
   },
@@ -518,16 +687,16 @@ const styles = StyleSheet.create({
   filterMenuButtonInline: {
     height: 40,
     width: 40,
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
+    backgroundColor: B.bg,
+    borderRadius: 0,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: B.border,
   },
   searchInput: {
     flex: 1,
-    color: COLORS.textDark,
+    color: B.textPri,
     fontSize: 13,
     fontWeight: '500',
     paddingVertical: 0,
@@ -543,24 +712,24 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 8,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 10,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: B.border,
   },
   summaryLabel: {
     fontSize: 9,
-    color: COLORS.textMuted,
-    fontWeight: '600',
+    color: B.accentDim,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 2.5,
     marginBottom: 3,
   },
   summaryValue: {
     fontSize: 17,
     fontWeight: '800',
-    color: COLORS.textDark,
+    color: B.textPri,
   },
 
   // ── Filter tabs ───────────────────────────────────────────────
@@ -574,39 +743,32 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 6,
     paddingHorizontal: 3,
-    borderRadius: 7,
-    backgroundColor: COLORS.borderLight,
+    borderRadius: 0,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
     alignItems: 'center',
   },
-  activeTab: { backgroundColor: COLORS.primary },
-  tabText: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted, textAlign: 'center' },
-  activeTabText: { color: COLORS.white },
-
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  loadingText: { color: COLORS.textMuted, fontSize: 13, fontWeight: '500' },
+  activeTab: { backgroundColor: B.accent, borderColor: B.accent },
+  tabText: { fontSize: 9, fontWeight: '700', color: B.textMuted, textAlign: 'center', letterSpacing: 1 },
+  activeTabText: { color: B.bg },
 
   listContainer: { flex: 1 },
   listContent: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 32 },
   listContentEmpty: { flexGrow: 1, paddingHorizontal: 14, paddingTop: 6, paddingBottom: 32 },
 
-  // ── Item card — mirrors ICPI inventory card ────────────────────
+  // ── Item card ────────────────────────────────────────────────
   itemCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: B.border,
   },
   itemCardExpanded: {
-    borderColor: COLORS.primary,
-    borderWidth: 1.5,
+    borderColor: B.borderActive,
+    borderWidth: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -618,12 +780,12 @@ const styles = StyleSheet.create({
   speciesText: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.textDark,
+    color: B.accentText,
     fontStyle: 'italic',
   },
   commonNameText: {
     fontSize: 11,
-    color: COLORS.textMuted,
+    color: B.textMuted,
     marginTop: 2,
     fontWeight: '500',
   },
@@ -632,10 +794,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 3,
     paddingHorizontal: 7,
-    borderRadius: 5,
+    borderRadius: 0,
     borderWidth: 1,
   },
-  badgeText: { fontSize: 10, fontWeight: '700' },
+  badgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
 
   stockLevelContainer: { marginBottom: 10 },
   stockTextRow: {
@@ -644,43 +806,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 5,
   },
-  stockCountText: { fontSize: 12, color: COLORS.textMuted },
-  boldStock: { fontWeight: '700', color: COLORS.textDark },
-  thresholdText: { fontSize: 10, color: COLORS.textLight, fontWeight: '500' },
-  progressBarBg: { height: 5, backgroundColor: COLORS.inputBg, borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 3 },
+  stockCountText: { fontSize: 12, color: B.textMuted },
+  boldStock: { fontWeight: '700', color: B.textPri },
+  thresholdText: { fontSize: 10, color: B.accentDim, fontWeight: '500' },
+  progressBarBg: { height: 3, backgroundColor: B.border, borderRadius: 0, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 0 },
 
   cardFooter: {
     flexDirection: 'row',
     gap: 8,
     borderTopWidth: 1,
-    borderTopColor: COLORS.pageBg,
+    borderTopColor: B.border,
     paddingTop: 10,
   },
   locBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
+    backgroundColor: B.bg,
     paddingVertical: 3,
     paddingHorizontal: 7,
-    borderRadius: 5,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: B.border,
   },
-  locText: { fontSize: 10, color: COLORS.textMid, fontWeight: '600' },
+  locText: { fontSize: 10, color: B.accentDim, fontWeight: '600' },
 
   // ── Detail panel ──────────────────────────────────────────────
   detailPanel: { marginTop: 4 },
   detailPanelDivider: {
     height: 1,
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: B.border,
     marginVertical: 10,
-  },
-  detailPanelTitle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 10,
   },
   detailRow: {
     flexDirection: 'row',
@@ -689,15 +845,15 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 9,
-    color: COLORS.textLight,
-    fontWeight: '600',
+    color: B.accentDim,
+    fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 2.5,
     marginBottom: 2,
   },
   detailValue: {
     fontSize: 12,
-    color: COLORS.textMid,
+    color: B.textPri,
     fontWeight: '600',
     lineHeight: 17,
   },
@@ -706,7 +862,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 48,
+    paddingHorizontal: 24,
   },
-  emptyTitle: { fontSize: 14, fontWeight: '700', color: COLORS.textDark, marginBottom: 4 },
-  emptySubtitle: { fontSize: 12, color: COLORS.textMuted, textAlign: 'center' },
+  emptyTitle: { fontSize: 14, fontWeight: '700', color: B.textPri, marginBottom: 6 },
+  emptySubtitle: { fontSize: 12, color: B.textMuted, textAlign: 'center' },
+  suggestionRow: { marginTop: 10 },
+  suggestionText: { fontSize: 13, color: B.textMuted, textAlign: 'center' },
+  suggestionLink: { color: B.accent, fontWeight: '700', textDecorationLine: 'underline' },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingBottom: 40,
+  },
+  errorTitle: { fontSize: 16, fontWeight: '700', color: B.textPri, marginBottom: 8, textAlign: 'center' },
+  errorSubtitle: { fontSize: 13, color: B.textMuted, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: B.accent,
+    paddingVertical: 15,
+    paddingHorizontal: 32,
+    borderRadius: 0,
+    justifyContent: 'center',
+  },
+  retryButtonText: { color: B.bg, fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase' },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 20,
+  },
+  privacyText: {
+    fontSize: 11,
+    color: B.textMuted,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
+  },
 });
