@@ -33,7 +33,6 @@ import BatchSummary from './screens/BatchSummary';
 import PackagingBarcodeScanner from './screens/PackagingBarcodeScanner';
 import StaffAlertsNotifications from './screens/StaffAlertsNotifications';
 import ProcessFlowchart from './screens/ProcessFlowchart';
-import MobileInventoryViewer from './screens/MobileInventoryViewer';
 import TaskHistoryPendingLogs from './screens/TaskHistoryPendingLogs';
 import OrderDetailScreen from './screens/OrderDetailScreen';
 
@@ -75,7 +74,6 @@ export default function App() {
           <Stack.Screen name="PackagingBarcodeScanner" component={PackagingBarcodeScanner} />
           <Stack.Screen name="StaffAlertsNotifications" component={StaffAlertsNotifications} />
           <Stack.Screen name="ProcessFlowchart" component={ProcessFlowchart} />
-          <Stack.Screen name="MobileInventoryViewer" component={MobileInventoryViewer} />
           <Stack.Screen name="TaskHistoryPendingLogs" component={TaskHistoryPendingLogs} />
           <Stack.Screen name="YoloScan"      component={YoloCameraModule} />
           <Stack.Screen name="BatchSummary"  component={BatchSummary}      />

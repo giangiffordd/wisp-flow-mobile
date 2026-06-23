@@ -2,11 +2,10 @@
 import { Platform, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, ClipboardList, Package, Layers } from 'lucide-react-native';
+import { Activity, ClipboardList, Layers } from 'lucide-react-native';
 
 import WorkflowModule from '../screens/WorkflowModule';
 import TaskHistoryPendingLogs from '../screens/TaskHistoryPendingLogs';
-import MobileInventoryViewer from '../screens/MobileInventoryViewer';
 import ProductionStagesScreen from '../screens/ProductionStagesScreen';
 import GlobalHeader from '../components/GlobalHeader';
 import { clearWorkerSession } from '../src/services/workerSession';
@@ -48,7 +47,6 @@ export default function MainAppNavigator({ navigation }) {
           if (route.name === 'Workflow')   return <Activity      size={size} color={color} />;
           if (route.name === 'Stages')     return <Layers        size={size} color={color} />;
           if (route.name === 'History')    return <ClipboardList size={size} color={color} />;
-          if (route.name === 'Inventory')  return <Package       size={size} color={color} />;
         },
         tabBarActiveTintColor:   '#5B21D9',
         tabBarInactiveTintColor: '#9CA3AF',
@@ -82,7 +80,6 @@ export default function MainAppNavigator({ navigation }) {
       <Tab.Screen name="Workflow"  component={WorkflowModule}          options={{ tabBarLabel: 'Workflow' }} />
       <Tab.Screen name="Stages"    component={ProductionStagesScreen}  options={{ tabBarLabel: 'Stages' }} />
       <Tab.Screen name="History"   component={TaskHistoryPendingLogs}  options={{ tabBarLabel: 'History' }} />
-      <Tab.Screen name="Inventory" component={MobileInventoryViewer}   options={{ tabBarLabel: 'Inventory' }} />
     </Tab.Navigator>
   );
 }
