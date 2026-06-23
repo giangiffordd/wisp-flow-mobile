@@ -301,6 +301,15 @@ export default function useBatch() {
     }).catch(() => {});
   }
 
+  function clearActiveBatch() {
+    setActiveBatch(null);
+    // Also wipe the detected species -- otherwise the next "Start New
+    // Batch" silently reuses the previous specimen's species instead of
+    // requiring a fresh scan, which is what made "Clear Batch" look broken.
+    setCurrentSpecies({ species: 'Awaiting scan…', commonName: '' });
+    AsyncStorage.removeItem('last_detected_species').catch(() => {});
+  }
+
   const stats = activeBatch ? {
     pass:      activeBatch.specimens.filter(s => s.status === 'pass').length,
     flagged:   activeBatch.specimens.filter(s => s.status === 'flagged').length,
@@ -317,5 +326,6 @@ export default function useBatch() {
     startBatchForSpecies,
     applyDiscard,
     submitBatch,
+    clearActiveBatch,
   };
 }

@@ -64,6 +64,7 @@ export default function WorkflowModule({ navigation, route }) {
     startBatchForSpecies,
     applyDiscard,
     submitBatch,
+    clearActiveBatch,
   } = useBatch();
 
   // Fade in on focus
@@ -91,7 +92,16 @@ export default function WorkflowModule({ navigation, route }) {
       return;
     }
     if (currentSpecies.species === 'Awaiting scan…') {
-      Alert.alert('No Species Detected', 'Scan a specimen first so the system can identify the species before creating a batch.');
+      // No species detected yet and there's no active batch, so the
+      // "SCAN SPECIMEN" button (which requires a batch) isn't reachable
+      // either -- this was a dead end. Open the scanner directly in
+      // standalone mode so a scan can populate currentSpecies; tapping
+      // "Start New Batch" again afterward will then succeed.
+      navigation.navigate('YoloScan', {
+        mode:      'standalone',
+        stepId:    1,
+        stepTitle: 'Identify Species',
+      });
       return;
     }
     startNewBatch();
@@ -147,6 +157,18 @@ export default function WorkflowModule({ navigation, route }) {
       { text: 'Other',              onPress: () => applyDiscard(specimen, 'Other')              },
       { text: 'Cancel', style: 'cancel' },
     ]);
+  };
+
+  // ── Clear active batch with confirmation ──
+  const handleClearBatch = () => {
+    Alert.alert(
+      'Clear Batch',
+      'This will discard the current batch and all scanned specimens. This cannot be undone.',
+      [
+        { text: 'Keep Batch', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: clearActiveBatch },
+      ]
+    );
   };
 
   // ── Finish batch → go to summary screen ──
@@ -334,6 +356,12 @@ export default function WorkflowModule({ navigation, route }) {
               <TouchableOpacity style={styles.finishBtn} onPress={handleFinishBatch} activeOpacity={0.85}>
                 <Text style={styles.finishBtnText}>FINISH BATCH</Text>
                 <ChevronRight size={16} color={B.bg} />
+              </TouchableOpacity>
+
+              {/* Clear batch */}
+              <TouchableOpacity style={styles.clearBatchBtn} onPress={handleClearBatch} activeOpacity={0.8}>
+                <Trash2 size={13} color={B.error} />
+                <Text style={styles.clearBatchText}>CLEAR BATCH</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -564,6 +592,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   finishBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase' },
+  clearBatchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: B.error,
+    paddingVertical: 11,
+    marginBottom: 24,
+    gap: 6,
+  },
+  clearBatchText: { color: B.error, fontWeight: '700', fontSize: 11, letterSpacing: 2.5, textTransform: 'uppercase' },
 
   // ── No Active Batch ──
   newBatchCard: {
