@@ -17,7 +17,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.giangifford.wispflowmobile",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "output": "single",

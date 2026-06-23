@@ -461,10 +461,10 @@ export default function ProductionStagesScreen({ navigation }) {
                         <View style={styles.btnSecondaryRow}>
                           <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
                             <ClipboardList size={13} color={B.accent} />
-                            <Text style={styles.btnLogText}>ADD LOG</Text>
+                            <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
                           </TouchableOpacity>
                           <TouchableOpacity style={styles.btnAdvance} onPress={() => handleAdvanceStage(stage)}>
-                            <Text style={styles.btnAdvanceText}>
+                            <Text style={styles.btnAdvanceText} numberOfLines={1}>
                               {stage.id === 12 ? 'MARK COMPLETE' : 'STAGE DONE'}
                             </Text>
                             <ChevronRight size={13} color={B.bg} />
@@ -475,10 +475,10 @@ export default function ProductionStagesScreen({ navigation }) {
                       <>
                         <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
                           <ClipboardList size={14} color={B.accent} />
-                          <Text style={styles.btnLogText}>ADD LOG</Text>
+                          <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.btnAdvance} onPress={() => handleAdvanceStage(stage)}>
-                          <Text style={styles.btnAdvanceText}>STAGE DONE</Text>
+                          <Text style={styles.btnAdvanceText} numberOfLines={1}>STAGE DONE</Text>
                           <ChevronRight size={14} color={B.bg} />
                         </TouchableOpacity>
                       </>
@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
   stageCardDone:  { borderColor: B.success, opacity: 0.85 },
   stageCardFuture: { opacity: 0.45 },
 
-  stageCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, padding: 12, paddingLeft: 16 },
+  stageCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, padding: 12, paddingLeft: 16, gap: 10 },
   stageName:      { fontSize: 13, fontWeight: '700', color: B.textPri },
   stageNameFuture: { color: B.textMuted },
 
@@ -795,6 +795,7 @@ const styles = StyleSheet.create({
   },
   btnSecondaryRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     width: '100%',
   },
@@ -848,17 +849,19 @@ const styles = StyleSheet.create({
   },
   btnLog: {
     flex: 1,
+    minWidth: 130,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
     paddingVertical: 9,
+    paddingHorizontal: 6,
     borderRadius: 0,
     borderWidth: 1,
     borderColor: B.accent,
     backgroundColor: 'transparent',
   },
-  btnLogText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 2 },
+  btnLogText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
   btnScan: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -871,15 +874,17 @@ const styles = StyleSheet.create({
   btnScanText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 2 },
   btnAdvance: {
     flex: 1,
+    minWidth: 130,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
     paddingVertical: 9,
+    paddingHorizontal: 6,
     borderRadius: 0,
     backgroundColor: B.success,
   },
-  btnAdvanceText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 2 },
+  btnAdvanceText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 1, flexShrink: 1, textAlign: 'center' },
 
   completedBanner: { alignItems: 'center', paddingTop: 24, gap: 8 },
   completedBannerText: { fontSize: 14, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
