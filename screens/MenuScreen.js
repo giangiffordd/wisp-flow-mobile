@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import { Boxes, History, ChevronRight, Cpu } from 'lucide-react-native';
+import { History, ChevronRight, Cpu } from 'lucide-react-native';
 import { COLORS, SHADOW_SM } from '../theme';
 
 const { width } = Dimensions.get('window');
@@ -15,18 +15,6 @@ const cardWidth = (width - 48) / 2;
 
 export default function MenuScreen({ navigation }) {
   const menuItems = [
-    {
-      id: 'inventory',
-      title: 'Inventory Viewer',
-      subtitle: 'Warehouse Stock',
-      screen: 'MobileInventoryViewer',
-      icon: Boxes,
-      iconBg: '#EFF6FF',
-      iconColor: COLORS.primary,
-      badge: 'Realtime',
-      badgeBg: '#EFF6FF',
-      badgeColor: COLORS.primary,
-    },
     {
       id: 'history',
       title: 'Task History',
