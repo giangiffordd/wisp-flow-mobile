@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
 import { supabase } from '../src/services/supabaseService';
 import { getWorkerSession } from '../src/services/workerSession';
-import { checkHealth, predictImage } from '../src/services/yoloApiService';
+import { checkHealth, predictImage, WISP_API_KEY } from '../src/services/yoloApiService';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import ApiSettingsModal from '../components/ApiSettingsModal';
 
@@ -827,7 +827,7 @@ export default function YoloCameraModule({ navigation, route }) {
         if (apiHost) {
           await fetch(`http://${apiHost}/save_scan`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': WISP_API_KEY },
             body: JSON.stringify(payload)
           });
         }

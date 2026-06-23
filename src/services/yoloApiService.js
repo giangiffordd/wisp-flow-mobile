@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const API_URL_KEY = 'yolo_api_url';
 const DEFAULT_API_URL = 'http://139.59.117.202:8000';
 const REQUEST_TIMEOUT = 12000;
+export const WISP_API_KEY = 'wf-G9YTobnU300n3EyGVY_KFjfwGCm4iMbJ';
 
 /**
  * @function getApiUrl
@@ -81,7 +82,7 @@ export async function predictImage(imageUri) {
     const response = await fetch(`${baseUrl}/predict`, {
       method: 'POST',
       body: formData,
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': 'multipart/form-data', 'X-API-Key': WISP_API_KEY },
       signal: controller.signal,
     });
     clearTimeout(timeout);
