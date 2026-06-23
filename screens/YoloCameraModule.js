@@ -456,9 +456,13 @@ export default function YoloCameraModule({ navigation, route }) {
       }
 
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
+        // skipProcessing bypasses the phone's normal photo pipeline --
+        // sharpening, noise reduction, multi-frame fusion, AND orientation
+        // correction. That's exactly why this camera path looked blurrier
+        // and "different" than the native camera app and test.py's clean
+        // captures. Let the OS process the photo normally.
+        quality: 0.9,
         base64: false,
-        skipProcessing: true,
       });
       setCapturedPhotoUri(photo.uri);
 
@@ -1065,6 +1069,15 @@ export default function YoloCameraModule({ navigation, route }) {
                 ref={cameraRef}
                 style={StyleSheet.absoluteFillObject}
                 facing="back"
+                // expo-camera's naming is inverted from what it looks like:
+                // "off" = continuously autofocus as needed (what we want for
+                // close-up specimens at varying distances). "on" = focus
+                // once then LOCK -- if that locked on something far away
+                // when the screen first opened, every later close-up shot
+                // would be stuck out-of-focus, matching the "farsighted"
+                // symptom. Explicit here so it can't silently regress.
+                autofocus="off"
+                zoom={0}
               />
             )}
 
