@@ -1,48 +1,39 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 // ===== AI GENERATED: yoloApiService =====
 // Purpose: Wraps all HTTP communication with the WISP-FLOW FastAPI backend
 // Inputs: image URI, API URL string
 // Returns: prediction result object or null on failure
 // Flow:
-// 1. getApiUrl resolves base URL from AsyncStorage (falls back to default)
+// 1. getApiUrl always returns the production droplet -- no AsyncStorage
+//    override, so a stale "point at my laptop" setting from local testing
+//    can never silently redirect a real build away from the live server.
 // 2. predictImage builds multipart form and POSTs to /predict
 // 3. checkHealth GETs / to verify server + model readiness
 
-const API_URL_KEY = 'yolo_api_url';
 const DEFAULT_API_URL = 'http://139.59.117.202:8000';
 const REQUEST_TIMEOUT = 12000;
 export const WISP_API_KEY = 'wf-G9YTobnU300n3EyGVY_KFjfwGCm4iMbJ';
 
 /**
  * @function getApiUrl
- * @description Get the currently configured YOLO API base URL.
+ * @description The YOLO API base URL. Hardcoded to the production droplet --
+ * intentionally not configurable at runtime.
  * @returns {Promise<string>}
  */
 export async function getApiUrl() {
-  try {
-    const savedUrl = await AsyncStorage.getItem(API_URL_KEY);
-    return savedUrl || DEFAULT_API_URL;
-  } catch {
-    return DEFAULT_API_URL;
-  }
+  return DEFAULT_API_URL;
 }
 
 /**
  * @function setApiUrl
- * @description Persist a new API base URL to AsyncStorage.
- * @param {string} url
- * @returns {Promise<string>} Normalized URL
+ * @description No-op: the API URL is hardcoded to the production droplet
+ * and can't be changed at runtime. Kept (rather than deleted) so
+ * ApiSettingsModal doesn't need a separate code path -- it just always
+ * shows/tests the real production URL now.
+ * @param {string} _url
+ * @returns {Promise<string>} The hardcoded production URL
  */
-export async function setApiUrl(url) {
-  try {
-    const normalizedUrl = url.replace(/\/+$/, '');
-    await AsyncStorage.setItem(API_URL_KEY, normalizedUrl);
-    return normalizedUrl;
-  } catch (saveError) {
-    console.warn('Failed to save API URL:', saveError);
-    return url;
-  }
+export async function setApiUrl(_url) {
+  return DEFAULT_API_URL;
 }
 
 /**
