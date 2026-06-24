@@ -59,6 +59,51 @@ const STAGES = [
 
 const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+// "{quantity} x {species}" -> { quantity, speciesDisplay }, or null if the
+// entry is a free-text note rather than a structured specimen-count log.
+const parseLogText = (text) => {
+  const match = /^(\d+)\s*×\s*(.+)$/.exec(text || '');
+  if (!match) return null;
+  return { quantity: parseInt(match[1], 10), speciesDisplay: match[2].trim() };
+};
+
+// Small edit-distance helper for "did you mean" suggestions when a species
+// search comes up empty (e.g. a typo like "papilioo ulysses").
+function levenshteinDistance(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+function findClosestSpecies(query, species) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  let best = null;
+  let bestDist = Infinity;
+  for (const s of species) {
+    for (const candidate of [s.species, s.commonName]) {
+      if (!candidate) continue;
+      const c = candidate.toLowerCase();
+      const dist = levenshteinDistance(q, c);
+      const threshold = Math.max(2, Math.floor(c.length * 0.35));
+      if (dist <= threshold && dist < bestDist) {
+        bestDist = dist;
+        best = s;
+      }
+    }
+  }
+  return best;
+}
+
 export default function ProductionStagesScreen({ navigation }) {
   const insets   = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -88,15 +133,26 @@ export default function ProductionStagesScreen({ navigation }) {
   const [logNote,        setLogNote]        = useState('');
   const [isLoggingStage, setIsLoggingStage] = useState(false);
 
-  // Species picker sub-modal, opened from a specific log row
-  const [speciesPickerRowKey, setSpeciesPickerRowKey] = useState(null);
+  // Species picker sub-modal -- shared by the ADD LOG rows and by editing an
+  // existing entry, so neither path can ever save a species that isn't
+  // actually in the catalog. speciesPickerTarget is either
+  // { mode: 'row', key } (a logRows row) or { mode: 'editing' } (the entry
+  // currently being edited).
+  const [speciesPickerTarget, setSpeciesPickerTarget] = useState(null);
   const [speciesPickerSearch, setSpeciesPickerSearch] = useState('');
 
   // Edit/remove entries for a stage -- replaces the old sequential
   // "STAGE DONE" advance button now that all stages are always open.
-  const [editStage,      setEditStage]      = useState(null);
-  const [editingEntryId, setEditingEntryId] = useState(null);
-  const [editingText,    setEditingText]    = useState('');
+  // Structured entries (quantity + species) edit with the same stepper +
+  // species-picker as ADD LOG, parsed back out of the saved "{qty} x
+  // {species}" text; free-text notes still edit as plain text.
+  const [editStage,        setEditStage]        = useState(null);
+  const [editingEntryId,   setEditingEntryId]   = useState(null);
+  const [editingIsStructured, setEditingIsStructured] = useState(false);
+  const [editingQuantity,  setEditingQuantity]  = useState(0);
+  const [editingSpecies,   setEditingSpecies]   = useState(null);
+  const [editingSpeciesDisplay, setEditingSpeciesDisplay] = useState(null);
+  const [editingText,      setEditingText]      = useState('');
 
   const loadBatches = useCallback(async () => {
     const data = await getProductionBatches();
@@ -201,17 +257,28 @@ export default function ProductionStagesScreen({ navigation }) {
   };
 
   const openSpeciesPickerForRow = (key) => {
-    setSpeciesPickerRowKey(key);
+    setSpeciesPickerTarget({ mode: 'row', key });
     setSpeciesPickerSearch('');
   };
 
-  const selectSpeciesForRow = (sp) => {
-    setLogRows(prev => prev.map(r =>
-      r.key === speciesPickerRowKey
-        ? { ...r, species: sp.species, speciesDisplay: sp.commonName || sp.species }
-        : r
-    ));
-    setSpeciesPickerRowKey(null);
+  const openSpeciesPickerForEditing = () => {
+    setSpeciesPickerTarget({ mode: 'editing' });
+    setSpeciesPickerSearch('');
+  };
+
+  // Single handler for both contexts -- the only way species ever gets set
+  // is by picking an actual catalog entry here, never by typing free text.
+  const selectSpeciesForPicker = (sp) => {
+    if (speciesPickerTarget?.mode === 'row') {
+      const key = speciesPickerTarget.key;
+      setLogRows(prev => prev.map(r =>
+        r.key === key ? { ...r, species: sp.species, speciesDisplay: sp.commonName || sp.species } : r
+      ));
+    } else if (speciesPickerTarget?.mode === 'editing') {
+      setEditingSpecies(sp.species);
+      setEditingSpeciesDisplay(sp.commonName || sp.species);
+    }
+    setSpeciesPickerTarget(null);
     setSpeciesPickerSearch('');
   };
 
@@ -280,18 +347,62 @@ export default function ProductionStagesScreen({ navigation }) {
 
   // ── Edit/remove a stage's logged entries ──
   const openEditModal = (stage) => setEditStage(stage);
-  const closeEditModal = () => { setEditStage(null); setEditingEntryId(null); setEditingText(''); };
+  const closeEditModal = () => {
+    setEditStage(null);
+    setEditingEntryId(null);
+    setEditingText('');
+    setEditingSpecies(null);
+    setEditingSpeciesDisplay(null);
+  };
 
-  const startEditEntry = (entry) => { setEditingEntryId(entry.id); setEditingText(entry.log_text); };
-  const cancelEditEntry = () => { setEditingEntryId(null); setEditingText(''); };
+  // Structured "{qty} x {species}" entries edit with the same stepper +
+  // species-picker as ADD LOG (parsed back out of the saved text); a plain
+  // free-text note still edits as free text, since that's what it is.
+  const startEditEntry = (entry) => {
+    setEditingEntryId(entry.id);
+    const parsed = parseLogText(entry.log_text);
+    if (parsed) {
+      setEditingIsStructured(true);
+      setEditingQuantity(parsed.quantity);
+      setEditingSpecies(null);
+      setEditingSpeciesDisplay(parsed.speciesDisplay);
+    } else {
+      setEditingIsStructured(false);
+      setEditingText(entry.log_text);
+    }
+  };
+
+  const cancelEditEntry = () => {
+    setEditingEntryId(null);
+    setEditingText('');
+    setEditingSpecies(null);
+    setEditingSpeciesDisplay(null);
+  };
+
+  const adjustEditingQty = (delta) => setEditingQuantity(q => Math.max(0, q + delta));
+  const setEditingQtyDirect = (text) => {
+    const n = parseInt(text, 10);
+    setEditingQuantity(Number.isNaN(n) ? 0 : Math.max(0, n));
+  };
 
   const saveEditEntry = async () => {
-    const text = editingText.trim();
-    if (!text) return;
-    const ok = await updateStageLog(editingEntryId, text);
+    let newText;
+    if (editingIsStructured) {
+      if (editingQuantity <= 0 || !editingSpeciesDisplay) {
+        Alert.alert('Required', 'Enter a quantity and choose a species.');
+        return;
+      }
+      newText = `${editingQuantity} × ${editingSpeciesDisplay}`;
+    } else {
+      newText = editingText.trim();
+      if (!newText) return;
+    }
+    const ok = await updateStageLog(editingEntryId, newText);
     if (!ok) { Alert.alert('Error', 'Could not save changes. Check your connection.'); return; }
     setEditingEntryId(null);
     setEditingText('');
+    setEditingSpecies(null);
+    setEditingSpeciesDisplay(null);
     await loadLogsForBatch(selectedBatch);
   };
 
@@ -610,8 +721,11 @@ export default function ProductionStagesScreen({ navigation }) {
         </View>
       </Modal>
 
-      {/* Species picker sub-modal — opened from a log row */}
-      <Modal visible={speciesPickerRowKey !== null} transparent animationType="fade">
+      {/* Species picker sub-modal — shared by ADD LOG rows and entry editing.
+          Selecting from this list is the ONLY way a row's species gets set,
+          so a typed species can never be saved unless it's an actual catalog
+          match. */}
+      <Modal visible={speciesPickerTarget !== null} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxHeight: '75%' }]}>
             <View style={styles.modalHeader}>
@@ -628,30 +742,55 @@ export default function ProductionStagesScreen({ navigation }) {
               />
             </View>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-              {allSpecies
-                .filter(s => {
-                  const q = speciesPickerSearch.trim().toLowerCase();
-                  return !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q);
-                })
-                .map((s, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={styles.suggestionItem}
-                    onPress={() => selectSpeciesForRow(s)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.suggestionCommon}>{s.commonName}</Text>
-                    <Text style={styles.suggestionScientific}>{s.species}</Text>
-                  </TouchableOpacity>
-                ))}
-              {allSpecies.length === 0 && (
-                <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
-                  {speciesLoading ? 'Loading species…' : 'No species available.'}
-                </Text>
-              )}
+              {(() => {
+                const q = speciesPickerSearch.trim().toLowerCase();
+                const filtered = allSpecies.filter(s =>
+                  !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q)
+                );
+
+                if (filtered.length > 0) {
+                  return filtered.map((s, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.suggestionItem}
+                      onPress={() => selectSpeciesForPicker(s)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.suggestionCommon}>{s.commonName}</Text>
+                      <Text style={styles.suggestionScientific}>{s.species}</Text>
+                    </TouchableOpacity>
+                  ));
+                }
+
+                if (allSpecies.length === 0) {
+                  return (
+                    <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
+                      {speciesLoading ? 'Loading species…' : 'No species available.'}
+                    </Text>
+                  );
+                }
+
+                // No exact/substring match -- offer the closest catalog
+                // entry instead of just showing an empty list.
+                const closest = findClosestSpecies(speciesPickerSearch, allSpecies);
+                return (
+                  <View style={{ padding: 16, gap: 10 }}>
+                    <Text style={{ color: B.textMuted, fontSize: 12 }}>
+                      No matches for "{speciesPickerSearch.trim()}".
+                    </Text>
+                    {closest && (
+                      <TouchableOpacity onPress={() => selectSpeciesForPicker(closest)} activeOpacity={0.7}>
+                        <Text style={{ fontSize: 13, color: B.textMuted }}>
+                          Did you mean <Text style={styles.didYouMeanLink}>{closest.commonName} ({closest.species})</Text>?
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })()}
             </ScrollView>
             <View style={{ padding: 16 }}>
-              <TouchableOpacity style={styles.btnSecondary} onPress={() => setSpeciesPickerRowKey(null)}>
+              <TouchableOpacity style={styles.btnSecondary} onPress={() => setSpeciesPickerTarget(null)}>
                 <Text style={styles.btnSecondaryText}>CANCEL</Text>
               </TouchableOpacity>
             </View>
@@ -675,13 +814,41 @@ export default function ProductionStagesScreen({ navigation }) {
                 <View key={entry.id} style={styles.editEntryRow}>
                   {editingEntryId === entry.id ? (
                     <>
-                      <TextInput
-                        style={[styles.input, styles.inputMultiline]}
-                        value={editingText}
-                        onChangeText={setEditingText}
-                        multiline
-                        autoFocus
-                      />
+                      {editingIsStructured ? (
+                        <View style={styles.logRow}>
+                          <View style={styles.stepperGroup}>
+                            <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustEditingQty(-1)} activeOpacity={0.7}>
+                              <Text style={styles.stepperBtnText}>−</Text>
+                            </TouchableOpacity>
+                            <TextInput
+                              style={styles.stepperInput}
+                              value={String(editingQuantity)}
+                              onChangeText={setEditingQtyDirect}
+                              keyboardType="number-pad"
+                            />
+                            <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustEditingQty(1)} activeOpacity={0.7}>
+                              <Text style={styles.stepperBtnText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <TouchableOpacity
+                            style={[styles.speciesPickerBtn, editingSpeciesDisplay && styles.speciesPickerBtnFilled]}
+                            onPress={openSpeciesPickerForEditing}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.speciesPickerBtnText, editingSpeciesDisplay && styles.speciesPickerBtnTextFilled]} numberOfLines={1}>
+                              {editingSpeciesDisplay || 'Choose species…'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TextInput
+                          style={[styles.input, styles.inputMultiline]}
+                          value={editingText}
+                          onChangeText={setEditingText}
+                          multiline
+                          autoFocus
+                        />
+                      )}
                       <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                         <TouchableOpacity style={styles.btnSecondary} onPress={cancelEditEntry}>
                           <Text style={styles.btnSecondaryText}>CANCEL</Text>
@@ -1205,4 +1372,5 @@ const styles = StyleSheet.create({
   suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
   suggestionCommon:     { fontSize: 13, fontWeight: '700', color: B.textPri },
   suggestionScientific: { fontSize: 11, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
+  didYouMeanLink:       { color: B.accent, fontWeight: '700' },
 });
