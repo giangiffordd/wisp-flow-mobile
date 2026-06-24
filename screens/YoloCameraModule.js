@@ -939,7 +939,7 @@ export default function YoloCameraModule({ navigation, route }) {
           </>
         ) : (
           <View style={StyleSheet.absoluteFillObject}>
-            <View style={styles.cameraOverlay}>
+            <View style={styles.cameraOverlayTop}>
               <View style={styles.glassBadge}>
                 <Text style={[styles.glassBadgeText, { color: '#fb7185' }]}>SIMULATION MODE</Text>
               </View>
@@ -1007,40 +1007,44 @@ export default function YoloCameraModule({ navigation, route }) {
             </Animated.View>
           ))}
 
-          <Animated.View style={{ transform: [{ scale: pulseAnim }], alignItems: 'center', zIndex: 10 }}>
-            {!isScanning && (
-              <Camera size={52} color={SKY} style={{ marginBottom: 10 }} />
-            )}
-            <Text style={[styles.cameraText, isScanning && styles.cameraTextActive]}>
-              {isLoading
-                ? (apiStatus === 'connected' ? 'Analyzing frame with best.pt model...' : 'Running WISP-FLOW simulation...')
-                : isScanning
-                  ? scanError
-                    ? scanError
-                    : pendingScans.length > 0
-                      ? `${pendingScans.length} kept — ready for next capture`
-                      : 'Ready — press Capture'
-                  : apiStatus === 'offline'
-                    ? 'AI server unreachable. Contact your supervisor.'
-                    : permission?.granted
-                      ? 'AI Model connected. Press Start Scan.'
-                      : 'Camera permission required to scan.'}
-            </Text>
-            {!permission?.granted && !isScanning && (
-              <TouchableOpacity onPress={requestPermission} style={{ marginTop: 8 }} activeOpacity={0.7}>
-                <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
-                  Enable Camera Access
+          {!pendingReview && (
+            apiStatus === 'offline' && !isScanning ? (
+              <View style={styles.offlineCard}>
+                <WifiOff size={30} color="#ef4444" style={{ marginBottom: 10 }} />
+                <Text style={styles.offlineCardTitle}>AI SERVER UNREACHABLE</Text>
+                <Text style={styles.offlineCardSub}>Check your connection, or contact your supervisor.</Text>
+                <TouchableOpacity onPress={checkApiConnection} style={styles.offlineCardBtn} activeOpacity={0.8}>
+                  <Text style={styles.offlineCardBtnText}>RETRY CONNECTION</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Animated.View style={{ transform: [{ scale: pulseAnim }], alignItems: 'center', zIndex: 10 }}>
+                {!isScanning && (
+                  <Camera size={52} color={SKY} style={{ marginBottom: 10 }} />
+                )}
+                <Text style={[styles.cameraText, isScanning && styles.cameraTextActive]}>
+                  {isLoading
+                    ? (apiStatus === 'connected' ? 'Analyzing frame with best.pt model...' : 'Running WISP-FLOW simulation...')
+                    : isScanning
+                      ? scanError
+                        ? scanError
+                        : pendingScans.length > 0
+                          ? `${pendingScans.length} kept — ready for next capture`
+                          : 'Ready — press Capture'
+                      : permission?.granted
+                        ? 'Press Start Scan.'
+                        : 'Camera permission required to scan.'}
                 </Text>
-              </TouchableOpacity>
-            )}
-            {apiStatus === 'offline' && !isScanning && (
-              <TouchableOpacity onPress={checkApiConnection} style={{ marginTop: 8 }} activeOpacity={0.7}>
-                <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
-                  Retry Connection
-                </Text>
-              </TouchableOpacity>
-            )}
-          </Animated.View>
+                {!permission?.granted && !isScanning && (
+                  <TouchableOpacity onPress={requestPermission} style={{ marginTop: 8 }} activeOpacity={0.7}>
+                    <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
+                      Enable Camera Access
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </Animated.View>
+            )
+          )}
 
 
           {/* Scanning sweep laser */}
@@ -1049,7 +1053,9 @@ export default function YoloCameraModule({ navigation, route }) {
           )}
         </View>
 
-        {/* Controls */}
+        {/* Controls -- hidden during review so nothing floats over the frozen
+            frame; the review panel's Retake/Keep are the only actions then. */}
+        {!pendingReview && (
         <View style={styles.cameraControls}>
           {!isScanning ? (
             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1091,6 +1097,7 @@ export default function YoloCameraModule({ navigation, route }) {
             </View>
           )}
         </View>
+        )}
       </View>
 
       {/* ── Results Panel ── */}
@@ -1145,6 +1152,11 @@ export default function YoloCameraModule({ navigation, route }) {
                   )}
                 </View>
 
+                {pendingScans.length > 0 && (
+                  <Text style={{ color: '#6B7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>
+                    {pendingScans.length} kept this session
+                  </Text>
+                )}
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity
                     style={[{ flex: 1, paddingVertical: 13, borderRadius: 0, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }, (revSpecimens.length === 0 || hasFlagged) && { flex: 1 }]}
@@ -1282,7 +1294,7 @@ export default function YoloCameraModule({ navigation, route }) {
 
         {/* ── Pending Scans: kept captures awaiting Confirm. Nothing here
             has been saved to Supabase/the stage log yet. ── */}
-        {pendingScans.length > 0 && (
+        {!pendingReview && pendingScans.length > 0 && (
           <View style={styles.sessionLogContainer}>
 
             <View style={styles.sessionLogHeader}>
@@ -1401,9 +1413,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#111827',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
-    letterSpacing: 2,
+    letterSpacing: 1,
+    paddingLeft: 1,
+    textAlign: 'center',
+    includeFontPadding: false,
     textTransform: 'uppercase',
   },
   headerSub: {
@@ -1412,6 +1427,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
     letterSpacing: 0.5,
+    paddingLeft: 0.5,
+    textAlign: 'center',
+    includeFontPadding: false,
     textTransform: 'uppercase',
   },
   headerRight: {
@@ -1581,6 +1599,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
+    includeFontPadding: false,
   },
 
   // ── Results ──
@@ -1892,11 +1911,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
+  offlineCard: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(8,11,15,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.5)',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    marginHorizontal: 24,
+    maxWidth: 320,
+    zIndex: 10,
+  },
+  offlineCardTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  offlineCardSub: {
+    color: '#cbd5e1',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 17,
+  },
+  offlineCardBtn: {
+    marginTop: 14,
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  offlineCardBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    includeFontPadding: false,
+  },
   glassBadgeText: {
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
+    includeFontPadding: false,
   },
 
   // ── Specimen Detected Banner ──
