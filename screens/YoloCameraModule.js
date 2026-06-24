@@ -840,9 +840,9 @@ export default function YoloCameraModule({ navigation, route }) {
       <Modal visible={!!pendingReview} transparent animationType="slide">
         <View style={{ flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
           <ScrollView
-            style={{ maxHeight: '55%' }}
+            style={{ maxHeight: '28%' }}
             contentContainerStyle={{
-              backgroundColor: '#FFFFFF', padding: 20, borderTopWidth: 1, borderColor: '#E5E7EB',
+              backgroundColor: '#FFFFFF', padding: 14, borderTopWidth: 1, borderColor: '#E5E7EB',
               shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 12,
             }}
           >
@@ -852,14 +852,15 @@ export default function YoloCameraModule({ navigation, route }) {
               if (revSpecimens.length === 0) {
                 return (
                   <>
-                    <AlertCircle color="#f59e0b" size={36} style={{ alignSelf: 'center', marginBottom: 12 }} />
-                    <Text style={{ color: '#111827', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase' }}>No Specimen Detected</Text>
-                    <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Aim at the specimen and retake.</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                      <AlertCircle color="#f59e0b" size={20} />
+                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
+                    </View>
                     <TouchableOpacity
-                      style={{ width: '100%', paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
+                      style={{ width: '100%', paddingVertical: 12, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
                       onPress={handleRetake}
                     >
-                      <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Retake</Text>
+                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Retake</Text>
                     </TouchableOpacity>
                   </>
                 );
@@ -871,51 +872,49 @@ export default function YoloCameraModule({ navigation, route }) {
 
               return (
                 <>
-                  <Text style={{ color: '#111827', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 2, textTransform: 'uppercase' }}>Scan Result</Text>
-                  <Text style={{ color: '#6B7280', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Detected {revSpecimens.length} {itemWording}</Text>
-
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 }}>
-                    <View style={{ alignItems: 'center' }}>
-                      <CheckCircle color="#10b981" size={32} style={{ marginBottom: 8 }} />
-                      <Text style={{ color: '#10b981', fontSize: 20, fontWeight: 'bold' }}>{passCount}</Text>
-                      <Text style={{ color: '#6B7280', fontSize: 12, fontWeight: '600' }}>PASS</Text>
-                    </View>
-                    <View style={{ width: 1, backgroundColor: '#E5E7EB' }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <AlertCircle color={flaggedItems.length > 0 ? "#ef4444" : "#4A6070"} size={32} style={{ marginBottom: 8 }} />
-                      <Text style={{ color: flaggedItems.length > 0 ? "#ef4444" : "#4A6070", fontSize: 20, fontWeight: 'bold' }}>{flaggedItems.length}</Text>
-                      <Text style={{ color: '#6B7280', fontSize: 12, fontWeight: '600' }}>FLAGGED</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      Detected {revSpecimens.length} {itemWording}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <CheckCircle color="#10b981" size={14} />
+                        <Text style={{ color: '#10b981', fontSize: 13, fontWeight: '700' }}>{passCount}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <AlertCircle color={flaggedItems.length > 0 ? "#ef4444" : "#4A6070"} size={14} />
+                        <Text style={{ color: flaggedItems.length > 0 ? "#ef4444" : "#4A6070", fontSize: 13, fontWeight: '700' }}>{flaggedItems.length}</Text>
+                      </View>
                     </View>
                   </View>
 
                   {flaggedItems.length > 0 && (
-                    <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
-                      <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '700', marginBottom: 8 }}>FLAGGED DETAILS:</Text>
+                    <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
                       {flaggedItems.map((f, idx) => {
                         const required = Object.keys(f.partsRequired || {});
                         const found = Object.keys(f.partsFound || {});
                         const missing = required.filter(p => !found.includes(p));
                         return (
-                          <Text key={idx} style={{ color: '#f8fafc', fontSize: 13, marginBottom: 4 }}>
-                            • <Text style={{ fontWeight: '600' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
+                          <Text key={idx} style={{ color: '#7f1d1d', fontSize: 12, marginBottom: 2 }}>
+                            • <Text style={{ fontWeight: '700' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
                           </Text>
                         );
                       })}
                     </View>
                   )}
 
-                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 14, borderRadius: 0, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 0, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}
                       onPress={handleRetake}
                     >
-                      <Text style={{ color: '#5B21D9', fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Retake</Text>
+                      <Text style={{ color: '#5B21D9', fontSize: 13, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Retake</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
+                      style={{ flex: 1, paddingVertical: 12, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
                       onPress={handleKeepScan}
                     >
-                      <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Keep</Text>
+                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Keep</Text>
                     </TouchableOpacity>
                   </View>
                 </>
