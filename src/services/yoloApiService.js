@@ -9,7 +9,14 @@
 // 2. predictImage builds multipart form and POSTs to /predict
 // 3. checkHealth GETs / to verify server + model readiness
 
-const DEFAULT_API_URL = 'http://139.59.117.202:8000';
+// HTTPS via a Caddy reverse proxy on the droplet (auto-issued Let's Encrypt
+// cert through the free nip.io wildcard DNS, no domain purchase needed).
+// Plain http://<ip>:8000 worked fine on iOS Expo Go, but Android's Expo Go
+// build enforces cleartext-HTTP blocking by default and that can't be
+// overridden from this app's config -- Expo Go is a pre-built Play Store
+// binary, not something compiled from app.json. HTTPS is the only fix that
+// doesn't require giving up Expo Go for Android testing.
+const DEFAULT_API_URL = 'https://139-59-117-202.nip.io';
 const REQUEST_TIMEOUT = 12000;
 export const WISP_API_KEY = 'wf-G9YTobnU300n3EyGVY_KFjfwGCm4iMbJ';
 
