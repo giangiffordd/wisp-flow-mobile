@@ -249,7 +249,13 @@ export default function ProductionStagesScreen({ navigation }) {
   useEffect(() => {
     setSpeciesLoading(true);
     fetchProductsCatalog()
-      .then(data => { setAllSpecies(data || []); })
+      .then(data => {
+        // Sort by common name (what the picker actually displays as the
+        // bold/primary line) -- the backend orders by genus instead,
+        // which isn't the alphabetical order a worker sees on screen.
+        const sorted = [...(data || [])].sort((a, b) => a.commonName.localeCompare(b.commonName));
+        setAllSpecies(sorted);
+      })
       .catch(() => {})
       .finally(() => setSpeciesLoading(false));
   }, []);
