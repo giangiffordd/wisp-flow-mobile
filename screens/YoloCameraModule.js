@@ -120,6 +120,20 @@ function applyQaRouting(speciesName, foundParts) {
   return { status: isPass ? 'PASS' : 'FLAGGED', required: rules };
 }
 
+// A specimen is flagged on an EXACT count mismatch (applyQaRouting above),
+// not just an absent part type -- e.g. 3 wings found when 4 are required
+// still flags it, even though "wing" is technically present in partsFound.
+// Reporting only outright-absent part types left this case showing
+// "Missing unknown" with no actionable info. This reports every
+// mismatched part with its found/required count so the artisan knows
+// exactly what to fix.
+function describeMissingParts(partsRequired, partsFound) {
+  const found = partsFound || {};
+  return Object.entries(partsRequired || {})
+    .filter(([part, reqCount]) => (found[part] || 0) !== reqCount)
+    .map(([part, reqCount]) => `${part} (${found[part] || 0}/${reqCount})`);
+}
+
 // ── Simulation Engine ────────────────────────────────────────────────────────
 
 function generateSimulatedPartBox(parentBox, partType, index, totalOfType) {
@@ -695,9 +709,7 @@ export default function YoloCameraModule({ navigation, route }) {
             }
           }
         } else {
-          const required = Object.keys(spec.partsRequired || {});
-          const found = Object.keys(spec.partsFound || {});
-          const missing = required.filter(p => !found.includes(p));
+          const missing = describeMissingParts(spec.partsRequired, spec.partsFound);
 
           await supabase
             .from('defects')
@@ -1116,9 +1128,7 @@ export default function YoloCameraModule({ navigation, route }) {
                       <ScrollView style={{ maxHeight: 110 }} nestedScrollEnabled>
                         <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
                           {flaggedItems.map((f, idx) => {
-                            const required = Object.keys(f.partsRequired || {});
-                            const found = Object.keys(f.partsFound || {});
-                            const missing = required.filter(p => !found.includes(p));
+                            const missing = describeMissingParts(f.partsRequired, f.partsFound);
                             return (
                               <Text key={idx} style={{ color: '#7f1d1d', fontSize: 13, marginBottom: 3 }}>
                                 • <Text style={{ fontWeight: '700' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
