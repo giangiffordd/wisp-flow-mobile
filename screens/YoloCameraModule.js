@@ -831,12 +831,21 @@ export default function YoloCameraModule({ navigation, route }) {
         </View>
       )}
 
-      {/* ── Scan Review Modal: Retake discards this capture, Keep adds it
+      {/* ── Scan Review Sheet: Retake discards this capture, Keep adds it
           to the pending session list below. Nothing is saved yet either
-          way -- only Confirm actually writes anything. ── */}
-      <Modal visible={!!pendingReview} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(8,11,15,0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 0, padding: 24, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
+          way -- only Confirm actually writes anything. Anchored to the
+          bottom with no backdrop dimming so the annotated camera frame
+          with bounding boxes stays fully visible above it -- a centered
+          modal with a dark backdrop was blocking the actual scan result. ── */}
+      <Modal visible={!!pendingReview} transparent animationType="slide">
+        <View style={{ flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
+          <ScrollView
+            style={{ maxHeight: '55%' }}
+            contentContainerStyle={{
+              backgroundColor: '#FFFFFF', padding: 20, borderTopWidth: 1, borderColor: '#E5E7EB',
+              shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 12,
+            }}
+          >
             {pendingReview && (() => {
               const revSpecimens = pendingReview.specimens;
 
@@ -847,7 +856,7 @@ export default function YoloCameraModule({ navigation, route }) {
                     <Text style={{ color: '#111827', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase' }}>No Specimen Detected</Text>
                     <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Aim at the specimen and retake.</Text>
                     <TouchableOpacity
-                      style={{ paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
+                      style={{ width: '100%', paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
                       onPress={handleRetake}
                     >
                       <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Retake</Text>
@@ -912,7 +921,7 @@ export default function YoloCameraModule({ navigation, route }) {
                 </>
               );
             })()}
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
