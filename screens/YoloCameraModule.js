@@ -516,8 +516,18 @@ export default function YoloCameraModule({ navigation, route }) {
 
       throw new Error('API returned no data');
     } catch (err) {
-      console.warn('Real scan failed, falling back to simulation:', err.message);
-      await doSimulatedScan();
+      // Never fabricate a result. A failed real scan now shows an honest
+      // error and an empty review (Retake only). The old behavior fell back
+      // to doSimulatedScan(), which invented a RANDOM specimen that was
+      // "clearly not there" and could even be written to real inventory if
+      // the worker Kept + Confirmed it. A QA tool must never invent a
+      // detection the AI did not actually make.
+      console.warn('Real scan failed:', err.message);
+      setScanError('Scan failed — check your connection and retake.');
+      setSpecimens([]);
+      setRawParts([]);
+      setSource('api');
+      setPendingReview({ specimens: [], base64Image: null });
     } finally {
       setIsLoading(false);
     }
@@ -556,9 +566,14 @@ export default function YoloCameraModule({ navigation, route }) {
     if (apiStatus === 'connected' && permission?.granted) {
       await doRealScan();
     } else {
-      setIsLoading(true);
-      await doSimulatedScan();
-      setIsLoading(false);
+      // No fabricated fallback. If the AI is unreachable or we lack camera
+      // permission, say so honestly instead of inventing a specimen.
+      setScanError(
+        !permission?.granted
+          ? 'Camera permission required to scan.'
+          : 'AI server unreachable — reconnect and retake.'
+      );
+      setPendingReview({ specimens: [], base64Image: null });
     }
   };
 
@@ -1032,7 +1047,7 @@ export default function YoloCameraModule({ navigation, route }) {
                           ? `${pendingScans.length} kept — ready for next capture`
                           : 'Ready — press Capture'
                       : permission?.granted
-                        ? 'Press Start Scan.'
+                        ? ''
                         : 'Camera permission required to scan.'}
                 </Text>
                 {!permission?.granted && !isScanning && (
