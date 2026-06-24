@@ -248,6 +248,22 @@ export async function getProductionBatches() {
   }
 }
 
+export async function deleteProductionBatch(batchId) {
+  if (!supabase || !batchId) return false;
+  try {
+    // Best-effort cleanup of this batch's logged entries first -- there's
+    // no DB-level cascade configured, so leftover rows would otherwise
+    // reference a batch that no longer exists.
+    await supabase.from('stage_logs').delete().eq('batch_id', batchId);
+    const { error } = await supabase.from('production_batches').delete().eq('id', batchId);
+    if (error) { console.error('deleteProductionBatch error:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('deleteProductionBatch exception:', e);
+    return false;
+  }
+}
+
 export async function advanceBatchStage(batchId, newStage) {
   if (!supabase) return false;
   try {
