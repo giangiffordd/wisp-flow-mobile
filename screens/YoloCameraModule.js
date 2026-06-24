@@ -352,10 +352,21 @@ export default function YoloCameraModule({ navigation, route }) {
   });
 
   // ── Check API connection on mount and when settings close ──
+  // Retries a couple of times before giving up -- a single slow/transient
+  // network blip right as the screen mounts (common right after the phone's
+  // WiFi/data connection wakes up) shouldn't permanently show "unreachable"
+  // with no way to recover short of leaving and re-entering the screen.
   const checkApiConnection = useCallback(async () => {
     setApiStatus('checking');
-    const result = await checkHealth();
-    setApiStatus(result.reachable && result.modelLoaded ? 'connected' : 'offline');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = await checkHealth();
+      if (result.reachable && result.modelLoaded) {
+        setApiStatus('connected');
+        return;
+      }
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+    }
+    setApiStatus('offline');
   }, []);
 
   useEffect(() => {
@@ -1175,6 +1186,13 @@ export default function YoloCameraModule({ navigation, route }) {
               <TouchableOpacity onPress={requestPermission} style={{ marginTop: 8 }} activeOpacity={0.7}>
                 <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
                   Enable Camera Access
+                </Text>
+              </TouchableOpacity>
+            )}
+            {apiStatus === 'offline' && !isScanning && (
+              <TouchableOpacity onPress={checkApiConnection} style={{ marginTop: 8 }} activeOpacity={0.7}>
+                <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
+                  Retry Connection
                 </Text>
               </TouchableOpacity>
             )}
