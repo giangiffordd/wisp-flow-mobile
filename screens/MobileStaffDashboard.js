@@ -119,6 +119,7 @@ export default function MobileStaffDashboard({ navigation }) {
         // any other device already logged in as them will get logged out
         // next time its periodic check runs (see MainAppNavigator).
         session.sessionToken = await claimWorkerSession(session.id);
+        console.warn('[login] worker', session.id, 'claimed sessionToken:', session.sessionToken);
         await setWorkerSession(session);
         Notifications.getExpoPushTokenAsync()
           .then(t => { if (t?.data) savePushToken(session.id, t.data); })
@@ -127,13 +128,15 @@ export default function MobileStaffDashboard({ navigation }) {
       } else {
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
-        if (newAttempts >= 5) {
+        if (newAttempts >= 4) {
           const until = Date.now() + 30_000;
           setLockedUntil(until);
           setLoginAttempts(0);
           setErrors(prev => ({ ...prev, general: 'Too many failed attempts. Locked for 30 seconds.' }));
+        } else if (newAttempts === 3) {
+          setErrors(prev => ({ ...prev, general: 'Invalid credentials. One more failed attempt may temporarily lock your account.' }));
         } else {
-          setErrors(prev => ({ ...prev, general: `Invalid credentials. ${5 - newAttempts} attempt${5 - newAttempts !== 1 ? 's' : ''} remaining.` }));
+          setErrors(prev => ({ ...prev, general: 'Invalid credentials.' }));
         }
       }
     } catch {

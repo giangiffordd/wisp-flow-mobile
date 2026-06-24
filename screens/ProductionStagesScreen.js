@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
+  KeyboardAvoidingView, Keyboard, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,11 +55,12 @@ const STAGES = [
   { id: 8,  name: 'Framing',                  type: 'manual' },
   { id: 9,  name: 'Initial Quality Control',  type: 'scan'   },
   { id: 10, name: 'Finishing',                type: 'manual' },
-  // Stage 11 "Final Quality Control" moved to the manager dashboard --
-  // managers review the annotated images (with part bounding boxes) from
-  // Initial Quality Control there instead, which is faster than a second
-  // physical scan for checking specimen completeness. Stage 12 keeps its
-  // original id so existing logged data stays linked to the right stage.
+  // Final Quality Control moved to the manager dashboard -- the manager
+  // reviews the annotated images (with part bounding boxes) from Initial
+  // Quality Control there instead of a second physical scan, which is
+  // faster for checking specimen completeness. Shown here grayed out so
+  // workers know it still exists in the pipeline, just not in this app.
+  { id: 11, name: 'Final Quality Control',    type: 'scan', disabled: true },
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
@@ -112,6 +114,12 @@ function findClosestSpecies(query, species) {
 export default function ProductionStagesScreen({ navigation }) {
   const insets   = useSafeAreaInsets();
   const isFocused = useIsFocused();
+  // Date.now() can collide if two rows are added within the same
+  // millisecond (a fast double-tap on "+ ADD SPECIMEN TYPE"), which gave
+  // React two list items with the same key and broke updates to whichever
+  // row got the duplicate. A monotonic counter can't collide.
+  const nextRowKeyRef = useRef(1);
+  const nextRowKey = () => nextRowKeyRef.current++;
 
   const [batches,         setBatches]         = useState([]);
   const [selectedBatch,   setSelectedBatch]   = useState(null);
@@ -239,13 +247,13 @@ export default function ProductionStagesScreen({ navigation }) {
   // ── Add stage log ──
   const openLogModal = (stage) => {
     setLogStage(stage);
-    setLogRows([{ key: Date.now(), quantity: 0, species: null, speciesDisplay: null }]);
+    setLogRows([{ key: nextRowKey(), quantity: 0, species: null, speciesDisplay: null }]);
     setLogNote('');
     setShowLogModal(true);
   };
 
   const addLogRow = () => {
-    setLogRows(prev => [...prev, { key: Date.now(), quantity: 0, species: null, speciesDisplay: null }]);
+    setLogRows(prev => [...prev, { key: nextRowKey(), quantity: 0, species: null, speciesDisplay: null }]);
   };
 
   const removeLogRow = (key) => {
@@ -283,17 +291,28 @@ export default function ProductionStagesScreen({ navigation }) {
       setEditingSpecies(sp.species);
       setEditingSpeciesDisplay(sp.commonName || sp.species);
     }
+    Keyboard.dismiss();
     setSpeciesPickerTarget(null);
     setSpeciesPickerSearch('');
   };
 
   const handleSubmitLog = async () => {
-    const filledRows = logRows.filter(r => r.quantity > 0 && r.species);
-    const note = logNote.trim();
-    if (filledRows.length === 0 && !note) {
-      Alert.alert('Required', 'Log a specimen count with its species, or add a note.');
+    // Quantity + species are mandatory together -- a row with one but not
+    // the other was previously silently dropped instead of telling the
+    // user, which looked like "my entry didn't save."
+    const incompleteRow = logRows.find(r => (r.quantity > 0 && !r.species) || (r.quantity === 0 && r.species));
+    if (incompleteRow) {
+      Alert.alert('Incomplete Row', "Each specimen row needs both a quantity and a species. Remove the row with the − button if you don't need it.");
       return;
     }
+    const filledRows = logRows.filter(r => r.quantity > 0 && r.species);
+    if (filledRows.length === 0) {
+      // The note is optional ON TOP OF a specimen count -- it can never
+      // substitute for one.
+      Alert.alert('Required', 'Log at least one specimen count with its species. A note alone isn\'t enough.');
+      return;
+    }
+    const note = logNote.trim();
     setIsLoggingStage(true);
     for (const row of filledRows) {
       await addStageLog(selectedBatch.id, logStage.id, logStage.name, `${row.quantity} × ${row.speciesDisplay}`);
@@ -302,6 +321,7 @@ export default function ProductionStagesScreen({ navigation }) {
       await addStageLog(selectedBatch.id, logStage.id, logStage.name, note);
     }
     setIsLoggingStage(false);
+    Keyboard.dismiss();
     setShowLogModal(false);
     await loadLogsForBatch(selectedBatch);
   };
@@ -352,6 +372,7 @@ export default function ProductionStagesScreen({ navigation }) {
   // ── Edit/remove a stage's logged entries ──
   const openEditModal = (stage) => setEditStage(stage);
   const closeEditModal = () => {
+    Keyboard.dismiss();
     setEditStage(null);
     setEditingEntryId(null);
     setEditingText('');
@@ -377,6 +398,7 @@ export default function ProductionStagesScreen({ navigation }) {
   };
 
   const cancelEditEntry = () => {
+    Keyboard.dismiss();
     setEditingEntryId(null);
     setEditingText('');
     setEditingSpecies(null);
@@ -403,6 +425,7 @@ export default function ProductionStagesScreen({ navigation }) {
     }
     const ok = await updateStageLog(editingEntryId, newText);
     if (!ok) { Alert.alert('Error', 'Could not save changes. Check your connection.'); return; }
+    Keyboard.dismiss();
     setEditingEntryId(null);
     setEditingText('');
     setEditingSpecies(null);
@@ -546,6 +569,30 @@ export default function ProductionStagesScreen({ navigation }) {
           const isScan       = stage.type === 'scan';
           const isLast       = idx === STAGES.length - 1;
 
+          // Final Quality Control: shown so the pipeline still reads as 12
+          // stages, but greyed out and inert -- it's handled in the
+          // manager dashboard now, not tappable here at all.
+          if (stage.disabled) {
+            return (
+              <View key={stage.id} style={styles.stageRow}>
+                <View style={styles.timelineSide}>
+                  <View style={[styles.stageDot, styles.stageDotDisabled]}>
+                    <Text style={[styles.stageDotNum, styles.stageDotNumDisabled]}>{stage.id}</Text>
+                  </View>
+                  {!isLast && <View style={styles.timelineLine} />}
+                </View>
+                <View style={[styles.stageCard, styles.stageCardDisabled]}>
+                  <View style={styles.stageCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.stageName, styles.stageNameDisabled]}>{stage.name}</Text>
+                      <Text style={styles.disabledStageNote}>Handled in the Manager Dashboard</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            );
+          }
+
           return (
             <View key={stage.id} style={styles.stageRow}>
               {/* Timeline line + dot — every stage is always open, the dot
@@ -658,13 +705,16 @@ export default function ProductionStagesScreen({ navigation }) {
 
       {/* Log entry modal */}
       <Modal visible={showLogModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ STAGE {logStage?.id}: {logStage?.name?.toUpperCase()} ]</Text>
               <Text style={styles.modalSubtitle}>Log today's progress</Text>
             </View>
-            <ScrollView style={{ padding: 20 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ padding: 20 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               <Text style={styles.inputLabel}>[ SPECIMENS LOGGED ]</Text>
               {logRows.map((row) => (
                 <View key={row.key} style={styles.logRow}>
@@ -715,7 +765,7 @@ export default function ProductionStagesScreen({ navigation }) {
                 textAlignVertical="top"
               />
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.btnSecondary} onPress={() => setShowLogModal(false)}>
+                <TouchableOpacity style={styles.btnSecondary} onPress={() => { Keyboard.dismiss(); setShowLogModal(false); }}>
                   <Text style={styles.btnSecondaryText}>CANCEL</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.btnPrimary} onPress={handleSubmitLog} disabled={isLoggingStage}>
@@ -724,7 +774,7 @@ export default function ProductionStagesScreen({ navigation }) {
               </View>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Species picker sub-modal — shared by ADD LOG rows and entry editing.
@@ -732,7 +782,10 @@ export default function ProductionStagesScreen({ navigation }) {
           so a typed species can never be saved unless it's an actual catalog
           match. */}
       <Modal visible={speciesPickerTarget !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { maxHeight: '75%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ CHOOSE SPECIES ]</Text>
@@ -747,7 +800,7 @@ export default function ProductionStagesScreen({ navigation }) {
                 autoCorrect={false}
               />
             </View>
-            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {(() => {
                 const q = speciesPickerSearch.trim().toLowerCase();
                 const filtered = allSpecies.filter(s =>
@@ -796,22 +849,25 @@ export default function ProductionStagesScreen({ navigation }) {
               })()}
             </ScrollView>
             <View style={{ padding: 16 }}>
-              <TouchableOpacity style={styles.btnSecondary} onPress={() => setSpeciesPickerTarget(null)}>
+              <TouchableOpacity style={styles.btnSecondary} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
                 <Text style={styles.btnSecondaryText}>CANCEL</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit/remove entries for a stage */}
       <Modal visible={editStage !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ EDIT STAGE {editStage?.id}: {editStage?.name?.toUpperCase()} ]</Text>
             </View>
-            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {editStage && logsForStage(editStage.id).length === 0 ? (
                 <Text style={{ color: B.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: 20 }}>
                   No entries logged yet for this stage.
@@ -889,7 +945,7 @@ export default function ProductionStagesScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Scan log modal */}
@@ -905,7 +961,7 @@ export default function ProductionStagesScreen({ navigation }) {
               </Text>
             </View>
 
-            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16, rowGap: 8 }}>
+            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16, rowGap: 8 }} nestedScrollEnabled>
               {(stageScanLogs[scanLogModal] || []).length === 0 ? (
                 <View style={{ alignItems: 'center', paddingVertical: 24, gap: 8 }}>
                   <ScanLine size={28} color={B.textMuted} />
@@ -1054,7 +1110,9 @@ const styles = StyleSheet.create({
     backgroundColor: B.accent,
   },
   stageDotDone:   { backgroundColor: B.success },
+  stageDotDisabled: { backgroundColor: B.border },
   stageDotNum:    { fontSize: 11, fontWeight: '800', color: B.bg },
+  stageDotNumDisabled: { color: B.textMuted },
   timelineLine:   { width: 2, flex: 1, minHeight: 16, backgroundColor: B.border, marginTop: 2 },
   timelineLineDone: { backgroundColor: B.success },
 
@@ -1069,9 +1127,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   stageCardDone:  { borderColor: B.success, opacity: 0.85 },
+  stageCardDisabled: { opacity: 0.45 },
 
   stageCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, padding: 12, paddingLeft: 16, gap: 10 },
   stageName:      { fontSize: 13, fontWeight: '700', color: B.textPri },
+  stageNameDisabled: { color: B.textMuted },
+  disabledStageNote: { fontSize: 10, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
 
   scanTag:        { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   scanTagText:    { fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 1.5 },
