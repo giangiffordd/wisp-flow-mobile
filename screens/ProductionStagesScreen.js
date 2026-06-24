@@ -250,10 +250,16 @@ export default function ProductionStagesScreen({ navigation }) {
     setSpeciesLoading(true);
     fetchProductsCatalog()
       .then(data => {
+        // Some inventory rows have stray leading/trailing whitespace in
+        // their name (seen directly in Supabase: "  Fork-horned Stag
+        // Beetle"), which misaligns the rendered text AND sorts before
+        // every letter since whitespace < any character -- trim
+        // defensively so a future dirty row can't cause the same thing.
+        const cleaned = (data || []).map(s => ({ ...s, commonName: s.commonName.trim(), species: s.species.trim() }));
         // Sort by common name (what the picker actually displays as the
         // bold/primary line) -- the backend orders by genus instead,
         // which isn't the alphabetical order a worker sees on screen.
-        const sorted = [...(data || [])].sort((a, b) => a.commonName.localeCompare(b.commonName));
+        const sorted = cleaned.sort((a, b) => a.commonName.localeCompare(b.commonName));
         setAllSpecies(sorted);
       })
       .catch(() => {})
