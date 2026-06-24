@@ -966,6 +966,20 @@ export default function YoloCameraModule({ navigation, route }) {
           <View style={[styles.corner, styles.cornerBL]} />
           <View style={[styles.corner, styles.cornerBR]} />
 
+          {/* Top pill: ready-state prompt / kept count, kept OUT of the
+              center so it never covers the specimen being scanned. */}
+          {isScanning && !isLoading && !pendingReview && !scanError && (
+            <View style={styles.capturePillWrap} pointerEvents="none">
+              <View style={styles.glassBadge}>
+                <Text style={styles.glassBadgeText}>
+                  {pendingScans.length > 0
+                    ? `${pendingScans.length} KEPT · READY FOR NEXT`
+                    : 'READY · PRESS CAPTURE'}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Render local bounding boxes ONLY for simulation mode */}
           {source === 'simulation' && specimens.length > 0 && !isLoading && specimens.map((spec, idx) => (
             <Animated.View
@@ -1038,11 +1052,10 @@ export default function YoloCameraModule({ navigation, route }) {
                   {isLoading
                     ? (apiStatus === 'connected' ? 'Analyzing frame with best.pt model...' : 'Running WISP-FLOW simulation...')
                     : isScanning
-                      ? scanError
-                        ? scanError
-                        : pendingScans.length > 0
-                          ? `${pendingScans.length} kept — ready for next capture`
-                          : 'Ready — press Capture'
+                      // Ready-state prompt moved to a top pill (see capturePill
+                      // below) so it doesn't block the specimen in the center.
+                      // Only errors stay centered here.
+                      ? (scanError || '')
                       : permission?.granted
                         ? ''
                         : 'Camera permission required to scan.'}
@@ -1132,12 +1145,16 @@ export default function YoloCameraModule({ navigation, route }) {
             const hasFlagged = flaggedItems.length > 0;
 
             return (
-              <View style={{ flex: 1, justifyContent: 'space-between' }}>
-                <View>
+              <View style={{ flex: 1 }}>
+                {/* Content area fills the panel and centers short results
+                    (pass / no-specimen) so they don't sit at the top with a
+                    big empty gap below; flagged stays top-aligned to scroll. */}
+                <View style={{ flex: 1, justifyContent: hasFlagged ? 'flex-start' : 'center' }}>
                   {revSpecimens.length === 0 ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <AlertCircle color="#f59e0b" size={20} />
-                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
+                    <View style={{ alignItems: 'center', gap: 8 }}>
+                      <AlertCircle color="#f59e0b" size={34} />
+                      <Text style={{ color: '#111827', fontSize: 15, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
+                      <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center' }}>Aim at the specimen and retake.</Text>
                     </View>
                   ) : hasFlagged ? (
                     <>
@@ -1145,7 +1162,7 @@ export default function YoloCameraModule({ navigation, route }) {
                         <AlertCircle color="#ef4444" size={20} />
                         <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Flagged — Needs Fixing</Text>
                       </View>
-                      <ScrollView style={{ maxHeight: 110 }} nestedScrollEnabled>
+                      <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
                         <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
                           {flaggedItems.map((f, idx) => {
                             const missing = describeMissingParts(f.partsRequired, f.partsFound);
@@ -1159,11 +1176,28 @@ export default function YoloCameraModule({ navigation, route }) {
                       </ScrollView>
                     </>
                   ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <CheckCircle color="#10b981" size={20} />
-                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                        {revSpecimens.length} {revSpecimens.length === 1 ? 'Specimen' : 'Specimens'} Passed
-                      </Text>
+                    <View style={{ alignItems: 'center', gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <CheckCircle color="#10b981" size={26} />
+                        <Text style={{ color: '#10b981', fontSize: 16, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                          {revSpecimens.length} {revSpecimens.length === 1 ? 'Specimen' : 'Specimens'} Passed
+                        </Text>
+                      </View>
+                      {/* Show what was actually detected so the panel is
+                          informative, not just a lone checkmark. */}
+                      {revSpecimens.map((s, i) => (
+                        <View key={i} style={{ width: '100%', backgroundColor: 'rgba(16,185,129,0.06)', borderWidth: 1, borderColor: 'rgba(16,185,129,0.25)', padding: 12 }}>
+                          <Text style={{ fontSize: 15, fontWeight: '700', fontStyle: 'italic', color: '#111827', textAlign: 'center' }}>{s.species}</Text>
+                          {s.commonName && s.commonName !== s.species && (
+                            <Text style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 2 }}>{s.commonName}</Text>
+                          )}
+                          {s.partsFound && Object.keys(s.partsFound).length > 0 && (
+                            <Text style={{ fontSize: 12, color: '#10b981', fontWeight: '600', textAlign: 'center', marginTop: 6 }}>
+                              {Object.entries(s.partsFound).map(([k, v]) => `${v} ${k}`).join(' · ')}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
                     </View>
                   )}
                 </View>
@@ -1941,10 +1975,18 @@ const styles = StyleSheet.create({
   glassBadge: {
     backgroundColor: 'rgba(8, 11, 15, 0.7)',
     borderWidth: 1,
-    borderColor: 'rgba(200,216,228,0.25)',
+    borderColor: 'rgba(124,58,237,0.6)',
     borderRadius: 0,
     paddingHorizontal: 16,
     paddingVertical: 6,
+  },
+  capturePillWrap: {
+    position: 'absolute',
+    top: 34,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 15,
   },
   offlineCard: {
     alignItems: 'center',

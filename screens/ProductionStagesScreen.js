@@ -63,7 +63,16 @@ const STAGES = [
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
-const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+// Existing batches were named with the short month ("Jun 24, 2026"). Reformat
+// any date-named batch to the full month ("June 24, 2026") for display, while
+// leaving non-date names untouched.
+const displayBatchName = (name) => {
+  if (!name) return name;
+  const d = new Date(name);
+  return isNaN(d.getTime()) ? name : formatBatchDate(d);
+};
 
 // RN's built-in Modal animationType="fade" runs a native transition with a
 // fixed, non-configurable duration that felt slow/clunky to use here.
@@ -544,7 +553,7 @@ export default function ProductionStagesScreen({ navigation }) {
               >
                 <View style={styles.batchCardRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.batchCardName}>{batch.batch_name}</Text>
+                    <Text style={styles.batchCardName}>{displayBatchName(batch.batch_name)}</Text>
                     {batch.created_at && (
                       <View style={styles.batchCardMetaRow}>
                         <Clock size={12} color={B.textMuted} />
@@ -688,7 +697,7 @@ export default function ProductionStagesScreen({ navigation }) {
           <ChevronLeft size={22} color={B.textPri} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.detailTitle} numberOfLines={1}>{selectedBatch.batch_name}</Text>
+          <Text style={styles.detailTitle} numberOfLines={1}>{displayBatchName(selectedBatch.batch_name)}</Text>
           <Text style={styles.detailSubtitle} numberOfLines={1}>{summaryText}</Text>
         </View>
         {isCompleted && (
