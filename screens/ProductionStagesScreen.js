@@ -65,13 +65,22 @@ const STAGES = [
 
 const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-// Existing batches were named with the short month ("Jun 24, 2026"). Reformat
-// any date-named batch to the full month ("June 24, 2026") for display, while
-// leaving non-date names untouched.
+// Existing batches were named with the short month ("Jun 24, 2026").
+// Expand the short month token to its full name for display ("June 24,
+// 2026"). Done as a plain string swap -- NOT via new Date(name), because
+// React Native's Hermes engine doesn't parse localized date strings, so
+// that silently failed and left "Jun" untouched.
+const _SHORT_TO_LONG_MONTH = {
+  Jan: 'January', Feb: 'February', Mar: 'March', Apr: 'April',
+  May: 'May', Jun: 'June', Jul: 'July', Aug: 'August',
+  Sep: 'September', Oct: 'October', Nov: 'November', Dec: 'December',
+};
 const displayBatchName = (name) => {
   if (!name) return name;
-  const d = new Date(name);
-  return isNaN(d.getTime()) ? name : formatBatchDate(d);
+  return name.replace(
+    /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/,
+    (m) => _SHORT_TO_LONG_MONTH[m] || m
+  );
 };
 
 // RN's built-in Modal animationType="fade" runs a native transition with a
