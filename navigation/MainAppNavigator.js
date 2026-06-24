@@ -10,9 +10,8 @@ import {
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Activity, ClipboardList, Layers, LogOut } from 'lucide-react-native';
+import { ClipboardList, Layers, LogOut } from 'lucide-react-native';
 
-import WorkflowModule          from '../screens/WorkflowModule';
 import TaskHistoryPendingLogs  from '../screens/TaskHistoryPendingLogs';
 import ProductionStagesScreen  from '../screens/ProductionStagesScreen';
 import GlobalHeader            from '../components/GlobalHeader';
@@ -88,7 +87,6 @@ export default function MainAppNavigator({ navigation }) {
       <Tab.Navigator
         screenOptions={({ route, navigation: nav }) => ({
           tabBarIcon: ({ focused, color, size }) => {
-            if (route.name === 'Workflow')  return <Activity      size={size} color={color} />;
             if (route.name === 'Stages')    return <Layers        size={size} color={color} />;
             if (route.name === 'History')   return <ClipboardList size={size} color={color} />;
           },
@@ -113,13 +111,12 @@ export default function MainAppNavigator({ navigation }) {
               title={route.name}
               onLogout={handleLogout}
               onBell={handleBell}
-              onBrandPress={() => nav.navigate('Workflow')}
+              onBrandPress={() => nav.navigate('Stages')}
               hasUnread={hasUnread}
             />
           ),
         })}
       >
-        <Tab.Screen name="Workflow"  component={WorkflowModule}         options={{ tabBarLabel: 'Workflow' }} />
         <Tab.Screen name="Stages"    component={ProductionStagesScreen} options={{ tabBarLabel: 'Stages' }} />
         <Tab.Screen name="History"   component={TaskHistoryPendingLogs} options={{ tabBarLabel: 'History' }} />
       </Tab.Navigator>

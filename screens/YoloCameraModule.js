@@ -693,7 +693,14 @@ export default function YoloCameraModule({ navigation, route }) {
 
     if (supabase) {
       for (const spec of detectedSpecimens) {
-        const genus = spec.species.trim().split(' ')[0] || '';
+        // Match the EXACT specimen (genus + species epithet), not a fuzzy
+        // genus substring. The old `%genus%` match credited the FIRST row
+        // whose genus merely contained this text (e.g. any "Papilio"),
+        // regardless of species -- so "Papilio blumei" and "Papilio thoas"
+        // both incremented the same wrong row. No exact match -> no update.
+        const _nameParts = spec.species.trim().split(/\s+/);
+        const genus = _nameParts[0] || '';
+        const speciesEpithet = _nameParts.slice(1).join(' ');
 
         if (spec.qcStatus === 'pass') {
           passedThisScan++;
@@ -707,11 +714,12 @@ export default function YoloCameraModule({ navigation, route }) {
                  worker: workerName || 'Unknown'
               });
           } else {
-            const { data: rows, error: fetchErr } = await supabase
+            let invQuery = supabase
               .from('inventory')
               .select('id, quantity, stock')
-              .ilike('genus', `%${genus}%`)
-              .limit(1);
+              .ilike('genus', genus);
+            if (speciesEpithet) invQuery = invQuery.ilike('species', speciesEpithet);
+            const { data: rows, error: fetchErr } = await invQuery.limit(1);
 
             if (!fetchErr && rows && rows.length > 0) {
               const row = rows[0];
