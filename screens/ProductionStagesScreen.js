@@ -8,11 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Plus, ChevronRight, ChevronLeft, CheckCircle2,
-  Circle, ScanLine, ClipboardList, AlertTriangle,
+  Circle, ScanLine, ClipboardList, AlertTriangle, Trash2,
 } from 'lucide-react-native';
 import {
   createProductionBatch,
   getProductionBatches,
+  deleteProductionBatch,
   advanceBatchStage,
   addStageLog,
   updateStageLog,
@@ -53,7 +54,11 @@ const STAGES = [
   { id: 8,  name: 'Framing',                  type: 'manual' },
   { id: 9,  name: 'Initial Quality Control',  type: 'scan'   },
   { id: 10, name: 'Finishing',                type: 'manual' },
-  { id: 11, name: 'Final Quality Control',    type: 'scan'   },
+  // Stage 11 "Final Quality Control" moved to the manager dashboard --
+  // managers review the annotated images (with part bounding boxes) from
+  // Initial Quality Control there instead, which is faster than a second
+  // physical scan for checking specimen completeness. Stage 12 keeps its
+  // original id so existing logged data stays linked to the right stage.
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
@@ -323,22 +328,21 @@ export default function ProductionStagesScreen({ navigation }) {
     );
   };
 
-  // Undo a mistaken "Mark Complete" -- reopens the batch so logs/scans can
-  // be added again, not just edited.
-  const handleReopenBatch = () => {
+  // ── Delete the whole batch -- e.g. it was created by mistake ──
+  const handleDeleteBatch = () => {
     Alert.alert(
-      'Reopen Batch',
-      'Undo marking this batch as completed?',
+      'Delete Batch',
+      `Delete "${selectedBatch.batch_name}" and everything logged in it? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reopen',
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
-            const ok = await advanceBatchStage(selectedBatch.id, 1);
-            if (!ok) { Alert.alert('Error', 'Could not reopen batch. Check your connection.'); return; }
-            const updated = { ...selectedBatch, current_stage: 1, status: 'in_progress' };
-            setSelectedBatch(updated);
-            setBatches(prev => prev.map(b => b.id === updated.id ? updated : b));
+            const ok = await deleteProductionBatch(selectedBatch.id);
+            if (!ok) { Alert.alert('Error', 'Could not delete batch. Check your connection.'); return; }
+            setBatches(prev => prev.filter(b => b.id !== selectedBatch.id));
+            setSelectedBatch(null);
           },
         },
       ]
@@ -459,7 +463,7 @@ export default function ProductionStagesScreen({ navigation }) {
             <Text style={{ fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 2.5 }}>[ PRODUCTION BATCHES ]</Text>
             <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
           </View>
-          <Text style={styles.pageSubtitle}>Track insect batches through the 12-stage lifecycle</Text>
+          <Text style={styles.pageSubtitle}>Track insect batches through the production lifecycle</Text>
 
           {isLoading ? (
             <ActivityIndicator color={B.accent} style={{ marginTop: 48 }} />
@@ -503,7 +507,7 @@ export default function ProductionStagesScreen({ navigation }) {
     );
   }
 
-  // ─── Batch detail — 12-stage timeline ────────────────────────
+  // ─── Batch detail — stage timeline ───────────────────────────
 
   const isCompleted = selectedBatch.status === 'completed';
   const loggedStageNames = STAGES.filter(stageHasActivity).map(s => s.name);
@@ -527,6 +531,9 @@ export default function ProductionStagesScreen({ navigation }) {
             <Text style={styles.completedBadgeText}>COMPLETED</Text>
           </View>
         )}
+        <TouchableOpacity style={styles.deleteBatchBtn} onPress={handleDeleteBatch} activeOpacity={0.7}>
+          <Trash2 size={18} color={B.error} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -637,10 +644,9 @@ export default function ProductionStagesScreen({ navigation }) {
           <View style={styles.completedBanner}>
             <CheckCircle2 size={28} color={B.success} />
             <Text style={styles.completedBannerText}>BATCH COMPLETE</Text>
-            <Text style={styles.completedBannerSub}>This batch has been marked as completed.</Text>
-            <TouchableOpacity style={styles.btnReopen} onPress={handleReopenBatch} activeOpacity={0.8}>
-              <Text style={styles.btnReopenText}>UNDO — REOPEN BATCH</Text>
-            </TouchableOpacity>
+            <Text style={styles.completedBannerSub}>
+              This batch has been marked as completed. You can still EDIT a stage's entries if something needs fixing.
+            </Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.btnMarkComplete} onPress={handleMarkComplete} activeOpacity={0.85}>
@@ -1028,6 +1034,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   completedBadgeText: { fontSize: 9, fontWeight: '700', color: B.success, letterSpacing: 1.5, textTransform: 'uppercase' },
+  deleteBatchBtn: {
+    padding: 6,
+    borderWidth: 1,
+    borderColor: B.border,
+  },
 
   // Timeline
   timelineContent: { padding: 16, paddingBottom: 40 },
@@ -1221,17 +1232,9 @@ const styles = StyleSheet.create({
   },
   btnEditText: { fontSize: 11, fontWeight: '800', color: B.textMuted, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
 
-  completedBanner: { alignItems: 'center', paddingTop: 24, gap: 8 },
+  completedBanner: { alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, gap: 8 },
   completedBannerText: { fontSize: 14, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
-  completedBannerSub:  { fontSize: 13, color: B.textMuted },
-  btnReopen: {
-    marginTop: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: B.accent,
-  },
-  btnReopenText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5 },
+  completedBannerSub:  { fontSize: 13, color: B.textMuted, textAlign: 'center' },
   btnMarkComplete: {
     flexDirection: 'row',
     alignItems: 'center',
