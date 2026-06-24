@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
   KeyboardAvoidingView, Keyboard, Platform, TouchableWithoutFeedback,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,6 +66,23 @@ const STAGES = [
 ];
 
 const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// RN's built-in Modal animationType="fade" runs a native transition with a
+// fixed, non-configurable duration that felt slow/clunky to use here.
+// This drives a much quicker (120ms) custom fade-in instead, used with
+// animationType="none" on the Modal itself. Close stays instant -- an
+// abrupt close doesn't feel slow, so it's not worth the complexity of also
+// animating the exit (which would require delaying the actual unmount).
+function useFadeIn(visible, duration = 120) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) {
+      opacity.setValue(0);
+      Animated.timing(opacity, { toValue: 1, duration, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+  return opacity;
+}
 
 // "{quantity} x {species}" -> { quantity, speciesDisplay }, or null if the
 // entry is a free-text note rather than a structured specimen-count log.
@@ -166,6 +184,12 @@ export default function ProductionStagesScreen({ navigation }) {
   const [editingSpecies,   setEditingSpecies]   = useState(null);
   const [editingSpeciesDisplay, setEditingSpeciesDisplay] = useState(null);
   const [editingText,      setEditingText]      = useState('');
+
+  // Fast custom fade-in for each modal -- see useFadeIn above.
+  const logModalFade      = useFadeIn(showLogModal && speciesPickerTarget === null);
+  const speciesModalFade  = useFadeIn(speciesPickerTarget !== null);
+  const editModalFade     = useFadeIn(editStage !== null && speciesPickerTarget === null);
+  const scanLogModalFade  = useFadeIn(scanLogModal !== null);
 
   const loadBatches = useCallback(async () => {
     const data = await getProductionBatches();
@@ -708,7 +732,8 @@ export default function ProductionStagesScreen({ navigation }) {
           Android: the second can fail to actually render while still
           eating all touch input, which looked like "no list opens, then
           every button is dead." Only one Modal is ever visible now. */}
-      <Modal visible={showLogModal && speciesPickerTarget === null} transparent animationType="fade">
+      <Modal visible={showLogModal && speciesPickerTarget === null} transparent animationType="none">
+        <Animated.View style={{ flex: 1, opacity: logModalFade }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -791,13 +816,15 @@ export default function ProductionStagesScreen({ navigation }) {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+        </Animated.View>
       </Modal>
 
       {/* Species picker sub-modal — shared by ADD LOG rows and entry editing.
           Selecting from this list is the ONLY way a row's species gets set,
           so a typed species can never be saved unless it's an actual catalog
           match. */}
-      <Modal visible={speciesPickerTarget !== null} transparent animationType="fade">
+      <Modal visible={speciesPickerTarget !== null} transparent animationType="none">
+        <Animated.View style={{ flex: 1, opacity: speciesModalFade }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -874,19 +901,21 @@ export default function ProductionStagesScreen({ navigation }) {
                 );
               })()}
             </ScrollView>
-            <View style={{ padding: 16 }}>
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border }}>
               <TouchableOpacity style={styles.btnSecondary} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
                 <Text style={styles.btnSecondaryText}>CANCEL</Text>
               </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
+        </Animated.View>
       </Modal>
 
       {/* Edit/remove entries for a stage -- same reasoning as the Log modal
           above: hidden while the species picker is open so only one
           native Modal is ever visible at a time. */}
-      <Modal visible={editStage !== null && speciesPickerTarget === null} transparent animationType="fade">
+      <Modal visible={editStage !== null && speciesPickerTarget === null} transparent animationType="none">
+        <Animated.View style={{ flex: 1, opacity: editModalFade }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -980,11 +1009,12 @@ export default function ProductionStagesScreen({ navigation }) {
             </View>
           </View>
         </KeyboardAvoidingView>
+        </Animated.View>
       </Modal>
 
       {/* Scan log modal */}
-      <Modal visible={scanLogModal !== null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+      <Modal visible={scanLogModal !== null} transparent animationType="none">
+        <Animated.View style={[styles.modalOverlay, { opacity: scanLogModalFade }]}>
           <TouchableWithoutFeedback onPress={() => setScanLogModal(null)}>
             <View style={StyleSheet.absoluteFillObject} />
           </TouchableWithoutFeedback>
@@ -1055,7 +1085,7 @@ export default function ProductionStagesScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </Modal>
     </View>
   );
@@ -1477,7 +1507,10 @@ const styles = StyleSheet.create({
     borderColor: B.accent,
     backgroundColor: '#F3EEFC',
   },
-  btnSecondaryText: { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 3, textTransform: 'uppercase' },
+  // paddingLeft compensates for letterSpacing -- it adds a trailing gap
+  // after the last character but nothing before the first, which shifts
+  // the visible text left of true-center inside a centered button.
+  btnSecondaryText: { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
   btnPrimary: {
     flex: 1,
     alignItems: 'center',
@@ -1486,7 +1519,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     backgroundColor: B.accent,
   },
-  btnPrimaryText: { fontSize: 13, fontWeight: '800', color: B.bg, letterSpacing: 3, textTransform: 'uppercase' },
+  btnPrimaryText: { fontSize: 13, fontWeight: '800', color: B.bg, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
 
   // Species picker list (log-entry species picker)
   suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
