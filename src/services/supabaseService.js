@@ -280,6 +280,36 @@ export async function addStageLog(batchId, stageNumber, stageName, logText, work
   }
 }
 
+export async function updateStageLog(logId, newText) {
+  if (!supabase || !logId) return false;
+  try {
+    const { error } = await supabase
+      .from('stage_logs')
+      .update({ log_text: newText })
+      .eq('id', logId);
+    if (error) { console.error('updateStageLog error:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('updateStageLog exception:', e);
+    return false;
+  }
+}
+
+export async function deleteStageLog(logId) {
+  if (!supabase || !logId) return false;
+  try {
+    const { error } = await supabase
+      .from('stage_logs')
+      .delete()
+      .eq('id', logId);
+    if (error) { console.error('deleteStageLog error:', error.message); return false; }
+    return true;
+  } catch (e) {
+    console.error('deleteStageLog exception:', e);
+    return false;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────
 //  Orders — B&B purchase orders driving production
 // ─────────────────────────────────────────────────────────────────
