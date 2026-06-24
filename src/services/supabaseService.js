@@ -135,6 +135,36 @@ export async function loginWorker(employeeId, pin) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  Single-session enforcement — only the most recent login per worker
+//  stays active; older devices get logged out. See
+//  supabase/single_session_migration.sql for the server-side functions.
+// ─────────────────────────────────────────────────────────────────
+
+export async function claimWorkerSession(workerId) {
+  if (!supabase || !workerId) return null;
+  try {
+    const { data, error } = await supabase.rpc('claim_worker_session', { p_worker_id: workerId });
+    if (error) { console.error('claimWorkerSession error:', error.message); return null; }
+    return data; // new session token (uuid)
+  } catch (e) {
+    console.error('claimWorkerSession exception:', e);
+    return null;
+  }
+}
+
+export async function isSessionActive(workerId, token) {
+  if (!supabase || !workerId || !token) return true; // fail open -- don't lock workers out over a network blip
+  try {
+    const { data, error } = await supabase.rpc('is_session_active', { p_worker_id: workerId, p_token: token });
+    if (error) { console.error('isSessionActive error:', error.message); return true; }
+    return data === true;
+  } catch (e) {
+    console.error('isSessionActive exception:', e);
+    return true;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Scan Batches — YoLo QC results saved for web dashboard approval
 // ─────────────────────────────────────────────────────────────────
 
