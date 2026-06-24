@@ -853,12 +853,16 @@ export default function ProductionStagesScreen({ navigation }) {
                 autoCorrect={false}
               />
             </View>
-            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            <ScrollView style={{ maxHeight: 165 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {(() => {
                 const q = speciesPickerSearch.trim().toLowerCase();
+                // Capped at 3 so the keyboard (which on some Android
+                // keyboards already includes a number row, eating extra
+                // height) never has to fight a long list for space -- type
+                // a more specific search to narrow it down instead.
                 const filtered = allSpecies.filter(s =>
                   !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q)
-                );
+                ).slice(0, 3);
 
                 if (filtered.length > 0) {
                   return filtered.map((s, i) => (
@@ -901,8 +905,8 @@ export default function ProductionStagesScreen({ navigation }) {
                 );
               })()}
             </ScrollView>
-            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border }}>
-              <TouchableOpacity style={styles.btnSecondary} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border, alignItems: 'center' }}>
+              <TouchableOpacity style={[styles.btnSecondary, { flex: 0, width: '50%' }]} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
                 <Text style={styles.btnSecondaryText}>CANCEL</Text>
               </TouchableOpacity>
             </View>
