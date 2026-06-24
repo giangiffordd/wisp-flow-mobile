@@ -256,6 +256,28 @@ export default function ProductionStagesScreen({ navigation }) {
     );
   };
 
+  // Undo a mistaken "Mark Complete" -- reopens the batch so logs/scans can
+  // be added again, not just edited.
+  const handleReopenBatch = () => {
+    Alert.alert(
+      'Reopen Batch',
+      'Undo marking this batch as completed?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reopen',
+          onPress: async () => {
+            const ok = await advanceBatchStage(selectedBatch.id, 1);
+            if (!ok) { Alert.alert('Error', 'Could not reopen batch. Check your connection.'); return; }
+            const updated = { ...selectedBatch, current_stage: 1, status: 'in_progress' };
+            setSelectedBatch(updated);
+            setBatches(prev => prev.map(b => b.id === updated.id ? updated : b));
+          },
+        },
+      ]
+    );
+  };
+
   // ── Edit/remove a stage's logged entries ──
   const openEditModal = (stage) => setEditStage(stage);
   const closeEditModal = () => { setEditStage(null); setEditingEntryId(null); setEditingText(''); };
@@ -472,26 +494,29 @@ export default function ProductionStagesScreen({ navigation }) {
                 )}
 
                 {/* Action buttons — every stage is open; skip/edit/add in any
-                    order. EDIT replaces the old sequential "STAGE DONE". */}
-                {!isCompleted && (
-                  <View style={styles.stageActions}>
-                    {isScan && (
-                      <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
-                        <ScanLine size={14} color={B.bg} />
-                        <Text style={styles.btnScanText}>LAUNCH SCANNER</Text>
-                      </TouchableOpacity>
-                    )}
-                    <View style={styles.btnSecondaryRow}>
+                    order. EDIT replaces the old sequential "STAGE DONE", and
+                    stays available even on a completed batch so a mistake
+                    (wrong count, wrong species) can still be fixed or
+                    removed -- completing a batch shouldn't lock in errors. */}
+                <View style={styles.stageActions}>
+                  {!isCompleted && isScan && (
+                    <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
+                      <ScanLine size={14} color={B.bg} />
+                      <Text style={styles.btnScanText}>LAUNCH SCANNER</Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={styles.btnSecondaryRow}>
+                    {!isCompleted && (
                       <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
                         <ClipboardList size={13} color={B.accent} />
                         <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={styles.btnEdit} onPress={() => openEditModal(stage)}>
-                        <Text style={styles.btnEditText} numberOfLines={1}>EDIT</Text>
-                      </TouchableOpacity>
-                    </View>
+                    )}
+                    <TouchableOpacity style={styles.btnEdit} onPress={() => openEditModal(stage)}>
+                      <Text style={styles.btnEditText} numberOfLines={1}>EDIT</Text>
+                    </TouchableOpacity>
                   </View>
-                )}
+                </View>
               </View>
             </View>
           );
@@ -502,6 +527,9 @@ export default function ProductionStagesScreen({ navigation }) {
             <CheckCircle2 size={28} color={B.success} />
             <Text style={styles.completedBannerText}>BATCH COMPLETE</Text>
             <Text style={styles.completedBannerSub}>This batch has been marked as completed.</Text>
+            <TouchableOpacity style={styles.btnReopen} onPress={handleReopenBatch} activeOpacity={0.8}>
+              <Text style={styles.btnReopenText}>UNDO — REOPEN BATCH</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity style={styles.btnMarkComplete} onPress={handleMarkComplete} activeOpacity={0.85}>
@@ -1029,6 +1057,14 @@ const styles = StyleSheet.create({
   completedBanner: { alignItems: 'center', paddingTop: 24, gap: 8 },
   completedBannerText: { fontSize: 14, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
   completedBannerSub:  { fontSize: 13, color: B.textMuted },
+  btnReopen: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: B.accent,
+  },
+  btnReopenText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5 },
   btnMarkComplete: {
     flexDirection: 'row',
     alignItems: 'center',
