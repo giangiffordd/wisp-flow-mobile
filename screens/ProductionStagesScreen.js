@@ -16,6 +16,7 @@ import {
   advanceBatchStage,
   addStageLog,
   getStageLogsForBatch,
+  fetchProductsCatalog,
 } from '../src/services/supabaseService';
 
 // ── Design tokens ──────────────────────────────────────────────
@@ -54,6 +55,8 @@ const STAGES = [
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
+const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
 export default function ProductionStagesScreen({ navigation }) {
   const insets   = useSafeAreaInsets();
   const isFocused = useIsFocused();
@@ -73,11 +76,19 @@ export default function ProductionStagesScreen({ navigation }) {
   const [newBatchSpecies,  setNewBatchSpecies]  = useState('');
   const [isCreating,       setIsCreating]       = useState(false);
 
-  // Log entry modal
+  // Log entry modal -- one row per specimen type (count + species), plus an
+  // optional free-text note for the whole entry.
   const [showLogModal,   setShowLogModal]   = useState(false);
   const [logStage,       setLogStage]       = useState(null);
-  const [logText,        setLogText]        = useState('');
+  const [logRows,        setLogRows]        = useState([{ key: 1, quantity: 0, species: null, speciesDisplay: null }]);
+  const [logNote,        setLogNote]        = useState('');
   const [isLoggingStage, setIsLoggingStage] = useState(false);
+
+  // Species catalog for the log-entry species picker
+  const [allSpecies,     setAllSpecies]     = useState([]);
+  const [speciesLoading, setSpeciesLoading] = useState(false);
+  const [speciesPickerRowKey, setSpeciesPickerRowKey] = useState(null);
+  const [speciesPickerSearch, setSpeciesPickerSearch] = useState('');
 
   const loadBatches = useCallback(async () => {
     const data = await getProductionBatches();
@@ -132,6 +143,21 @@ export default function ProductionStagesScreen({ navigation }) {
     setIsRefreshing(false);
   };
 
+  // Species catalog for the stage-log species picker, loaded once on mount.
+  useEffect(() => {
+    setSpeciesLoading(true);
+    fetchProductsCatalog()
+      .then(data => { setAllSpecies(data || []); })
+      .catch(() => {})
+      .finally(() => setSpeciesLoading(false));
+  }, []);
+
+  // Auto-name the batch from today's date when the create modal opens.
+  useEffect(() => {
+    if (!showCreateModal) return;
+    setNewBatchName(formatBatchDate(new Date()));
+  }, [showCreateModal]);
+
   // ── Create batch ──
   const handleCreateBatch = async () => {
     const name = newBatchName.trim();
@@ -154,14 +180,57 @@ export default function ProductionStagesScreen({ navigation }) {
   // ── Add stage log ──
   const openLogModal = (stage) => {
     setLogStage(stage);
-    setLogText('');
+    setLogRows([{ key: Date.now(), quantity: 0, species: null, speciesDisplay: null }]);
+    setLogNote('');
     setShowLogModal(true);
   };
 
+  const addLogRow = () => {
+    setLogRows(prev => [...prev, { key: Date.now(), quantity: 0, species: null, speciesDisplay: null }]);
+  };
+
+  const removeLogRow = (key) => {
+    setLogRows(prev => prev.length > 1 ? prev.filter(r => r.key !== key) : prev);
+  };
+
+  const adjustLogRowQty = (key, delta) => {
+    setLogRows(prev => prev.map(r => r.key === key ? { ...r, quantity: Math.max(0, r.quantity + delta) } : r));
+  };
+
+  const setLogRowQtyDirect = (key, text) => {
+    const n = parseInt(text, 10);
+    setLogRows(prev => prev.map(r => r.key === key ? { ...r, quantity: Number.isNaN(n) ? 0 : Math.max(0, n) } : r));
+  };
+
+  const openSpeciesPickerForRow = (key) => {
+    setSpeciesPickerRowKey(key);
+    setSpeciesPickerSearch('');
+  };
+
+  const selectSpeciesForRow = (sp) => {
+    setLogRows(prev => prev.map(r =>
+      r.key === speciesPickerRowKey
+        ? { ...r, species: sp.species, speciesDisplay: sp.commonName || sp.species }
+        : r
+    ));
+    setSpeciesPickerRowKey(null);
+    setSpeciesPickerSearch('');
+  };
+
   const handleSubmitLog = async () => {
-    if (!logText.trim()) { Alert.alert('Required', 'Enter a log entry.'); return; }
+    const filledRows = logRows.filter(r => r.quantity > 0 && r.species);
+    const note = logNote.trim();
+    if (filledRows.length === 0 && !note) {
+      Alert.alert('Required', 'Log a specimen count with its species, or add a note.');
+      return;
+    }
     setIsLoggingStage(true);
-    await addStageLog(selectedBatch.id, logStage.id, logStage.name, logText.trim());
+    for (const row of filledRows) {
+      await addStageLog(selectedBatch.id, logStage.id, logStage.name, `${row.quantity} × ${row.speciesDisplay}`);
+    }
+    if (note) {
+      await addStageLog(selectedBatch.id, logStage.id, logStage.name, note);
+    }
     setIsLoggingStage(false);
     setShowLogModal(false);
     await loadLogsForBatch(selectedBatch);
@@ -312,13 +381,9 @@ export default function ProductionStagesScreen({ navigation }) {
               </View>
               <View style={{ padding: 20, gap: 12 }}>
                 <Text style={styles.inputLabel}>[ BATCH NAME ]</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Batch name (e.g. Batch #001)"
-                  placeholderTextColor={B.textMuted}
-                  value={newBatchName}
-                  onChangeText={setNewBatchName}
-                />
+                <View style={[styles.input, styles.inputReadOnly]}>
+                  <Text style={styles.inputReadOnlyText}>{newBatchName}</Text>
+                </View>
                 <Text style={styles.inputLabel}>[ SPECIES ]</Text>
                 <TextInput
                   style={styles.input}
@@ -502,21 +567,59 @@ export default function ProductionStagesScreen({ navigation }) {
       {/* Log entry modal */}
       <Modal visible={showLogModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ STAGE {logStage?.id}: {logStage?.name?.toUpperCase()} ]</Text>
               <Text style={styles.modalSubtitle}>Log today's progress</Text>
             </View>
-            <View style={{ padding: 20, gap: 12 }}>
-              <Text style={styles.inputLabel}>[ LOG ENTRY ]</Text>
+            <ScrollView style={{ padding: 20 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled">
+              <Text style={styles.inputLabel}>[ SPECIMENS LOGGED ]</Text>
+              {logRows.map((row) => (
+                <View key={row.key} style={styles.logRow}>
+                  <View style={styles.stepperGroup}>
+                    <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustLogRowQty(row.key, -1)} activeOpacity={0.7}>
+                      <Text style={styles.stepperBtnText}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.stepperInput}
+                      value={String(row.quantity)}
+                      onChangeText={(t) => setLogRowQtyDirect(row.key, t)}
+                      keyboardType="number-pad"
+                    />
+                    <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustLogRowQty(row.key, 1)} activeOpacity={0.7}>
+                      <Text style={styles.stepperBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.speciesPickerBtn, row.species && styles.speciesPickerBtnFilled]}
+                    onPress={() => openSpeciesPickerForRow(row.key)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.speciesPickerBtnText, row.species && styles.speciesPickerBtnTextFilled]} numberOfLines={1}>
+                      {row.speciesDisplay || 'Choose species…'}
+                    </Text>
+                  </TouchableOpacity>
+                  {logRows.length > 1 && (
+                    <TouchableOpacity style={styles.logRowRemove} onPress={() => removeLogRow(row.key)} activeOpacity={0.7}>
+                      <Text style={styles.logRowRemoveText}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+
+              <TouchableOpacity onPress={addLogRow} activeOpacity={0.7}>
+                <Text style={styles.addRowLink}>+ ADD SPECIMEN TYPE</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.inputLabel}>[ NOTE — OPTIONAL ]</Text>
               <TextInput
                 style={[styles.input, styles.inputMultiline]}
-                placeholder="Describe what was done today..."
+                placeholder="Anything else to note... (optional)"
                 placeholderTextColor={B.textMuted}
-                value={logText}
-                onChangeText={setLogText}
+                value={logNote}
+                onChangeText={setLogNote}
                 multiline
-                numberOfLines={4}
+                numberOfLines={3}
                 textAlignVertical="top"
               />
               <View style={styles.modalActions}>
@@ -527,6 +630,55 @@ export default function ProductionStagesScreen({ navigation }) {
                   {isLoggingStage ? <ActivityIndicator color={B.bg} size="small" /> : <Text style={styles.btnPrimaryText}>SAVE LOG</Text>}
                 </TouchableOpacity>
               </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Species picker sub-modal — opened from a log row */}
+      <Modal visible={speciesPickerRowKey !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '75%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>[ CHOOSE SPECIES ]</Text>
+            </View>
+            <View style={{ padding: 16 }}>
+              <TextInput
+                style={styles.input}
+                placeholder="Search species…"
+                placeholderTextColor={B.textMuted}
+                value={speciesPickerSearch}
+                onChangeText={setSpeciesPickerSearch}
+                autoCorrect={false}
+              />
+            </View>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              {allSpecies
+                .filter(s => {
+                  const q = speciesPickerSearch.trim().toLowerCase();
+                  return !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q);
+                })
+                .map((s, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={styles.suggestionItem}
+                    onPress={() => selectSpeciesForRow(s)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.suggestionCommon}>{s.commonName}</Text>
+                    <Text style={styles.suggestionScientific}>{s.species}</Text>
+                  </TouchableOpacity>
+                ))}
+              {allSpecies.length === 0 && (
+                <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
+                  {speciesLoading ? 'Loading species…' : 'No species available.'}
+                </Text>
+              )}
+            </ScrollView>
+            <View style={{ padding: 16 }}>
+              <TouchableOpacity style={styles.btnSecondary} onPress={() => setSpeciesPickerRowKey(null)}>
+                <Text style={styles.btnSecondaryText}>CANCEL</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -920,6 +1072,74 @@ const styles = StyleSheet.create({
     color: B.textPri,
   },
   inputMultiline: { minHeight: 100 },
+  inputReadOnly: { justifyContent: 'center' },
+  inputReadOnlyText: { fontSize: 14, fontWeight: '600', color: B.textPri },
+
+  // Stage log rows — quantity stepper + species picker per specimen type
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: B.border,
+  },
+  stepperBtn: {
+    width: 34,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: B.bg,
+  },
+  stepperBtnText: { fontSize: 18, fontWeight: '700', color: B.accent },
+  stepperInput: {
+    width: 44,
+    height: 38,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '700',
+    color: B.textPri,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: B.border,
+  },
+  speciesPickerBtn: {
+    flex: 1,
+    height: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: B.border,
+    backgroundColor: B.bg,
+  },
+  speciesPickerBtnFilled: {
+    borderColor: B.accent,
+    backgroundColor: 'rgba(91,33,217,0.06)',
+  },
+  speciesPickerBtnText: { fontSize: 13, fontWeight: '500', color: B.textMuted },
+  speciesPickerBtnTextFilled: { color: B.textPri, fontWeight: '700' },
+  logRowRemove: {
+    width: 34,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logRowRemoveText: { fontSize: 15, fontWeight: '700', color: B.error },
+  addRowLink: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: B.accent,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+
+  // Species picker list (shared shape with create-batch autocomplete)
+  suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
+  suggestionCommon:     { fontSize: 13, fontWeight: '700', color: B.textPri },
+  suggestionScientific: { fontSize: 11, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
 
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   btnSecondary: {
