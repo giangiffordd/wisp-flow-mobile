@@ -56,11 +56,10 @@ const STAGES = [
   { id: 8,  name: 'Framing',                  type: 'manual' },
   { id: 9,  name: 'Initial Quality Control',  type: 'scan'   },
   { id: 10, name: 'Finishing',                type: 'manual' },
-  // Final Quality Control is a mobile YOLOv8 scan checkpoint per the project
-  // objectives (Initial QC, Final QC, Packaging are the three scan stages).
-  // The scan submits a pending batch for manager approval just like Initial
-  // QC; the manager still does the final image review on the web dashboard.
-  { id: 11, name: 'Final Quality Control',    type: 'scan'   },
+  // Final Quality Control is manager-only -- workers can't act on it here.
+  // It's shown grayed out so the pipeline still reads as 12 stages, with a
+  // note that only the manager controls it (on the web dashboard).
+  { id: 11, name: 'Final Quality Control',    type: 'scan', disabled: true },
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
@@ -137,6 +136,10 @@ export default function ProductionStagesScreen({ navigation }) {
   // row got the duplicate. A monotonic counter can't collide.
   const nextRowKeyRef = useRef(1);
   const nextRowKey = () => nextRowKeyRef.current++;
+  // FAB press feedback -- a quick scale-down on press-in, springs back out.
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const fabPressIn  = () => Animated.spring(fabScale, { toValue: 0.85, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
+  const fabPressOut = () => Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 12 }).start();
 
   const [batches,         setBatches]         = useState([]);
   const [selectedBatch,   setSelectedBatch]   = useState(null);
@@ -566,14 +569,18 @@ export default function ProductionStagesScreen({ navigation }) {
         </ScrollView>
 
         {/* FAB — creates a batch immediately, no modal */}
-        <TouchableOpacity
-          style={[styles.fab, { bottom: insets.bottom + 16 }]}
-          onPress={handleQuickCreateBatch}
-          activeOpacity={0.85}
-          disabled={isCreating}
-        >
-          {isCreating ? <ActivityIndicator color={B.bg} size="small" /> : <Plus size={26} color={B.bg} />}
-        </TouchableOpacity>
+        <Animated.View style={[styles.fab, { bottom: insets.bottom + 16, transform: [{ scale: fabScale }] }]}>
+          <TouchableOpacity
+            style={styles.fabTouch}
+            onPress={handleQuickCreateBatch}
+            onPressIn={fabPressIn}
+            onPressOut={fabPressOut}
+            activeOpacity={0.9}
+            disabled={isCreating}
+          >
+            {isCreating ? <ActivityIndicator color={B.bg} size="small" /> : <Plus size={26} color={B.bg} />}
+          </TouchableOpacity>
+        </Animated.View>
       </View>
     );
   }
@@ -704,6 +711,30 @@ export default function ProductionStagesScreen({ navigation }) {
           const isScan       = stage.type === 'scan';
           const isLast       = idx === STAGES.length - 1;
 
+          // Manager-only stage (Final Quality Control): shown so the pipeline
+          // still reads as 12 stages, but grayed out and inert -- only the
+          // manager can act on it (on the web dashboard), not workers.
+          if (stage.disabled) {
+            return (
+              <View key={stage.id} style={styles.stageRow}>
+                <View style={styles.timelineSide}>
+                  <View style={[styles.stageDot, styles.stageDotDisabled]}>
+                    <Text style={[styles.stageDotNum, styles.stageDotNumDisabled]}>{stage.id}</Text>
+                  </View>
+                  {!isLast && <View style={styles.timelineLine} />}
+                </View>
+                <View style={[styles.stageCard, styles.stageCardDisabled]}>
+                  <View style={styles.stageCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.stageName, styles.stageNameDisabled]}>{stage.name}</Text>
+                      <Text style={styles.disabledStageNote}>Manager-only · controlled on the dashboard</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            );
+          }
+
           return (
             <View key={stage.id} style={styles.stageRow}>
               {/* Timeline line + dot — every stage is always open, the dot
@@ -810,6 +841,13 @@ export default function ProductionStagesScreen({ navigation }) {
             <Text style={styles.completedBannerSub}>
               This batch has been marked as completed. You can still EDIT a stage's entries if something needs fixing.
             </Text>
+          </View>
+        ) : loggedStageNames.length === 0 ? (
+          // Can't complete a batch that has had no work at all -- nothing
+          // logged and nothing scanned. Show why, instead of an active button.
+          <View style={[styles.btnMarkComplete, styles.btnMarkCompleteDisabled]}>
+            <CheckCircle2 size={16} color={B.textMuted} />
+            <Text style={[styles.btnMarkCompleteText, { color: B.textMuted }]}>LOG A STAGE TO COMPLETE</Text>
           </View>
         ) : (
           <TouchableOpacity style={styles.btnMarkComplete} onPress={handleMarkComplete} activeOpacity={0.85}>
@@ -1144,6 +1182,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: B.accentText,
   },
+  fabTouch: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' },
 
   // Detail header
   detailHeader: {
@@ -1394,6 +1433,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     backgroundColor: B.success,
   },
+  btnMarkCompleteDisabled: { backgroundColor: B.bgEl, borderWidth: 1, borderColor: B.border },
   btnMarkCompleteText: { fontSize: 12, fontWeight: '800', color: B.bg, letterSpacing: 2, textTransform: 'uppercase' },
 
   // Edit/remove stage log entries
