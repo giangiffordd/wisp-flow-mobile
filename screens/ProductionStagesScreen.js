@@ -15,6 +15,8 @@ import {
   getProductionBatches,
   advanceBatchStage,
   addStageLog,
+  updateStageLog,
+  deleteStageLog,
   getStageLogsForBatch,
   fetchProductsCatalog,
 } from '../src/services/supabaseService';
@@ -70,11 +72,13 @@ export default function ProductionStagesScreen({ navigation }) {
   const [stageScanLogs,   setStageScanLogs]   = useState({});
   const [scanLogModal,    setScanLogModal]     = useState(null); // stageId of open modal
 
-  // Create batch modal
-  const [showCreateModal,  setShowCreateModal]  = useState(false);
-  const [newBatchName,     setNewBatchName]     = useState('');
-  const [newBatchSpecies,  setNewBatchSpecies]  = useState('');
-  const [isCreating,       setIsCreating]       = useState(false);
+  // Quick batch creation -- no modal, no species: tapping the FAB creates a
+  // date-named batch immediately and opens its (always-open) 12 stages.
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Species catalog for the stage-log species picker
+  const [allSpecies,     setAllSpecies]     = useState([]);
+  const [speciesLoading, setSpeciesLoading] = useState(false);
 
   // Log entry modal -- one row per specimen type (count + species), plus an
   // optional free-text note for the whole entry.
@@ -84,11 +88,15 @@ export default function ProductionStagesScreen({ navigation }) {
   const [logNote,        setLogNote]        = useState('');
   const [isLoggingStage, setIsLoggingStage] = useState(false);
 
-  // Species catalog for the log-entry species picker
-  const [allSpecies,     setAllSpecies]     = useState([]);
-  const [speciesLoading, setSpeciesLoading] = useState(false);
+  // Species picker sub-modal, opened from a specific log row
   const [speciesPickerRowKey, setSpeciesPickerRowKey] = useState(null);
   const [speciesPickerSearch, setSpeciesPickerSearch] = useState('');
+
+  // Edit/remove entries for a stage -- replaces the old sequential
+  // "STAGE DONE" advance button now that all stages are always open.
+  const [editStage,      setEditStage]      = useState(null);
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editingText,    setEditingText]    = useState('');
 
   const loadBatches = useCallback(async () => {
     const data = await getProductionBatches();
@@ -143,7 +151,8 @@ export default function ProductionStagesScreen({ navigation }) {
     setIsRefreshing(false);
   };
 
-  // Species catalog for the stage-log species picker, loaded once on mount.
+  // Load the species catalog once on mount -- shared by both the create-batch
+  // autocomplete and the stage-log species picker, not just the create modal.
   useEffect(() => {
     setSpeciesLoading(true);
     fetchProductsCatalog()
@@ -152,27 +161,16 @@ export default function ProductionStagesScreen({ navigation }) {
       .finally(() => setSpeciesLoading(false));
   }, []);
 
-  // Auto-name the batch from today's date when the create modal opens.
-  useEffect(() => {
-    if (!showCreateModal) return;
-    setNewBatchName(formatBatchDate(new Date()));
-  }, [showCreateModal]);
-
-  // ── Create batch ──
-  const handleCreateBatch = async () => {
-    const name = newBatchName.trim();
-    const species = newBatchSpecies.trim();
-    if (!name) { Alert.alert('Required', 'Enter a batch name.'); return; }
+  // ── Create batch — instant, date-named, no species, straight to stages ──
+  const handleQuickCreateBatch = async () => {
+    if (isCreating) return;
     setIsCreating(true);
-    const created = await createProductionBatch(name, species || 'Unspecified');
+    const created = await createProductionBatch(formatBatchDate(new Date()), 'Unspecified');
     setIsCreating(false);
     if (!created) {
       Alert.alert('Error', 'Could not create batch. Check your connection.');
       return;
     }
-    setShowCreateModal(false);
-    setNewBatchName('');
-    setNewBatchSpecies('');
     await loadBatches();
     setSelectedBatch(created);
   };
@@ -236,47 +234,58 @@ export default function ProductionStagesScreen({ navigation }) {
     await loadLogsForBatch(selectedBatch);
   };
 
-  // ── Advance stage ──
-  const handleAdvanceStage = (stage) => {
-    const currentStage = selectedBatch.current_stage;
-    if (stage.id !== currentStage) return;
-
-    if (stage.type === 'scan' && (stageScanCounts[stage.id] || 0) === 0) {
-      Alert.alert(
-        'Scan Required',
-        stage.id === 12
-          ? 'Scan at least one package barcode before marking this stage complete.'
-          : 'Launch the scanner and complete at least one scan before marking this stage done.',
-      );
-      return;
-    }
-
-    const nextStage = currentStage + 1;
-    const label = nextStage > 12 ? 'mark this batch as completed' : `advance to Stage ${nextStage}: ${STAGES[nextStage - 1]?.name}`;
+  // ── Mark whole batch complete — stages are always open, no per-stage
+  // advancement anymore, so completion is one manual action for the batch. ──
+  const handleMarkComplete = () => {
     Alert.alert(
-      'Confirm',
-      `Are you sure you want to ${label}?`,
+      'Mark Batch Complete',
+      'Are you sure you want to mark this batch as completed?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: nextStage > 12 ? 'Complete' : 'Advance',
+          text: 'Complete',
           onPress: async () => {
-            const ok = await advanceBatchStage(selectedBatch.id, nextStage);
-            if (!ok) { Alert.alert('Error', 'Could not advance stage. Check your connection.'); return; }
-            // Clear this stage's scan count + log now that it's done
-            await AsyncStorage.multiRemove([
-              `stage_scan_count_${selectedBatch.id}_${stage.id}`,
-              `stage_scan_log_${selectedBatch.id}_${stage.id}`,
-            ]).catch(() => {});
-            setStageScanCounts(prev => ({ ...prev, [stage.id]: 0 }));
-            setStageScanLogs(prev => ({ ...prev, [stage.id]: [] }));
-            const updated = { ...selectedBatch, current_stage: nextStage, status: nextStage > 12 ? 'completed' : 'in_progress' };
+            const ok = await advanceBatchStage(selectedBatch.id, 13); // any value > 12 = completed
+            if (!ok) { Alert.alert('Error', 'Could not mark batch complete. Check your connection.'); return; }
+            const updated = { ...selectedBatch, current_stage: 13, status: 'completed' };
             setSelectedBatch(updated);
             setBatches(prev => prev.map(b => b.id === updated.id ? updated : b));
           },
         },
       ]
     );
+  };
+
+  // ── Edit/remove a stage's logged entries ──
+  const openEditModal = (stage) => setEditStage(stage);
+  const closeEditModal = () => { setEditStage(null); setEditingEntryId(null); setEditingText(''); };
+
+  const startEditEntry = (entry) => { setEditingEntryId(entry.id); setEditingText(entry.log_text); };
+  const cancelEditEntry = () => { setEditingEntryId(null); setEditingText(''); };
+
+  const saveEditEntry = async () => {
+    const text = editingText.trim();
+    if (!text) return;
+    const ok = await updateStageLog(editingEntryId, text);
+    if (!ok) { Alert.alert('Error', 'Could not save changes. Check your connection.'); return; }
+    setEditingEntryId(null);
+    setEditingText('');
+    await loadLogsForBatch(selectedBatch);
+  };
+
+  const handleDeleteEntry = (entry) => {
+    Alert.alert('Delete Entry', 'Remove this log entry? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          const ok = await deleteStageLog(entry.id);
+          if (!ok) { Alert.alert('Error', 'Could not delete entry. Check your connection.'); return; }
+          await loadLogsForBatch(selectedBatch);
+        },
+      },
+    ]);
   };
 
   // ── Launch scanner — stage 12 uses barcode scanner, others use YOLO ──
@@ -298,14 +307,10 @@ export default function ProductionStagesScreen({ navigation }) {
 
   // ─── Render helpers ──────────────────────────────────────────
 
-  const getStageStatus = (stageId) => {
-    if (!selectedBatch) return 'future';
-    if (selectedBatch.status === 'completed' || stageId < selectedBatch.current_stage) return 'done';
-    if (stageId === selectedBatch.current_stage) return 'active';
-    return 'future';
-  };
-
   const logsForStage = (stageId) => stageLogs.filter(l => l.stage_number === stageId);
+
+  const stageHasActivity = (stage) =>
+    logsForStage(stage.id).length > 0 || (stage.type === 'scan' && (stageScanCounts[stage.id] || 0) > 0);
 
   // ─── Batch list ──────────────────────────────────────────────
 
@@ -337,73 +342,30 @@ export default function ProductionStagesScreen({ navigation }) {
                 <View style={styles.batchCardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.batchCardName}>{batch.batch_name}</Text>
-                    <Text style={styles.batchCardSpecies}>{batch.species}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                    <View style={[
-                      styles.statusBadge,
-                      batch.status === 'completed' ? styles.badgeDone : styles.badgeActive,
-                    ]}>
-                      <Text style={[
-                        styles.statusBadgeText,
-                        batch.status === 'completed' ? styles.badgeDoneText : styles.badgeActiveText,
-                      ]}>
-                        {batch.status === 'completed' ? 'COMPLETED' : `STAGE ${batch.current_stage} / 12`}
+                    <View style={[styles.statusBadge, batch.status === 'completed' ? styles.badgeDone : styles.badgeActive]}>
+                      <Text style={[styles.statusBadgeText, batch.status === 'completed' ? styles.badgeDoneText : styles.badgeActiveText]}>
+                        {batch.status === 'completed' ? 'COMPLETED' : 'ACTIVE'}
                       </Text>
                     </View>
                     <ChevronRight size={18} color={B.accentDim} />
                   </View>
-                </View>
-                {/* Mini progress bar */}
-                <View style={styles.progressTrack}>
-                  <View style={[styles.progressFill, { width: `${Math.min((batch.current_stage - 1) / 12 * 100, 100)}%` }]} />
                 </View>
               </TouchableOpacity>
             ))
           )}
         </ScrollView>
 
-        {/* FAB */}
+        {/* FAB — creates a batch immediately, no modal */}
         <TouchableOpacity
           style={[styles.fab, { bottom: insets.bottom + 16 }]}
-          onPress={() => setShowCreateModal(true)}
+          onPress={handleQuickCreateBatch}
           activeOpacity={0.85}
+          disabled={isCreating}
         >
-          <Plus size={26} color={B.bg} />
+          {isCreating ? <ActivityIndicator color={B.bg} size="small" /> : <Plus size={26} color={B.bg} />}
         </TouchableOpacity>
-
-        {/* Create batch modal */}
-        <Modal visible={showCreateModal} transparent animationType="fade">
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>[ NEW PRODUCTION BATCH ]</Text>
-              </View>
-              <View style={{ padding: 20, gap: 12 }}>
-                <Text style={styles.inputLabel}>[ BATCH NAME ]</Text>
-                <View style={[styles.input, styles.inputReadOnly]}>
-                  <Text style={styles.inputReadOnlyText}>{newBatchName}</Text>
-                </View>
-                <Text style={styles.inputLabel}>[ SPECIES ]</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Species (e.g. Papilio ulysses)"
-                  placeholderTextColor={B.textMuted}
-                  value={newBatchSpecies}
-                  onChangeText={setNewBatchSpecies}
-                />
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.btnSecondary} onPress={() => setShowCreateModal(false)}>
-                    <Text style={styles.btnSecondaryText}>CANCEL</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.btnPrimary} onPress={handleCreateBatch} disabled={isCreating}>
-                    {isCreating ? <ActivityIndicator color={B.bg} size="small" /> : <Text style={styles.btnPrimaryText}>CREATE</Text>}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </View>
     );
   }
@@ -411,6 +373,10 @@ export default function ProductionStagesScreen({ navigation }) {
   // ─── Batch detail — 12-stage timeline ────────────────────────
 
   const isCompleted = selectedBatch.status === 'completed';
+  const loggedStageNames = STAGES.filter(stageHasActivity).map(s => s.name);
+  const summaryText = loggedStageNames.length > 0
+    ? `Logged: ${loggedStageNames.join(', ')}`
+    : 'No stages logged yet';
 
   return (
     <View style={[styles.root, { paddingBottom: insets.bottom }]}>
@@ -421,7 +387,7 @@ export default function ProductionStagesScreen({ navigation }) {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.detailTitle} numberOfLines={1}>{selectedBatch.batch_name}</Text>
-          <Text style={styles.detailSubtitle}>{selectedBatch.species}</Text>
+          <Text style={styles.detailSubtitle} numberOfLines={1}>{summaryText}</Text>
         </View>
         {isCompleted && (
           <View style={styles.completedBadge}>
@@ -435,45 +401,30 @@ export default function ProductionStagesScreen({ navigation }) {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={B.accent} />}
       >
         {STAGES.map((stage, idx) => {
-          const status  = getStageStatus(stage.id);
-          const logs    = logsForStage(stage.id);
-          const isActive = status === 'active';
-          const isDone   = status === 'done';
-          const isFuture = status === 'future';
-          const isScan   = stage.type === 'scan';
-          const isLast   = idx === STAGES.length - 1;
+          const logs        = logsForStage(stage.id);
+          const hasActivity = stageHasActivity(stage);
+          const isScan       = stage.type === 'scan';
+          const isLast       = idx === STAGES.length - 1;
 
           return (
             <View key={stage.id} style={styles.stageRow}>
-              {/* Timeline line + dot */}
+              {/* Timeline line + dot — every stage is always open, the dot
+                  just reflects whether anything's been logged yet */}
               <View style={styles.timelineSide}>
-                <View style={[
-                  styles.stageDot,
-                  isDone   && styles.stageDotDone,
-                  isActive && styles.stageDotActive,
-                  isFuture && styles.stageDotFuture,
-                ]}>
-                  {isDone
+                <View style={[styles.stageDot, hasActivity && styles.stageDotDone]}>
+                  {hasActivity
                     ? <CheckCircle2 size={14} color={B.bg} />
-                    : <Text style={[styles.stageDotNum, isFuture && styles.stageDotNumFuture]}>{stage.id}</Text>
+                    : <Text style={styles.stageDotNum}>{stage.id}</Text>
                   }
                 </View>
-                {!isLast && <View style={[styles.timelineLine, isDone && styles.timelineLineDone]} />}
+                {!isLast && <View style={[styles.timelineLine, hasActivity && styles.timelineLineDone]} />}
               </View>
 
               {/* Stage card */}
-              <View style={[
-                styles.stageCard,
-                isActive && styles.stageCardActive,
-                isDone   && styles.stageCardDone,
-                isFuture && styles.stageCardFuture,
-              ]}>
-                {/* Left accent bar for active stage */}
-                {isActive && <View style={styles.stageActiveAccent} />}
-
+              <View style={[styles.stageCard, hasActivity && styles.stageCardDone]}>
                 <View style={styles.stageCardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.stageName, isFuture && styles.stageNameFuture]}>{stage.name}</Text>
+                    <Text style={styles.stageName}>{stage.name}</Text>
                     {isScan && stage.id !== 12 && (
                       <View style={styles.scanTag}>
                         <ScanLine size={11} color={B.accent} />
@@ -481,23 +432,31 @@ export default function ProductionStagesScreen({ navigation }) {
                       </View>
                     )}
                   </View>
-                  {/* Inline scan count pill — replaces the full-width count row */}
-                  {isScan && isActive && (stageScanCounts[stage.id] || 0) > 0 && (
+                  {/* Scan log button — shows for every scan stage */}
+                  {isScan && (
                     <TouchableOpacity
-                      style={styles.scanCountPill}
-                      onPress={() => setScanLogModal(stage.id)}
-                      activeOpacity={0.7}
+                      style={[
+                        styles.scanCountPill,
+                        (stageScanCounts[stage.id] || 0) > 0 && styles.scanCountPillFilled,
+                      ]}
+                      onPress={() => (stageScanCounts[stage.id] || 0) > 0 && setScanLogModal(stage.id)}
+                      activeOpacity={(stageScanCounts[stage.id] || 0) > 0 ? 0.75 : 1}
                     >
-                      <ScanLine size={10} color={B.accent} />
-                      <Text style={styles.scanCountPillText}>{stageScanCounts[stage.id]}</Text>
+                      <ScanLine size={11} color={(stageScanCounts[stage.id] || 0) > 0 ? B.bg : B.textMuted} />
+                      <Text style={[
+                        styles.scanCountPillText,
+                        (stageScanCounts[stage.id] || 0) > 0 && styles.scanCountPillTextFilled,
+                      ]}>
+                        {(stageScanCounts[stage.id] || 0) > 0
+                          ? `${stageScanCounts[stage.id]} SCAN LOG`
+                          : '0 SCANS'}
+                      </Text>
+                      {(stageScanCounts[stage.id] || 0) > 0 && (
+                        <ChevronRight size={11} color="#FFFFFF" />
+                      )}
                     </TouchableOpacity>
                   )}
-                  {isDone && <CheckCircle2 size={18} color={B.success} />}
-                  {isActive && !isCompleted && (
-                    <View style={styles.activePill}>
-                      <Text style={styles.activePillText}>ACTIVE</Text>
-                    </View>
-                  )}
+                  {hasActivity && <CheckCircle2 size={18} color={B.success} />}
                 </View>
 
                 {/* Existing logs for this stage */}
@@ -512,42 +471,25 @@ export default function ProductionStagesScreen({ navigation }) {
                   </View>
                 )}
 
-                {/* Action buttons — only for active stage */}
-                {isActive && !isCompleted && (
+                {/* Action buttons — every stage is open; skip/edit/add in any
+                    order. EDIT replaces the old sequential "STAGE DONE". */}
+                {!isCompleted && (
                   <View style={styles.stageActions}>
-                    {isScan ? (
-                      <>
-                        {/* Full-width primary action */}
-                        <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
-                          <ScanLine size={14} color={B.bg} />
-                          <Text style={styles.btnScanText}>LAUNCH SCANNER</Text>
-                        </TouchableOpacity>
-                        {/* Secondary row */}
-                        <View style={styles.btnSecondaryRow}>
-                          <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
-                            <ClipboardList size={13} color={B.accent} />
-                            <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.btnAdvance} onPress={() => handleAdvanceStage(stage)}>
-                            <Text style={styles.btnAdvanceText} numberOfLines={1}>
-                              {stage.id === 12 ? 'MARK COMPLETE' : 'STAGE DONE'}
-                            </Text>
-                            <ChevronRight size={13} color={B.bg} />
-                          </TouchableOpacity>
-                        </View>
-                      </>
-                    ) : (
-                      <>
-                        <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
-                          <ClipboardList size={14} color={B.accent} />
-                          <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.btnAdvance} onPress={() => handleAdvanceStage(stage)}>
-                          <Text style={styles.btnAdvanceText} numberOfLines={1}>STAGE DONE</Text>
-                          <ChevronRight size={14} color={B.bg} />
-                        </TouchableOpacity>
-                      </>
+                    {isScan && (
+                      <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
+                        <ScanLine size={14} color={B.bg} />
+                        <Text style={styles.btnScanText}>LAUNCH SCANNER</Text>
+                      </TouchableOpacity>
                     )}
+                    <View style={styles.btnSecondaryRow}>
+                      <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
+                        <ClipboardList size={13} color={B.accent} />
+                        <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.btnEdit} onPress={() => openEditModal(stage)}>
+                        <Text style={styles.btnEditText} numberOfLines={1}>EDIT</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 )}
               </View>
@@ -555,12 +497,17 @@ export default function ProductionStagesScreen({ navigation }) {
           );
         })}
 
-        {isCompleted && (
+        {isCompleted ? (
           <View style={styles.completedBanner}>
             <CheckCircle2 size={28} color={B.success} />
-            <Text style={styles.completedBannerText}>ALL 12 STAGES COMPLETE</Text>
-            <Text style={styles.completedBannerSub}>This batch has been fully processed.</Text>
+            <Text style={styles.completedBannerText}>BATCH COMPLETE</Text>
+            <Text style={styles.completedBannerSub}>This batch has been marked as completed.</Text>
           </View>
+        ) : (
+          <TouchableOpacity style={styles.btnMarkComplete} onPress={handleMarkComplete} activeOpacity={0.85}>
+            <CheckCircle2 size={16} color={B.bg} />
+            <Text style={styles.btnMarkCompleteText}>MARK BATCH COMPLETE</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
 
@@ -684,6 +631,66 @@ export default function ProductionStagesScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Edit/remove entries for a stage */}
+      <Modal visible={editStage !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>[ EDIT STAGE {editStage?.id}: {editStage?.name?.toUpperCase()} ]</Text>
+            </View>
+            <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled">
+              {editStage && logsForStage(editStage.id).length === 0 ? (
+                <Text style={{ color: B.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: 20 }}>
+                  No entries logged yet for this stage.
+                </Text>
+              ) : editStage && logsForStage(editStage.id).map(entry => (
+                <View key={entry.id} style={styles.editEntryRow}>
+                  {editingEntryId === entry.id ? (
+                    <>
+                      <TextInput
+                        style={[styles.input, styles.inputMultiline]}
+                        value={editingText}
+                        onChangeText={setEditingText}
+                        multiline
+                        autoFocus
+                      />
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                        <TouchableOpacity style={styles.btnSecondary} onPress={cancelEditEntry}>
+                          <Text style={styles.btnSecondaryText}>CANCEL</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.btnPrimary} onPress={saveEditEntry}>
+                          <Text style={styles.btnPrimaryText}>SAVE</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.logText}>{entry.log_text}</Text>
+                      <Text style={styles.logTime}>
+                        {new Date(entry.logged_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+                        <TouchableOpacity onPress={() => startEditEntry(entry)} activeOpacity={0.7}>
+                          <Text style={styles.editLink}>EDIT</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDeleteEntry(entry)} activeOpacity={0.7}>
+                          <Text style={styles.deleteLink}>DELETE</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border }}>
+              <TouchableOpacity style={[styles.btnSecondary, { flex: 0 }]} onPress={closeEditModal} activeOpacity={0.7}>
+                <Text style={styles.btnSecondaryText}>CLOSE</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Scan log modal */}
       <Modal visible={scanLogModal !== null} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -776,7 +783,6 @@ const styles = StyleSheet.create({
   },
   batchCardRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   batchCardName:  { fontSize: 14, fontWeight: '700', color: B.textPri },
-  batchCardSpecies: { fontSize: 12, color: B.textMuted, marginTop: 2, fontStyle: 'italic' },
 
   statusBadge:    { borderRadius: 0, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   badgeActive:    { backgroundColor: 'rgba(143,164,184,0.12)', borderColor: B.accent },
@@ -784,9 +790,6 @@ const styles = StyleSheet.create({
   statusBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
   badgeActiveText: { color: B.accent },
   badgeDoneText:  { color: B.success },
-
-  progressTrack:  { height: 3, backgroundColor: B.border, borderRadius: 0 },
-  progressFill:   { height: 3, backgroundColor: B.accent, borderRadius: 0 },
 
   fab: {
     position: 'absolute',
@@ -845,10 +848,7 @@ const styles = StyleSheet.create({
     backgroundColor: B.accent,
   },
   stageDotDone:   { backgroundColor: B.success },
-  stageDotActive: { backgroundColor: B.accent },
-  stageDotFuture: { backgroundColor: B.border },
   stageDotNum:    { fontSize: 11, fontWeight: '800', color: B.bg },
-  stageDotNumFuture: { color: B.textMuted },
   timelineLine:   { width: 2, flex: 1, minHeight: 16, backgroundColor: B.border, marginTop: 2 },
   timelineLineDone: { backgroundColor: B.success },
 
@@ -862,34 +862,13 @@ const styles = StyleSheet.create({
     backgroundColor: B.bgCard,
     overflow: 'hidden',
   },
-  stageActiveAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: B.accent,
-  },
-  stageCardActive: { borderColor: B.borderActive },
   stageCardDone:  { borderColor: B.success, opacity: 0.85 },
-  stageCardFuture: { opacity: 0.45 },
 
   stageCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, padding: 12, paddingLeft: 16, gap: 10 },
   stageName:      { fontSize: 13, fontWeight: '700', color: B.textPri },
-  stageNameFuture: { color: B.textMuted },
 
   scanTag:        { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   scanTagText:    { fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 1.5 },
-
-  activePill: {
-    backgroundColor: 'rgba(143,164,184,0.12)',
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: B.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  activePillText: { fontSize: 9, fontWeight: '700', color: B.accent, letterSpacing: 1.5 },
 
   logsContainer: {
     borderTopWidth: 1,
@@ -924,17 +903,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: B.accent,
-    backgroundColor: 'rgba(91,33,217,0.06)',
+    borderColor: B.border,
+    backgroundColor: B.bg,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 5,
     marginRight: 6,
   },
+  scanCountPillFilled: {
+    borderColor: '#0891B2',
+    backgroundColor: '#0891B2',
+  },
   scanCountPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    color: B.accent,
-    letterSpacing: 0.5,
+    color: B.textMuted,
+    letterSpacing: 0.8,
+  },
+  scanCountPillTextFilled: {
+    color: '#FFFFFF',
   },
   btnScanFull: {
     flexDirection: 'row',
@@ -1024,7 +1010,7 @@ const styles = StyleSheet.create({
     backgroundColor: B.accent,
   },
   btnScanText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 2 },
-  btnAdvance: {
+  btnEdit: {
     flex: 1,
     minWidth: 130,
     flexDirection: 'row',
@@ -1034,13 +1020,36 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 6,
     borderRadius: 0,
-    backgroundColor: B.success,
+    borderWidth: 1,
+    borderColor: B.textMuted,
+    backgroundColor: 'transparent',
   },
-  btnAdvanceText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 1, flexShrink: 1, textAlign: 'center' },
+  btnEditText: { fontSize: 11, fontWeight: '800', color: B.textMuted, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
 
   completedBanner: { alignItems: 'center', paddingTop: 24, gap: 8 },
   completedBannerText: { fontSize: 14, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
   completedBannerSub:  { fontSize: 13, color: B.textMuted },
+  btnMarkComplete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 0,
+    backgroundColor: B.success,
+  },
+  btnMarkCompleteText: { fontSize: 12, fontWeight: '800', color: B.bg, letterSpacing: 2, textTransform: 'uppercase' },
+
+  // Edit/remove stage log entries
+  editEntryRow: {
+    borderWidth: 1,
+    borderColor: B.border,
+    backgroundColor: B.bg,
+    padding: 10,
+  },
+  editLink:   { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1 },
+  deleteLink: { fontSize: 11, fontWeight: '800', color: B.error, letterSpacing: 1 },
 
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', paddingHorizontal: 20 },
@@ -1072,8 +1081,6 @@ const styles = StyleSheet.create({
     color: B.textPri,
   },
   inputMultiline: { minHeight: 100 },
-  inputReadOnly: { justifyContent: 'center' },
-  inputReadOnlyText: { fontSize: 14, fontWeight: '600', color: B.textPri },
 
   // Stage log rows — quantity stepper + species picker per specimen type
   logRow: {
@@ -1136,11 +1143,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // Species picker list (shared shape with create-batch autocomplete)
-  suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
-  suggestionCommon:     { fontSize: 13, fontWeight: '700', color: B.textPri },
-  suggestionScientific: { fontSize: 11, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
-
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
   btnSecondary: {
     flex: 1,
@@ -1162,4 +1164,9 @@ const styles = StyleSheet.create({
     backgroundColor: B.accent,
   },
   btnPrimaryText: { fontSize: 13, fontWeight: '800', color: B.bg, letterSpacing: 3, textTransform: 'uppercase' },
+
+  // Species picker list (log-entry species picker)
+  suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
+  suggestionCommon:     { fontSize: 13, fontWeight: '700', color: B.textPri },
+  suggestionScientific: { fontSize: 11, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
 });
