@@ -716,6 +716,19 @@ export default function YoloCameraModule({ navigation, route }) {
           scanned_at: new Date().toISOString(),
         })),
       });
+
+      // Flagged specimens also go to the `defects` review queue (preserves
+      // the manager's existing flagged view; defects never touch inventory).
+      for (const s of allSpecs.filter(x => x.qcStatus !== 'pass')) {
+        const missing = describeMissingParts(s.partsRequired, s.partsFound);
+        await supabase.from('defects').insert({
+          species: s.species,
+          missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
+          status: 'new',
+          worker: workerName || 'Unknown',
+        });
+      }
+
       if (flaggedCount > 0) await notifySpecimenFlagged(species);
     }
 
