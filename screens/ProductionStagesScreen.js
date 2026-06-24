@@ -2,14 +2,14 @@
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, Alert, ActivityIndicator, RefreshControl,
-  KeyboardAvoidingView, Keyboard, Platform,
+  KeyboardAvoidingView, Keyboard, Platform, TouchableWithoutFeedback,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Plus, ChevronRight, ChevronLeft, CheckCircle2,
-  Circle, ScanLine, ClipboardList, AlertTriangle, Trash2,
+  Circle, ScanLine, ClipboardList, AlertTriangle, Trash2, X,
 } from 'lucide-react-native';
 import {
   createProductionBatch,
@@ -713,10 +713,22 @@ export default function ProductionStagesScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
+          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowLogModal(false); }}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>[ STAGE {logStage?.id}: {logStage?.name?.toUpperCase()} ]</Text>
-              <Text style={styles.modalSubtitle}>Log today's progress</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>[ STAGE {logStage?.id}: {logStage?.name?.toUpperCase()} ]</Text>
+                <Text style={styles.modalSubtitle}>Log today's progress</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => { Keyboard.dismiss(); setShowLogModal(false); }}
+                activeOpacity={0.7}
+              >
+                <X size={18} color={B.textMuted} />
+              </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               <Text style={styles.inputLabel}>[ SPECIMENS LOGGED ]</Text>
@@ -790,9 +802,19 @@ export default function ProductionStagesScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
+          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '75%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ CHOOSE SPECIES ]</Text>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}
+                activeOpacity={0.7}
+              >
+                <X size={18} color={B.textMuted} />
+              </TouchableOpacity>
             </View>
             <View style={{ padding: 16 }}>
               <TextInput
@@ -869,9 +891,15 @@ export default function ProductionStagesScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
+          <TouchableWithoutFeedback onPress={closeEditModal}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ EDIT STAGE {editStage?.id}: {editStage?.name?.toUpperCase()} ]</Text>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={closeEditModal} activeOpacity={0.7}>
+                <X size={18} color={B.textMuted} />
+              </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {editStage && logsForStage(editStage.id).length === 0 ? (
@@ -957,14 +985,22 @@ export default function ProductionStagesScreen({ navigation }) {
       {/* Scan log modal */}
       <Modal visible={scanLogModal !== null} transparent animationType="fade">
         <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback onPress={() => setScanLogModal(null)}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                [ STAGE {scanLogModal}: {STAGES.find(s => s.id === scanLogModal)?.name?.toUpperCase()} ]
-              </Text>
-              <Text style={styles.modalSubtitle}>
-                {stageScanCounts[scanLogModal] || 0} scan{(stageScanCounts[scanLogModal] || 0) !== 1 ? 's' : ''} this session
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>
+                  [ STAGE {scanLogModal}: {STAGES.find(s => s.id === scanLogModal)?.name?.toUpperCase()} ]
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {stageScanCounts[scanLogModal] || 0} scan{(stageScanCounts[scanLogModal] || 0) !== 1 ? 's' : ''} this session
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setScanLogModal(null)} activeOpacity={0.7}>
+                <X size={18} color={B.textMuted} />
+              </TouchableOpacity>
             </View>
 
             <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16, rowGap: 8 }} nestedScrollEnabled>
@@ -1333,11 +1369,24 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     borderBottomWidth: 1,
     borderBottomColor: B.border,
     paddingHorizontal: 20,
     paddingVertical: 14,
     backgroundColor: B.bgEl,
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 0,
+    borderWidth: 1,
+    borderColor: B.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
   },
   modalTitle:    { fontSize: 12, fontWeight: '800', color: B.textPri, letterSpacing: 2, textTransform: 'uppercase' },
   modalSubtitle: { fontSize: 12, color: B.textMuted, marginTop: 4 },
@@ -1422,10 +1471,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 13,
+    minHeight: 46,
     borderRadius: 0,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: B.accent,
-    backgroundColor: 'transparent',
+    backgroundColor: '#F3EEFC',
   },
   btnSecondaryText: { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 3, textTransform: 'uppercase' },
   btnPrimary: {
