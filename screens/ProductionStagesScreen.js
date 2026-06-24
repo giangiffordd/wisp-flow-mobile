@@ -703,8 +703,12 @@ export default function ProductionStagesScreen({ navigation }) {
         )}
       </ScrollView>
 
-      {/* Log entry modal */}
-      <Modal visible={showLogModal} transparent animationType="fade">
+      {/* Log entry modal -- hidden (not unmounted) while the species picker
+          is open. Two native Modals visible at once is unreliable on
+          Android: the second can fail to actually render while still
+          eating all touch input, which looked like "no list opens, then
+          every button is dead." Only one Modal is ever visible now. */}
+      <Modal visible={showLogModal && speciesPickerTarget === null} transparent animationType="fade">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
@@ -857,8 +861,10 @@ export default function ProductionStagesScreen({ navigation }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Edit/remove entries for a stage */}
-      <Modal visible={editStage !== null} transparent animationType="fade">
+      {/* Edit/remove entries for a stage -- same reasoning as the Log modal
+          above: hidden while the species picker is open so only one
+          native Modal is ever visible at a time. */}
+      <Modal visible={editStage !== null && speciesPickerTarget === null} transparent animationType="fade">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
