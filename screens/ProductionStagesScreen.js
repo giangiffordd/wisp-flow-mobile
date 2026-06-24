@@ -185,10 +185,10 @@ export default function ProductionStagesScreen({ navigation }) {
   const [editingSpeciesDisplay, setEditingSpeciesDisplay] = useState(null);
   const [editingText,      setEditingText]      = useState('');
 
-  // Fast custom fade-in for each modal -- see useFadeIn above.
-  const logModalFade      = useFadeIn(showLogModal && speciesPickerTarget === null);
-  const speciesModalFade  = useFadeIn(speciesPickerTarget !== null);
-  const editModalFade     = useFadeIn(editStage !== null && speciesPickerTarget === null);
+  // Fast custom fade-in for each modal -- see useFadeIn above. The species
+  // picker no longer has its own Modal/fade (see renderSpeciesPickerBody).
+  const logModalFade      = useFadeIn(showLogModal);
+  const editModalFade     = useFadeIn(editStage !== null);
   const scanLogModalFade  = useFadeIn(scanLogModal !== null);
 
   const loadBatches = useCallback(async () => {
@@ -554,6 +554,93 @@ export default function ProductionStagesScreen({ navigation }) {
     );
   }
 
+  // Species picker body -- rendered INSIDE whichever modal (Add Log or
+  // Edit Entries) opened it, rather than as its own separate Modal. Two
+  // native Modal windows toggling visible at the same render (one tearing
+  // down as the other mounts) caused a visible flash on transition;
+  // swapping content within a single already-open Modal has none.
+  const renderSpeciesPickerBody = () => (
+    <>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>[ CHOOSE SPECIES ]</Text>
+        <TouchableOpacity
+          style={styles.modalCloseBtn}
+          onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}
+          activeOpacity={0.7}
+        >
+          <X size={18} color={B.textMuted} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ padding: 16 }}>
+        <TextInput
+          style={styles.input}
+          placeholder="Search species…"
+          placeholderTextColor={B.textMuted}
+          value={speciesPickerSearch}
+          onChangeText={setSpeciesPickerSearch}
+          autoCorrect={false}
+        />
+      </View>
+      <ScrollView style={{ maxHeight: 165 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+        {(() => {
+          const q = speciesPickerSearch.trim().toLowerCase();
+          // Capped at 3 so the keyboard (which on some Android keyboards
+          // already includes a number row, eating extra height) never
+          // has to fight a long list for space -- type a more specific
+          // search to narrow it down instead.
+          const filtered = allSpecies.filter(s =>
+            !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q)
+          ).slice(0, 3);
+
+          if (filtered.length > 0) {
+            return filtered.map((s, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.suggestionItem}
+                onPress={() => selectSpeciesForPicker(s)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.suggestionCommon}>{s.commonName}</Text>
+                <Text style={styles.suggestionScientific}>{s.species}</Text>
+              </TouchableOpacity>
+            ));
+          }
+
+          if (allSpecies.length === 0) {
+            return (
+              <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
+                {speciesLoading ? 'Loading species…' : 'No species available.'}
+              </Text>
+            );
+          }
+
+          // No exact/substring match -- offer the closest catalog entry
+          // instead of just showing an empty list.
+          const closest = findClosestSpecies(speciesPickerSearch, allSpecies);
+          return (
+            <View style={{ padding: 16, gap: 10 }}>
+              <Text style={{ color: B.textMuted, fontSize: 12 }}>
+                No matches for "{speciesPickerSearch.trim()}".
+              </Text>
+              {closest && (
+                <TouchableOpacity onPress={() => selectSpeciesForPicker(closest)} activeOpacity={0.7}>
+                  <Text style={{ fontSize: 13, color: B.textMuted }}>
+                    Did you mean <Text style={styles.didYouMeanLink}>{closest.commonName} ({closest.species})</Text>?
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
+      </ScrollView>
+      <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border, alignItems: 'center' }}>
+        <TouchableOpacity style={[styles.btnSecondary, { flex: 0, width: '50%' }]} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
+          <Text style={styles.btnSecondaryText}>CANCEL</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
   // ─── Batch detail — stage timeline ───────────────────────────
 
   const isCompleted = selectedBatch.status === 'completed';
@@ -732,7 +819,7 @@ export default function ProductionStagesScreen({ navigation }) {
           Android: the second can fail to actually render while still
           eating all touch input, which looked like "no list opens, then
           every button is dead." Only one Modal is ever visible now. */}
-      <Modal visible={showLogModal && speciesPickerTarget === null} transparent animationType="none">
+      <Modal visible={showLogModal} transparent animationType="none">
         <Animated.View style={{ flex: 1, opacity: logModalFade }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -742,6 +829,8 @@ export default function ProductionStagesScreen({ navigation }) {
             <View style={StyleSheet.absoluteFillObject} />
           </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
+            {speciesPickerTarget?.mode === 'row' ? renderSpeciesPickerBody() : (
+            <>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>[ STAGE {logStage?.id}: {logStage?.name?.toUpperCase()} ]</Text>
@@ -814,111 +903,19 @@ export default function ProductionStagesScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+            </>
+            )}
           </View>
         </KeyboardAvoidingView>
         </Animated.View>
       </Modal>
 
-      {/* Species picker sub-modal — shared by ADD LOG rows and entry editing.
-          Selecting from this list is the ONLY way a row's species gets set,
-          so a typed species can never be saved unless it's an actual catalog
-          match. */}
-      <Modal visible={speciesPickerTarget !== null} transparent animationType="none">
-        <Animated.View style={{ flex: 1, opacity: speciesModalFade }}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <View style={[styles.modalCard, { maxHeight: '75%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>[ CHOOSE SPECIES ]</Text>
-              <TouchableOpacity
-                style={styles.modalCloseBtn}
-                onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}
-                activeOpacity={0.7}
-              >
-                <X size={18} color={B.textMuted} />
-              </TouchableOpacity>
-            </View>
-            <View style={{ padding: 16 }}>
-              <TextInput
-                style={styles.input}
-                placeholder="Search species…"
-                placeholderTextColor={B.textMuted}
-                value={speciesPickerSearch}
-                onChangeText={setSpeciesPickerSearch}
-                autoCorrect={false}
-              />
-            </View>
-            <ScrollView style={{ maxHeight: 165 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-              {(() => {
-                const q = speciesPickerSearch.trim().toLowerCase();
-                // Capped at 3 so the keyboard (which on some Android
-                // keyboards already includes a number row, eating extra
-                // height) never has to fight a long list for space -- type
-                // a more specific search to narrow it down instead.
-                const filtered = allSpecies.filter(s =>
-                  !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q)
-                ).slice(0, 3);
-
-                if (filtered.length > 0) {
-                  return filtered.map((s, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={styles.suggestionItem}
-                      onPress={() => selectSpeciesForPicker(s)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.suggestionCommon}>{s.commonName}</Text>
-                      <Text style={styles.suggestionScientific}>{s.species}</Text>
-                    </TouchableOpacity>
-                  ));
-                }
-
-                if (allSpecies.length === 0) {
-                  return (
-                    <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
-                      {speciesLoading ? 'Loading species…' : 'No species available.'}
-                    </Text>
-                  );
-                }
-
-                // No exact/substring match -- offer the closest catalog
-                // entry instead of just showing an empty list.
-                const closest = findClosestSpecies(speciesPickerSearch, allSpecies);
-                return (
-                  <View style={{ padding: 16, gap: 10 }}>
-                    <Text style={{ color: B.textMuted, fontSize: 12 }}>
-                      No matches for "{speciesPickerSearch.trim()}".
-                    </Text>
-                    {closest && (
-                      <TouchableOpacity onPress={() => selectSpeciesForPicker(closest)} activeOpacity={0.7}>
-                        <Text style={{ fontSize: 13, color: B.textMuted }}>
-                          Did you mean <Text style={styles.didYouMeanLink}>{closest.commonName} ({closest.species})</Text>?
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              })()}
-            </ScrollView>
-            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: B.border, alignItems: 'center' }}>
-              <TouchableOpacity style={[styles.btnSecondary, { flex: 0, width: '50%' }]} onPress={() => { Keyboard.dismiss(); setSpeciesPickerTarget(null); }}>
-                <Text style={styles.btnSecondaryText}>CANCEL</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-        </Animated.View>
-      </Modal>
-
-      {/* Edit/remove entries for a stage -- same reasoning as the Log modal
-          above: hidden while the species picker is open so only one
-          native Modal is ever visible at a time. */}
-      <Modal visible={editStage !== null && speciesPickerTarget === null} transparent animationType="none">
+      {/* Edit/remove entries for a stage. The species picker (when editing a
+          structured entry) renders INSIDE this same Modal/Animated.View
+          rather than as a separate Modal -- two native Modal windows
+          toggling visible at the same instant (one tearing down as the
+          other mounts) caused a visible flash/flicker on transition. */}
+      <Modal visible={editStage !== null} transparent animationType="none">
         <Animated.View style={{ flex: 1, opacity: editModalFade }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -928,6 +925,8 @@ export default function ProductionStagesScreen({ navigation }) {
             <View style={StyleSheet.absoluteFillObject} />
           </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>
+            {speciesPickerTarget?.mode === 'editing' ? renderSpeciesPickerBody() : (
+            <>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>[ EDIT STAGE {editStage?.id}: {editStage?.name?.toUpperCase()} ]</Text>
               <TouchableOpacity style={styles.modalCloseBtn} onPress={closeEditModal} activeOpacity={0.7}>
@@ -1011,6 +1010,8 @@ export default function ProductionStagesScreen({ navigation }) {
                 <Text style={styles.btnSecondaryText}>CLOSE</Text>
               </TouchableOpacity>
             </View>
+            </>
+            )}
           </View>
         </KeyboardAvoidingView>
         </Animated.View>
