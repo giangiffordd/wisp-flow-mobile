@@ -144,10 +144,14 @@ export async function claimWorkerSession(workerId) {
   if (!supabase || !workerId) return null;
   try {
     const { data, error } = await supabase.rpc('claim_worker_session', { p_worker_id: workerId });
-    if (error) { console.error('claimWorkerSession error:', error.message); return null; }
+    // console.warn, not .error: a transient network blip here just means
+    // this device doesn't get the new session token, which is recoverable
+    // (not a crash) -- console.error pops a full-screen LogBox error on
+    // every occurrence, which is disruptive for something this routine.
+    if (error) { console.warn('claimWorkerSession error:', error.message); return null; }
     return data; // new session token (uuid)
   } catch (e) {
-    console.error('claimWorkerSession exception:', e);
+    console.warn('claimWorkerSession exception:', e.message || e);
     return null;
   }
 }
@@ -156,10 +160,14 @@ export async function isSessionActive(workerId, token) {
   if (!supabase || !workerId || !token) return true; // fail open -- don't lock workers out over a network blip
   try {
     const { data, error } = await supabase.rpc('is_session_active', { p_worker_id: workerId, p_token: token });
-    if (error) { console.error('isSessionActive error:', error.message); return true; }
+    // Same fail-open intent as above applies to the logging level too --
+    // this polls every 30s automatically, so console.error here meant a
+    // disruptive red error screen roughly twice a minute on any network
+    // hiccup, for a condition the code already explicitly tolerates.
+    if (error) { console.warn('isSessionActive error:', error.message); return true; }
     return data === true;
   } catch (e) {
-    console.error('isSessionActive exception:', e);
+    console.warn('isSessionActive exception:', e.message || e);
     return true;
   }
 }
