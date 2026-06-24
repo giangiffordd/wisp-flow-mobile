@@ -9,10 +9,9 @@ import {
   Animated,
 } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
-import { Bell, Plus, ChevronRight, RotateCcw, Trash2 } from 'lucide-react-native';
+import { Plus, ChevronRight, RotateCcw, Trash2 } from 'lucide-react-native';
 import { fmtTime, fmtDate } from '../src/utils/format';
 import useBatch, { MAX_RESCANS } from '../src/hooks/useBatch';
-import { fetchStaffAlerts } from '../src/services/supabaseService';
 
 const B = {
   bg:           '#F5F5F7',
@@ -53,7 +52,6 @@ const BATCH_STATUS = {
 export default function WorkflowModule({ navigation, route }) {
   const isFocused = useIsFocused();
   const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const [alertsPreview, setAlertsPreview] = useState([]);
 
   const {
     activeBatch,
@@ -72,17 +70,6 @@ export default function WorkflowModule({ navigation, route }) {
     if (!isFocused) { fadeAnim.setValue(0); return; }
     fadeAnim.setValue(0);
     Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
-  }, [isFocused]);
-
-  // Load real alerts preview on focus
-  useEffect(() => {
-    if (!isFocused) return;
-    (async () => {
-      try {
-        const data = await fetchStaffAlerts();
-        setAlertsPreview(data.slice(0, 3));
-      } catch {}
-    })();
   }, [isFocused]);
 
   // ── Start a new batch ──
@@ -187,45 +174,6 @@ export default function WorkflowModule({ navigation, route }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-
-          {/* ── Alerts Banner ── */}
-          <TouchableOpacity
-            style={[styles.alertsBanner, alertsPreview.length === 0 && styles.alertsBannerNeutral]}
-            onPress={() => navigation?.getParent()?.navigate('StaffAlertsNotifications')}
-            activeOpacity={0.8}
-          >
-            <View style={styles.alertsBannerLeft}>
-              <View style={styles.alertsBell}>
-                <Bell size={18} color={alertsPreview.length > 0 ? B.accent : B.textMuted} />
-                {alertsPreview.length > 0 && <View style={styles.alertsBadgeDot} />}
-              </View>
-              <View>
-                <Text style={[styles.alertsBannerTitle, alertsPreview.length === 0 && { color: B.textMuted }]}>ALERTS</Text>
-                <Text style={styles.alertsBannerSub}>
-                  {alertsPreview.length > 0
-                    ? `${alertsPreview.length} notification${alertsPreview.length !== 1 ? 's' : ''} pending`
-                    : 'No new notifications'}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.alertsTagRow}>
-              {alertsPreview.slice(0, 2).map(a => (
-                <View key={a.id} style={[
-                  styles.alertsTypeTag,
-                  a.severity === 'critical' && styles.alertsTagCritical,
-                  a.severity === 'warning'  && styles.alertsTagWarning,
-                  a.severity === 'info'     && styles.alertsTagSuccess,
-                ]}>
-                  <Text style={[
-                    styles.alertsTagText,
-                    a.severity === 'critical' && { color: B.error },
-                    a.severity === 'warning'  && { color: B.warning },
-                    a.severity === 'info'     && { color: B.accent },
-                  ]} numberOfLines={1}>{a.title}</Text>
-                </View>
-              ))}
-            </View>
-          </TouchableOpacity>
 
           {/* ── Active Batch or Start Prompt ── */}
           {activeBatch ? (
@@ -434,55 +382,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
-
-  // ── Alerts Banner ──
-  alertsBanner: {
-    backgroundColor: B.bgCard,
-    borderRadius: 0,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: B.border,
-    borderLeftWidth: 4,
-    borderLeftColor: B.accent,
-  },
-  alertsBannerNeutral: {
-    borderLeftColor: B.border,
-    opacity: 0.7,
-  },
-  alertsBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
-  alertsBell: {
-    position: 'relative',
-    width: 34, height: 34,
-    borderRadius: 0,
-    backgroundColor: B.bgEl,
-    borderWidth: 1,
-    borderColor: B.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  alertsBadgeDot: {
-    position: 'absolute',
-    top: 6, right: 6,
-    width: 7, height: 7,
-    borderRadius: 0,
-    backgroundColor: B.error,
-    borderWidth: 1,
-    borderColor: B.bgCard,
-  },
-  alertsBannerTitle: { fontSize: 13, fontWeight: '800', color: B.textPri, letterSpacing: 1.5 },
-  alertsBannerSub:   { fontSize: 11, color: B.textMuted, marginTop: 1 },
-  alertsTagRow:      { flexDirection: 'row', gap: 5, flexWrap: 'wrap' },
-  alertsTypeTag:     { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 0, borderWidth: 1, borderColor: B.border, backgroundColor: B.bgEl },
-  alertsTagCritical: { backgroundColor: B.errorBg, borderColor: B.error },
-  alertsTagWarning:  { backgroundColor: B.warningBg, borderColor: B.warning },
-  alertsTagSuccess:  { backgroundColor: B.successBg, borderColor: B.success },
-  alertsTagText:     { fontSize: 10, fontWeight: '600', color: B.textMuted },
 
   // ── Active Batch Card ──
   batchCard: {

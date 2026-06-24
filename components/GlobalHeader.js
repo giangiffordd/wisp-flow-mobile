@@ -4,7 +4,7 @@ import { LogOut, Bell } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 
-export default function GlobalHeader({ title, onLogout, onBell, onBrandPress }) {
+export default function GlobalHeader({ title, onLogout, onBell, onBrandPress, hasUnread }) {
   const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -37,6 +37,7 @@ export default function GlobalHeader({ title, onLogout, onBell, onBrandPress }) 
         {onBell && (
           <TouchableOpacity onPress={onBell} style={styles.iconButton} activeOpacity={0.7}>
             <Bell size={17} color={COLORS.textOnDark} />
+            {hasUnread && <View style={styles.unreadDot} />}
           </TouchableOpacity>
         )}
         {onLogout && (
@@ -100,10 +101,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconButton: {
+    position: 'relative',
     padding: 7,
     backgroundColor: 'rgba(0,0,0,0.04)',
     borderRadius: 0,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 0,
+    backgroundColor: '#EF4444',
+    borderWidth: 1,
+    borderColor: COLORS.headerBg,
   },
 });

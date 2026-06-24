@@ -1,4 +1,4 @@
-﻿import React from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Platform, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,10 +9,27 @@ import TaskHistoryPendingLogs from '../screens/TaskHistoryPendingLogs';
 import ProductionStagesScreen from '../screens/ProductionStagesScreen';
 import GlobalHeader from '../components/GlobalHeader';
 import { clearWorkerSession } from '../src/services/workerSession';
+import { fetchStaffAlerts } from '../src/services/supabaseService';
 
 const Tab = createBottomTabNavigator();
+const UNREAD_POLL_MS = 30000;
 
 export default function MainAppNavigator({ navigation }) {
+  const [hasUnread, setHasUnread] = useState(false);
+
+  // Poll for unread alerts so the bell badge stays current across all tabs,
+  // not just whenever the alerts screen happens to be visited.
+  useEffect(() => {
+    let cancelled = false;
+    const checkUnread = async () => {
+      const alerts = await fetchStaffAlerts();
+      if (!cancelled) setHasUnread(alerts.length > 0);
+    };
+    checkUnread();
+    const interval = setInterval(checkUnread, UNREAD_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
   const handleLogout = () => {
     Alert.alert(
       'Log Out',
@@ -73,6 +90,7 @@ export default function MainAppNavigator({ navigation }) {
             onLogout={handleLogout}
             onBell={handleBell}
             onBrandPress={() => nav.navigate('Workflow')}
+            hasUnread={hasUnread}
           />
         ),
       })}
