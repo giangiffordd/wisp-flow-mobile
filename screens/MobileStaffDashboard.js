@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react-native';
-import { loginWorker, savePushToken } from '../src/services/supabaseService';
+import { loginWorker, savePushToken, claimWorkerSession } from '../src/services/supabaseService';
 import { setWorkerSession, getWorkerSession } from '../src/services/workerSession';
 import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
@@ -115,6 +115,10 @@ export default function MobileStaffDashboard({ navigation }) {
       if (session) {
         setLoginAttempts(0);
         setLockedUntil(null);
+        // Claims this device as the active session for this worker --
+        // any other device already logged in as them will get logged out
+        // next time its periodic check runs (see MainAppNavigator).
+        session.sessionToken = await claimWorkerSession(session.id);
         await setWorkerSession(session);
         Notifications.getExpoPushTokenAsync()
           .then(t => { if (t?.data) savePushToken(session.id, t.data); })
