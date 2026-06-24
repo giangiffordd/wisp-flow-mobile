@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Plus, ChevronRight, ChevronLeft, CheckCircle2,
-  Circle, ScanLine, ClipboardList, AlertTriangle, Trash2, X,
+  Circle, ScanLine, ClipboardList, AlertTriangle, Trash2, X, Clock,
 } from 'lucide-react-native';
 import {
   createProductionBatch,
@@ -534,10 +534,23 @@ export default function ProductionStagesScreen({ navigation }) {
             </View>
           ) : (
             batches.map(batch => (
-              <TouchableOpacity key={batch.id} style={styles.batchCard} onPress={() => setSelectedBatch(batch)} activeOpacity={0.75}>
+              <TouchableOpacity
+                key={batch.id}
+                style={[styles.batchCard, { borderLeftWidth: 3, borderLeftColor: batch.status === 'completed' ? B.success : B.accent }]}
+                onPress={() => setSelectedBatch(batch)}
+                activeOpacity={0.75}
+              >
                 <View style={styles.batchCardRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.batchCardName}>{batch.batch_name}</Text>
+                    {batch.created_at && (
+                      <View style={styles.batchCardMetaRow}>
+                        <Clock size={12} color={B.textMuted} />
+                        <Text style={styles.batchCardMeta}>
+                          Created {new Date(batch.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <View style={[styles.statusBadge, batch.status === 'completed' ? styles.badgeDone : styles.badgeActive]}>
@@ -798,7 +811,7 @@ export default function ProductionStagesScreen({ navigation }) {
                   )}
                   <View style={styles.btnSecondaryRow}>
                     {!isCompleted && (
-                      <TouchableOpacity style={styles.btnLog} onPress={() => openLogModal(stage)}>
+                      <TouchableOpacity style={[styles.btnLog, logs.length === 0 && styles.btnLogAlone]} onPress={() => openLogModal(stage)}>
                         <ClipboardList size={13} color={B.accent} />
                         <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
                       </TouchableOpacity>
@@ -1132,8 +1145,10 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  batchCardRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  batchCardRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
   batchCardName:  { fontSize: 14, fontWeight: '700', color: B.textPri },
+  batchCardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  batchCardMeta:  { fontSize: 11, color: B.textMuted, fontWeight: '500' },
 
   statusBadge:    { borderRadius: 0, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   badgeActive:    { backgroundColor: 'rgba(143,164,184,0.12)', borderColor: B.accent },
@@ -1295,6 +1310,7 @@ const styles = StyleSheet.create({
   btnSecondaryRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 8,
     width: '100%',
   },
@@ -1361,6 +1377,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   btnLogText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
+  // When ADD LOG is the only action (stage has no entries yet, so no EDIT),
+  // it shouldn't stretch edge-to-edge -- size to content and center it.
+  btnLogAlone: { flex: 0, paddingHorizontal: 36 },
   btnScan: {
     flexDirection: 'row',
     alignItems: 'center',
