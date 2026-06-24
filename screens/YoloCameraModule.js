@@ -892,7 +892,7 @@ export default function YoloCameraModule({ navigation, route }) {
         <View style={styles.workerBar}>
           <Text style={styles.workerBarName}>OPERATOR: {workerName.toUpperCase()}</Text>
           <Text style={styles.workerBarStats}>
-            {dailyStats.scanned} scanned · {dailyStats.scanned > 0 ? Math.round((dailyStats.passed / dailyStats.scanned) * 100) : 0}% pass rate
+            {dailyStats.scanned} this session · {dailyStats.scanned > 0 ? Math.round((dailyStats.passed / dailyStats.scanned) * 100) : 0}% pass
           </Text>
         </View>
       )}
@@ -953,13 +953,10 @@ export default function YoloCameraModule({ navigation, route }) {
 
           </>
         ) : (
-          <View style={StyleSheet.absoluteFillObject}>
-            <View style={styles.cameraOverlayTop}>
-              <View style={styles.glassBadge}>
-                <Text style={[styles.glassBadgeText, { color: '#fb7185' }]}>SIMULATION MODE</Text>
-              </View>
-            </View>
-          </View>
+          // Camera permission denied. Simulation no longer exists, so there's
+          // no "SIMULATION MODE" -- the centered prompt below shows the
+          // "Camera permission required" message + Enable link instead.
+          <View style={StyleSheet.absoluteFillObject} />
         )}
 
         <View style={styles.cameraMockup}>
@@ -1077,8 +1074,12 @@ export default function YoloCameraModule({ navigation, route }) {
               <TouchableOpacity
                 style={[
                   styles.startButton,
-                  (isCooldown || apiStatus === 'offline') && { backgroundColor: '#E5E7EB', borderColor: '#E5E7EB' },
-                  isRepairMode && apiStatus !== 'offline' && { borderColor: '#f59e0b', borderWidth: 1.5 },
+                  // Cooldown ("clearing the table" between scans) uses the
+                  // app's amber accent, not dead gray -- it's a transient
+                  // wait state, not a disabled one. Offline stays gray.
+                  isCooldown && { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
+                  apiStatus === 'offline' && { backgroundColor: '#E5E7EB', borderColor: '#E5E7EB' },
+                  isRepairMode && apiStatus !== 'offline' && !isCooldown && { borderColor: '#f59e0b', borderWidth: 1.5 },
                 ]}
                 onPress={handleCapture}
                 disabled={isCooldown || apiStatus === 'offline'}
@@ -1326,42 +1327,47 @@ export default function YoloCameraModule({ navigation, route }) {
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
             >
-              {pendingScans.map((entry, idx) => {
-                const primary = entry.specimens[0];
-                const flaggedCount = entry.specimens.filter(s => s.qcStatus !== 'pass').length;
-                return (
-                  <View
-                    key={entry.id}
-                    style={[
-                      styles.sessionLogEntry,
-                      idx === 0 && (flaggedCount > 0 ? styles.sessionLogEntryLatestFlagged : styles.sessionLogEntryLatest),
-                    ]}
-                  >
-                    <View style={styles.sessionEntryLeft}>
-                      <View style={[
-                        styles.sessionEntryDot,
-                        idx === 0 && { backgroundColor: flaggedCount > 0 ? '#ef4444' : '#10b981' }
-                      ]} />
-                      <View>
-                        <Text style={styles.sessionEntrySpecies}>
-                          {primary.species}{entry.specimens.length > 1 ? ` +${entry.specimens.length - 1} more` : ''}
-                        </Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 1 }}>
-                          <Text style={styles.sessionEntryMeta}>{primary.commonName} · {entry.timestamp}</Text>
-                          <View style={[styles.qcBadgeMini, flaggedCount > 0 ? styles.qcBadgeFlagged : styles.qcBadgePass]}>
-                            <Text style={[styles.qcBadgeTextMini, flaggedCount > 0 ? styles.qcBadgeTextFlagged : styles.qcBadgeTextPass]}>
-                              {flaggedCount > 0 ? 'FLAGGED' : 'PASS'}
-                            </Text>
-                          </View>
+              {(() => {
+                // Group kept captures by their AI-detected species, so a
+                // worker doing several species in one session (e.g. 5
+                // Papilio ulysses in the morning, then 6 Papilio thoas in
+                // the afternoon) gets a clean per-species breakdown with
+                // subtotals. The species is read from the model on each
+                // scan -- there's nothing to pick by hand, and a mis-tagged
+                // scan can just be deleted from its group.
+                const groups = {};
+                for (const entry of pendingScans) {
+                  const sp = entry.specimens[0]?.species || 'Unknown';
+                  (groups[sp] = groups[sp] || []).push(entry);
+                }
+                return Object.keys(groups).sort().map(species => {
+                  const entries = groups[species];
+                  const common = entries[0].specimens[0]?.commonName;
+                  return (
+                    <View key={species} style={{ marginBottom: 6 }}>
+                      <View style={styles.speciesGroupHeader}>
+                        <Text style={styles.speciesGroupName} numberOfLines={1}>{species}</Text>
+                        <View style={styles.speciesGroupCount}>
+                          <Text style={styles.speciesGroupCountText}>×{entries.length}</Text>
                         </View>
                       </View>
+                      {entries.map(entry => (
+                        <View key={entry.id} style={styles.sessionLogEntry}>
+                          <View style={styles.sessionEntryLeft}>
+                            <View style={[styles.sessionEntryDot, { backgroundColor: '#10b981' }]} />
+                            <Text style={styles.sessionEntryMeta} numberOfLines={1}>
+                              {common ? common + ' · ' : ''}{entry.timestamp}
+                            </Text>
+                          </View>
+                          <TouchableOpacity onPress={() => handleDeletePending(entry.id)} style={styles.clearLogButton}>
+                            <Trash2 size={15} color="#ef4444" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
                     </View>
-                    <TouchableOpacity onPress={() => handleDeletePending(entry.id)} style={styles.clearLogButton}>
-                      <Trash2 size={15} color="#ef4444" />
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                  );
+                });
+              })()}
             </ScrollView>
 
             {/* Confirm bar -- nothing above this has touched Supabase or the
@@ -1541,8 +1547,8 @@ const styles = StyleSheet.create({
     left: 40,
     right: 40,
     height: 2,
-    backgroundColor: SKY,
-    opacity: 0.6,
+    backgroundColor: '#7C3AED', // on-theme purple sweep, not plain white
+    opacity: 0.85,
     top: '50%',
     borderRadius: 0,
   },
@@ -1783,6 +1789,20 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     overflow: 'hidden',
   },
+  // Per-species group header in the pending-scans list (on-theme purple).
+  speciesGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#F3EEFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  speciesGroupName: { flex: 1, fontSize: 12, fontWeight: '800', fontStyle: 'italic', color: '#5B21D9', letterSpacing: 0.3, marginRight: 8 },
+  speciesGroupCount: { backgroundColor: '#5B21D9', paddingHorizontal: 8, paddingVertical: 2 },
+  speciesGroupCountText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   sessionLogHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
