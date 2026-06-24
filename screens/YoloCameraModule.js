@@ -15,7 +15,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, AlertCircle, ArrowLeft, Hash, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
+import { Camera, AlertCircle, ArrowLeft, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
 import { supabase } from '../src/services/supabaseService';
 import { getWorkerSession } from '../src/services/workerSession';
 import { checkHealth, predictImage, WISP_API_KEY } from '../src/services/yoloApiService';
@@ -324,25 +324,19 @@ export default function YoloCameraModule({ navigation, route }) {
   const [dailyStats, setDailyStats] = useState({ scanned: 0, passed: 0 });
   const [isCooldown, setIsCooldown] = useState(false);
   const isRepairMode = scanMode === 'rescan';
-  const [scanSummaryData, setScanSummaryData] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
 
-  // ── Selected specimen for counting ──
-  const [selectedIdx, setSelectedIdx]     = useState(null);
-  const [isCounting, setIsCounting]       = useState(false);
-  const [tally, setTally]                 = useState(0);
-  const tallyRef                          = useRef(0);
-  const countIntervalRef                  = useRef(null);
-
-  // ── Session log state ──
-  const [sessionLog, setSessionLog]     = useState([]);
-  const [isSyncing, setIsSyncing]       = useState(false);
-  const [syncStatus, setSyncStatus]     = useState(null);
-  const [countingDone, setCountingDone] = useState(false);
+  // ── Pending scan session: each capture is reviewed (Retake/Keep) before
+  // it's added here, and nothing reaches Supabase/AsyncStorage until the
+  // whole session is Confirmed. Lets a worker scan several specimens (any
+  // species) in one continuous session, drop ones they don't want, then
+  // commit everything at once. ──
+  const [pendingReview, setPendingReview] = useState(null); // { specimens, base64Image } awaiting Retake/Keep
+  const [pendingScans, setPendingScans]   = useState([]);   // [{ id, specimens, base64Image, timestamp }]
+  const [isConfirming, setIsConfirming]   = useState(false);
 
   // ── Animations ──
   const pulseAnim        = useRef(new Animated.Value(1)).current;
-  const tallyScale       = useRef(new Animated.Value(1)).current;
   const boundingBoxOpacity = useRef(new Animated.Value(0)).current;
   const bannerOpacity    = useRef(new Animated.Value(0)).current;
   const laserAnim        = useRef(new Animated.Value(0)).current;
@@ -398,21 +392,6 @@ export default function YoloCameraModule({ navigation, route }) {
     }
     return () => pulse && pulse.stop();
   }, [isScanning]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (countIntervalRef.current) clearInterval(countIntervalRef.current);
-    };
-  }, []);
-
-  // ── Animate tally badge ──
-  const animateTally = () => {
-    Animated.sequence([
-      Animated.timing(tallyScale, { toValue: 1.35, duration: 120, useNativeDriver: true }),
-      Animated.spring(tallyScale,  { toValue: 1,    useNativeDriver: true, speed: 20, bounciness: 8 }),
-    ]).start();
-  };
 
   // ── Bounding box + banner animation ──
   useEffect(() => {
@@ -509,12 +488,7 @@ export default function YoloCameraModule({ navigation, route }) {
           setAnnotatedImageBase64(result.annotated_image_base64);
         }
         setSource('api');
-        setSelectedIdx(null);
-        
-        // Prompt user immediately
-        setTimeout(() => {
-          promptSaveAndSync(mappedSpecimens, result.annotated_image_base64);
-        }, 500);
+        setPendingReview({ specimens: mappedSpecimens, base64Image: result.annotated_image_base64 || null });
         return;
       }
 
@@ -523,6 +497,7 @@ export default function YoloCameraModule({ navigation, route }) {
         setSpecimens([]);
         setRawParts([]);
         setSource('api');
+        setPendingReview({ specimens: [], base64Image: null });
         return;
       }
 
@@ -546,77 +521,24 @@ export default function YoloCameraModule({ navigation, route }) {
       setSpecimens([specimen]);
       setRawParts(specimen.detectedParts || []);
       setSource('simulation');
-      setSelectedIdx(null);
+      setPendingReview({ specimens: [specimen], base64Image: null });
     } catch (err) {
       console.warn('Simulation error:', err);
       setScanError('Simulation failed. Please try again.');
     }
   };
 
-  // ── Start counting for a detected specimen ──
-  const startCounting = (idx) => {
-    setSelectedIdx(idx);
-    tallyRef.current = 1;
-    setTally(1);
-    setIsCounting(true);
-
-    Animated.timing(bannerOpacity, {
-      toValue: 0, duration: 150, useNativeDriver: true,
-    }).start();
-
-    countIntervalRef.current = setInterval(() => {
-      tallyRef.current += 1;
-      setTally(tallyRef.current);
-      animateTally();
-    }, 1500);
-  };
-
-  // ── Stop counting ──
-  const stopCounting = (saveToLog = false) => {
-    if (countIntervalRef.current) {
-      clearInterval(countIntervalRef.current);
-      countIntervalRef.current = null;
-    }
-    setIsCounting(false);
-    setCountingDone(true);
-
-    if (saveToLog && selectedIdx !== null && specimens[selectedIdx] && tallyRef.current > 0) {
-      const specimen = specimens[selectedIdx];
-      const entry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        species: specimen.species,
-        commonName: specimen.commonName,
-        count: tallyRef.current,
-        source: source,
-        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        qcStatus: specimen.qcStatus,
-        confidence: specimen.confidence,
-        partsFound: specimen.partsFound,
-        partsRequired: specimen.partsRequired,
-      };
-      setSessionLog(prev => [entry, ...prev]);
-      setSyncStatus(null);
-    }
-  };
-
-  // ── Handle Start Scan ──
-  const handleStartScan = async () => {
+  // ── Capture a frame -- used for both the first capture and every
+  // subsequent one in the same session (Retake/Keep both return here). ──
+  const handleCapture = async () => {
     setIsScanning(true);
     setSpecimens([]);
     setRawParts([]);
     setAnnotatedImageBase64(null);
     setCapturedPhotoUri(null);
     setSource(null);
-    setTally(0);
-    tallyRef.current = 0;
-    setIsCounting(false);
-    setCountingDone(false);
-    setSelectedIdx(null);
     setScanError(null);
-    if (countIntervalRef.current) {
-      clearInterval(countIntervalRef.current);
-      countIntervalRef.current = null;
-    }
+    setPendingReview(null);
 
     if (apiStatus === 'connected' && permission?.granted) {
       await doRealScan();
@@ -627,55 +549,41 @@ export default function YoloCameraModule({ navigation, route }) {
     }
   };
 
-  // ── Scan Next ──
-  const handleScanNext = async () => {
+  // ── Retake: discard the capture awaiting review, return to live camera ──
+  const handleRetake = () => {
+    setPendingReview(null);
     setSpecimens([]);
     setRawParts([]);
     setAnnotatedImageBase64(null);
     setCapturedPhotoUri(null);
     setSource(null);
-    setTally(0);
-    tallyRef.current = 0;
-    setIsCounting(false);
-    setCountingDone(false);
-    setSelectedIdx(null);
     setScanError(null);
-    if (countIntervalRef.current) {
-      clearInterval(countIntervalRef.current);
-      countIntervalRef.current = null;
-    }
-
-    if (apiStatus === 'connected' && permission?.granted) {
-      await doRealScan();
-    } else {
-      setIsLoading(true);
-      await doSimulatedScan();
-      setIsLoading(false);
-    }
   };
 
-  // ── Handle Stop Scan ──
-  const handleStopScan = async () => {
-    setScanSummaryData(null);
-    const finalLog = [...sessionLog];
-    if (isCounting && selectedIdx !== null && specimens[selectedIdx] && tallyRef.current > 0) {
-      const specimen = specimens[selectedIdx];
-      const entry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        species: specimen.species,
-        commonName: specimen.commonName,
-        count: tallyRef.current,
-        source: source,
-        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        qcStatus: specimen.qcStatus,
-        stepTitle,
-        stepId,
-      };
-      finalLog.unshift(entry);
+  // ── Keep: add the reviewed capture to the pending session list, then
+  // return to live camera for the next one. Nothing is saved yet. ──
+  const handleKeepScan = () => {
+    if (pendingReview && pendingReview.specimens.length > 0) {
+      setPendingScans(prev => [
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          specimens: pendingReview.specimens,
+          base64Image: pendingReview.base64Image,
+          timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        },
+        ...prev,
+      ]);
     }
+    handleRetake();
+  };
 
-    // Clear all state
-    if (countIntervalRef.current) { clearInterval(countIntervalRef.current); countIntervalRef.current = null; }
+  const handleDeletePending = (id) => {
+    setPendingScans(prev => prev.filter(e => e.id !== id));
+  };
+
+  // ── Handle Stop Scan -- back to idle. Does not touch pendingScans itself;
+  // callers decide whether those should be discarded first. ──
+  const handleStopScan = () => {
     setIsScanning(false);
     setIsLoading(false);
     setSpecimens([]);
@@ -683,19 +591,36 @@ export default function YoloCameraModule({ navigation, route }) {
     setAnnotatedImageBase64(null);
     setCapturedPhotoUri(null);
     setSource(null);
-    setTally(0);
-    tallyRef.current = 0;
-    setIsCounting(false);
-    setCountingDone(false);
-    setSelectedIdx(null);
-    setSessionLog([]);
-    setSyncStatus(null);
     setScanError(null);
+    setPendingReview(null);
     bannerOpacity.setValue(0);
   };
 
-  // ── Batch mode: write result to AsyncStorage then go back ──
-  const commitToBatch = async (primary, isMismatch) => {
+  // ── Leaving the scan session (back button / End Session) while scans are
+  // still pending would silently lose them -- confirm first. ──
+  const guardPendingScans = (proceed) => {
+    if (pendingScans.length > 0) {
+      Alert.alert(
+        'Discard Pending Scans?',
+        `You have ${pendingScans.length} scan${pendingScans.length === 1 ? '' : 's'} not yet confirmed. Leaving now will discard ${pendingScans.length === 1 ? 'it' : 'them'}.`,
+        [
+          { text: 'Keep Reviewing', style: 'cancel' },
+          { text: 'Discard', style: 'destructive', onPress: () => { setPendingScans([]); proceed(); } },
+        ]
+      );
+      return;
+    }
+    proceed();
+  };
+
+  const handleEndSessionPress = () => guardPendingScans(handleStopScan);
+  const handleBackPress = () => guardPendingScans(() => navigation.goBack());
+
+  // ── WorkflowModule batch mode: write result to AsyncStorage then go back.
+  // Only the active-batch / re-scan flow uses this -- it expects exactly
+  // one outcome per trip, same as before this screen supported multi-scan
+  // sessions. ──
+  const finalizeWorkflowBatch = async (primary, isMismatch) => {
     const info = SPECIES_INFO[primary.rawSpecies];
     await Promise.all([
       AsyncStorage.setItem('last_detected_species', JSON.stringify({
@@ -721,205 +646,178 @@ export default function YoloCameraModule({ navigation, route }) {
       await notifySpecimenFlagged(primary.species);
     }
 
+    setPendingScans([]);
     navigation.goBack();
   };
 
-  const handleAddToBatch = () => {
-    if (!batchId || specimens.length === 0) return;
-    const primary = specimens[0];
+  // ── Sync one kept capture to Supabase (inventory/defects) + local stage
+  // log. Only runs at Confirm time, once per pending entry -- nothing here
+  // fires automatically anymore. ──
+  const syncOneCapture = async (entry) => {
+    const detectedSpecimens = entry.specimens;
+    const base64Image = entry.base64Image;
+    let passedThisScan = 0;
+    const scannedThisScan = detectedSpecimens.length;
 
-    const isMismatch =
-      batchSpecies &&
-      primary.species.toLowerCase() !== batchSpecies.toLowerCase();
+    if (supabase) {
+      for (const spec of detectedSpecimens) {
+        const genus = spec.species.trim().split(' ')[0] || '';
 
-    if (isMismatch) {
-      Alert.alert(
-        'Species Mismatch',
-        `This batch is for ${batchSpecies}.\nYou scanned ${primary.species}.\n\nWas this intentional?`,
-        [
-          { text: 'Add Anyway',   onPress: () => commitToBatch(primary, true) },
-          { text: 'Discard Scan', style: 'destructive', onPress: () => navigation.goBack() },
-          { text: 'Cancel',       style: 'cancel' },
-        ]
-      );
-      return;
-    }
-
-    commitToBatch(primary, false);
-  };
-
-  // ── Post-Scan Prompt & Save Flow ──
-  const promptSaveAndSync = (detectedSpecimens, base64Image) => {
-    if (!detectedSpecimens || detectedSpecimens.length === 0) return;
-    // SEAMLESS FLOW: Bypass the modal and auto-save immediately.
-    saveAndSyncScan(detectedSpecimens, base64Image);
-  };
-
-  const saveAndSyncScan = async (detectedSpecimens, base64Image) => {
-    setScanSummaryData(null);
-    setIsLoading(true);
-    try {
-      let passedThisScan = 0;
-      let scannedThisScan = detectedSpecimens.length;
-      
-      // 1. Sync Inventory & Defects to Supabase
-      if (supabase) {
-        for (const spec of detectedSpecimens) {
-          const genus = spec.species.trim().split(' ')[0] || '';
-          
-          if (spec.qcStatus === 'pass') {
-            passedThisScan++;
-            if (isRepairMode) {
-              await supabase
-                .from('defects')
-                .insert({
-                   species: spec.species,
-                   missing_parts: 'Fixed (Pending Approval)',
-                   status: 'pending_approval',
-                   worker: workerName || 'Unknown'
-                });
-            } else {
-              const { data: rows, error: fetchErr } = await supabase
-                .from('inventory')
-                .select('id, quantity, stock')
-                .ilike('genus', `%${genus}%`)
-                .limit(1);
-
-              if (!fetchErr && rows && rows.length > 0) {
-                const row = rows[0];
-                const quantityKey = 'quantity' in row ? 'quantity' : 'stock';
-                const currentQty = row[quantityKey] ?? 0;
-                await supabase
-                  .from('inventory')
-                  .update({ [quantityKey]: currentQty + 1 })
-                  .eq('id', row.id);
-              }
-            }
-          } else {
-            // It is FLAGGED, log to 'defects' table
-            const required = Object.keys(spec.partsRequired || {});
-            const found = Object.keys(spec.partsFound || {});
-            const missing = required.filter(p => !found.includes(p));
-            
+        if (spec.qcStatus === 'pass') {
+          passedThisScan++;
+          if (isRepairMode) {
             await supabase
               .from('defects')
               .insert({
                  species: spec.species,
-                 missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
-                 status: 'new',
+                 missing_parts: 'Fixed (Pending Approval)',
+                 status: 'pending_approval',
                  worker: workerName || 'Unknown'
               });
+          } else {
+            const { data: rows, error: fetchErr } = await supabase
+              .from('inventory')
+              .select('id, quantity, stock')
+              .ilike('genus', `%${genus}%`)
+              .limit(1);
+
+            if (!fetchErr && rows && rows.length > 0) {
+              const row = rows[0];
+              const quantityKey = 'quantity' in row ? 'quantity' : 'stock';
+              const currentQty = row[quantityKey] ?? 0;
+              await supabase
+                .from('inventory')
+                .update({ [quantityKey]: currentQty + 1 })
+                .eq('id', row.id);
+            }
           }
+        } else {
+          const required = Object.keys(spec.partsRequired || {});
+          const found = Object.keys(spec.partsFound || {});
+          const missing = required.filter(p => !found.includes(p));
+
+          await supabase
+            .from('defects')
+            .insert({
+               species: spec.species,
+               missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
+               status: 'new',
+               worker: workerName || 'Unknown'
+            });
         }
       }
+    }
 
-      setDailyStats(prev => ({
-         scanned: prev.scanned + scannedThisScan,
-         passed: prev.passed + passedThisScan
-      }));
+    setDailyStats(prev => ({
+       scanned: prev.scanned + scannedThisScan,
+       passed: prev.passed + passedThisScan
+    }));
 
-      // 2. Persist detected species so WorkflowModule can pick it up on refocus
-      if (detectedSpecimens.length > 0) {
-        const primary = detectedSpecimens[0];
-        const info = SPECIES_INFO[primary.rawSpecies];
-        await AsyncStorage.setItem('last_detected_species', JSON.stringify({
-          species: primary.species,
-          commonName: info ? info.common : primary.species,
-        })).catch(() => {});
+    if (detectedSpecimens.length > 0) {
+      const primary = detectedSpecimens[0];
+      const info = SPECIES_INFO[primary.rawSpecies];
+      await AsyncStorage.setItem('last_detected_species', JSON.stringify({
+        species: primary.species,
+        commonName: info ? info.common : primary.species,
+      })).catch(() => {});
+    }
+
+    if (base64Image) {
+      const primary = detectedSpecimens[0];
+      const payload = {
+        annotated_image_base64: base64Image,
+        species: primary.species,
+        confidence: primary.confidence,
+        qa_status: primary.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'
+      };
+
+      const apiHost = await AsyncStorage.getItem('api_host');
+      if (apiHost) {
+        await fetch(`http://${apiHost}/save_scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': WISP_API_KEY },
+          body: JSON.stringify(payload)
+        });
       }
+    }
 
-      // 3. Save Image to Local Database via API
-      if (base64Image) {
-        const primary = detectedSpecimens[0];
-        const payload = {
-          annotated_image_base64: base64Image,
-          species: primary.species,
-          confidence: primary.confidence,
-          qa_status: primary.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'
-        };
-
-        const apiHost = await AsyncStorage.getItem('api_host');
-        if (apiHost) {
-          await fetch(`http://${apiHost}/save_scan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-API-Key': WISP_API_KEY },
-            body: JSON.stringify(payload)
-          });
-        }
-      }
-
-      setIsLoading(false);
-      setIsCooldown(true);
-      setTimeout(() => setIsCooldown(false), 3000);
-
-      // Show non-blocking toast instead of Alert
-      const passCount = detectedSpecimens.filter(s => s.qcStatus === 'pass').length;
-      const flaggedCount = detectedSpecimens.filter(s => s.qcStatus !== 'pass').length;
-      let msg = `✅ Saved! ${passCount} Pass`;
-      if (flaggedCount > 0) msg += `, ⚠️ ${flaggedCount} Flagged`;
-      
-      setToastMessage(msg);
-      setTimeout(() => setToastMessage(null), 3000);
-
-      // Persist stage scan count + log for ProductionStagesScreen
-      if (scanMode === 'standalone' && batchId && stepId) {
-        const countKey = `stage_scan_count_${batchId}_${stepId}`;
-        const logKey   = `stage_scan_log_${batchId}_${stepId}`;
-        const prev = await AsyncStorage.getItem(countKey).catch(() => null);
-        await AsyncStorage.setItem(countKey, String((parseInt(prev || '0', 10) + 1))).catch(() => {});
-        const logRaw = await AsyncStorage.getItem(logKey).catch(() => null);
-        const existing = logRaw ? JSON.parse(logRaw) : [];
-        const primary = detectedSpecimens[0];
-        const entry = {
-          timestamp:    new Date().toISOString(),
-          species:      primary?.species      || 'Unknown',
-          passCount:    detectedSpecimens.filter(s => s.qcStatus === 'pass').length,
-          flaggedCount: detectedSpecimens.filter(s => s.qcStatus !== 'pass').length,
-          total:        detectedSpecimens.length,
-          type:         'yolo',
-        };
-        await AsyncStorage.setItem(logKey, JSON.stringify([entry, ...existing].slice(0, 50))).catch(() => {});
-      }
-
-    } catch (err) {
-      console.error("Error during save/sync:", err);
-      setIsLoading(false);
-      Alert.alert('Error', 'Failed to save or sync inventory.');
+    if (scanMode === 'standalone' && batchId && stepId) {
+      const countKey = `stage_scan_count_${batchId}_${stepId}`;
+      const logKey   = `stage_scan_log_${batchId}_${stepId}`;
+      const prevCount = await AsyncStorage.getItem(countKey).catch(() => null);
+      await AsyncStorage.setItem(countKey, String((parseInt(prevCount || '0', 10) + 1))).catch(() => {});
+      const logRaw = await AsyncStorage.getItem(logKey).catch(() => null);
+      const existing = logRaw ? JSON.parse(logRaw) : [];
+      const primary = detectedSpecimens[0];
+      const logEntry = {
+        timestamp:    new Date().toISOString(),
+        species:      primary?.species      || 'Unknown',
+        passCount:    detectedSpecimens.filter(s => s.qcStatus === 'pass').length,
+        flaggedCount: detectedSpecimens.filter(s => s.qcStatus !== 'pass').length,
+        total:        detectedSpecimens.length,
+        type:         'yolo',
+      };
+      await AsyncStorage.setItem(logKey, JSON.stringify([logEntry, ...existing].slice(0, 50))).catch(() => {});
     }
   };
 
-  // ── Sync session log — inventory already updated per-scan by saveAndSyncScan ──
-  const handleSyncSession = async () => {
-    if (sessionLog.length === 0) return;
-    setIsSyncing(true);
-    setSyncStatus(null);
-    await new Promise(r => setTimeout(r, 600));
-    setSyncStatus('success');
-    setIsSyncing(false);
+  // ── Confirm: commit every kept-but-unconfirmed scan. WorkflowModule's
+  // active-batch / re-scan flow only ever expects one outcome, so it uses
+  // the most recently kept entry (with the existing species-mismatch
+  // check); standalone/Stages sessions sync every pending entry. ──
+  const handleConfirmSession = async () => {
+    if (pendingScans.length === 0) return;
+
+    if ((scanMode === 'new' || scanMode === 'rescan') && batchId) {
+      const last = pendingScans[0]; // most recently kept (list is newest-first)
+      const primary = last.specimens[0];
+      const isMismatch = batchSpecies && primary.species.toLowerCase() !== batchSpecies.toLowerCase();
+
+      if (isMismatch) {
+        Alert.alert(
+          'Species Mismatch',
+          `This batch is for ${batchSpecies}.\nYou scanned ${primary.species}.\n\nWas this intentional?`,
+          [
+            { text: 'Add Anyway', onPress: () => finalizeWorkflowBatch(primary, true) },
+            {
+              text: 'Clear Batch & Start New',
+              onPress: async () => {
+                const session = await getWorkerSession();
+                const prefix  = session?.employee_id || 'default';
+                await AsyncStorage.removeItem(`${prefix}_active_batch`);
+                setPendingScans([]);
+                navigation.goBack();
+              },
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      await finalizeWorkflowBatch(primary, false);
+      return;
+    }
+
+    setIsConfirming(true);
+    const count = pendingScans.length;
+    try {
+      for (const entry of pendingScans) {
+        await syncOneCapture(entry);
+      }
+      setPendingScans([]);
+      setIsCooldown(true);
+      setTimeout(() => setIsCooldown(false), 3000);
+      setToastMessage(`✅ Confirmed ${count} scan${count === 1 ? '' : 's'}`);
+      setTimeout(() => setToastMessage(null), 3000);
+      handleStopScan();
+    } catch (err) {
+      console.error('Error confirming session:', err);
+      Alert.alert('Error', 'Failed to save or sync some scans. Please try again.');
+    } finally {
+      setIsConfirming(false);
+    }
   };
-
-  // ── Clear session log ──
-  const handleClearSession = () => {
-    Alert.alert(
-      'Clear Session?',
-      'This will remove all scanned entries from this session log.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => {
-          setSessionLog([]);
-          setSyncStatus(null);
-        }},
-      ]
-    );
-  };
-
-  const handleSpecimenPress = () => {};
-
-  const handleStopCount = () => {
-    stopCounting(true);
-  };
-
-  const selectedSpecimen = selectedIdx !== null ? specimens[selectedIdx] : (specimens.length === 1 ? specimens[0] : null);
 
   // Compute total parts count
   const totalPartsCount = rawParts.length;
@@ -933,20 +831,39 @@ export default function YoloCameraModule({ navigation, route }) {
         </View>
       )}
 
-      {/* ── Custom Scan Summary Modal ── */}
-      <Modal visible={!!scanSummaryData} transparent animationType="fade">
+      {/* ── Scan Review Modal: Retake discards this capture, Keep adds it
+          to the pending session list below. Nothing is saved yet either
+          way -- only Confirm actually writes anything. ── */}
+      <Modal visible={!!pendingReview} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(8,11,15,0.92)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
           <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 0, padding: 24, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10 }}>
-            {scanSummaryData && (() => {
-              const specimens = scanSummaryData.specimens;
-              const passCount = specimens.filter(s => s.qcStatus === 'pass').length;
-              const flaggedItems = specimens.filter(s => s.qcStatus !== 'pass');
-              const itemWording = specimens.length === 1 ? 'specimen' : 'specimens';
-              
+            {pendingReview && (() => {
+              const revSpecimens = pendingReview.specimens;
+
+              if (revSpecimens.length === 0) {
+                return (
+                  <>
+                    <AlertCircle color="#f59e0b" size={36} style={{ alignSelf: 'center', marginBottom: 12 }} />
+                    <Text style={{ color: '#111827', fontSize: 18, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase' }}>No Specimen Detected</Text>
+                    <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', marginBottom: 24 }}>Aim at the specimen and retake.</Text>
+                    <TouchableOpacity
+                      style={{ paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
+                      onPress={handleRetake}
+                    >
+                      <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Retake</Text>
+                    </TouchableOpacity>
+                  </>
+                );
+              }
+
+              const passCount = revSpecimens.filter(s => s.qcStatus === 'pass').length;
+              const flaggedItems = revSpecimens.filter(s => s.qcStatus !== 'pass');
+              const itemWording = revSpecimens.length === 1 ? 'specimen' : 'specimens';
+
               return (
                 <>
-                  <Text style={{ color: '#111827', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 2, textTransform: 'uppercase' }}>Scan Summary</Text>
-                  <Text style={{ color: '#6B7280', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Detected {specimens.length} {itemWording}</Text>
+                  <Text style={{ color: '#111827', fontSize: 22, fontWeight: '800', marginBottom: 6, textAlign: 'center', letterSpacing: 2, textTransform: 'uppercase' }}>Scan Result</Text>
+                  <Text style={{ color: '#6B7280', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Detected {revSpecimens.length} {itemWording}</Text>
 
                   <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 }}>
                     <View style={{ alignItems: 'center' }}>
@@ -981,15 +898,15 @@ export default function YoloCameraModule({ navigation, route }) {
                   <View style={{ flexDirection: 'row', gap: 12 }}>
                     <TouchableOpacity
                       style={{ flex: 1, paddingVertical: 14, borderRadius: 0, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}
-                      onPress={handleScanNext}
+                      onPress={handleRetake}
                     >
-                      <Text style={{ color: '#5B21D9', fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Discard</Text>
+                      <Text style={{ color: '#5B21D9', fontSize: 14, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Retake</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={{ flex: 1, paddingVertical: 14, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
-                      onPress={() => saveAndSyncScan(scanSummaryData.specimens, scanSummaryData.base64Image)}
+                      onPress={handleKeepScan}
                     >
-                      <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Save & Sync</Text>
+                      <Text style={{ color: '#F5F5F7', fontSize: 14, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' }}>Keep</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -1004,10 +921,7 @@ export default function YoloCameraModule({ navigation, route }) {
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => {
-            stopCounting();
-            navigation && navigation.goBack();
-          }}
+          onPress={handleBackPress}
           activeOpacity={0.7}
         >
           <ArrowLeft size={20} color="#5B21D9" />
@@ -1017,13 +931,12 @@ export default function YoloCameraModule({ navigation, route }) {
           <Text style={styles.headerSub}>WISP-FLOW AI Scan</Text>
         </View>
 
-
-        {/* Header right — tally badge only */}
+        {/* Header right — pending scan count */}
         <View style={styles.headerRight}>
-          {isCounting && (
-            <Animated.View style={[styles.tallyHeaderBadge, { transform: [{ scale: tallyScale }] }]}>
-              <Text style={styles.tallyHeaderNum}>{tally}</Text>
-            </Animated.View>
+          {pendingScans.length > 0 && (
+            <View style={styles.tallyHeaderBadge}>
+              <Text style={styles.tallyHeaderNum}>{pendingScans.length}</Text>
+            </View>
           )}
         </View>
       </View>
@@ -1171,11 +1084,11 @@ export default function YoloCameraModule({ navigation, route }) {
               {isLoading
                 ? (apiStatus === 'connected' ? 'Analyzing frame with best.pt model...' : 'Running WISP-FLOW simulation...')
                 : isScanning
-                  ? isCounting
-                    ? `Tracking ${selectedSpecimen?.species ?? 'specimen'}…`
-                    : scanError
-                      ? scanError
-                      : ''
+                  ? scanError
+                    ? scanError
+                    : pendingScans.length > 0
+                      ? `${pendingScans.length} kept — ready for next capture`
+                      : 'Ready — press Capture'
                   : apiStatus === 'offline'
                     ? 'AI server unreachable. Contact your supervisor.'
                     : permission?.granted
@@ -1215,7 +1128,7 @@ export default function YoloCameraModule({ navigation, route }) {
                   (isCooldown || apiStatus === 'offline') && { backgroundColor: '#E5E7EB', borderColor: '#E5E7EB' },
                   isRepairMode && apiStatus !== 'offline' && { borderColor: '#f59e0b', borderWidth: 1.5 },
                 ]}
-                onPress={handleStartScan}
+                onPress={handleCapture}
                 disabled={isCooldown || apiStatus === 'offline'}
               >
                 {isRepairMode && apiStatus !== 'offline'
@@ -1234,18 +1147,13 @@ export default function YoloCameraModule({ navigation, route }) {
             </View>
           ) : (
             <View style={styles.scanningControls}>
-              {isCounting ? (
-                <TouchableOpacity style={styles.stopCountButton} onPress={handleStopCount}>
-                  <Square size={15} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.mainButtonText}>Stop Count</Text>
+              {!isLoading && !pendingReview && (
+                <TouchableOpacity style={styles.scanNextButton} onPress={handleCapture}>
+                  <Camera size={15} color="#5B21D9" style={{ marginRight: 6 }} />
+                  <Text style={[styles.mainButtonText, { color: '#5B21D9' }]}>Capture</Text>
                 </TouchableOpacity>
-              ) : countingDone ? (
-                <TouchableOpacity style={styles.scanNextButton} onPress={handleScanNext}>
-                  <RefreshCw size={15} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.mainButtonText}>Scan Next</Text>
-                </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity style={styles.stopButton} onPress={handleStopScan}>
+              )}
+              <TouchableOpacity style={styles.stopButton} onPress={handleEndSessionPress}>
                 <Square size={15} color="#fff" style={{ marginRight: 6 }} />
                 <Text style={styles.mainButtonText}>End Session</Text>
               </TouchableOpacity>
@@ -1297,98 +1205,64 @@ export default function YoloCameraModule({ navigation, route }) {
             nestedScrollEnabled
             showsVerticalScrollIndicator={false}
           >
-            {specimens.map((spec, idx) => {
-              const isSelected = selectedIdx === idx;
-              const isActive = isCounting && isSelected;
-              const isDone = countingDone && isSelected;
-
-              return (
-                <View
-                  key={spec.id || idx}
-                  style={[
-                    styles.detectionCard,
-                    isActive && styles.detectionCardCounting,
-                    isDone && styles.detectionCardDone,
-                    specimens.length > 1 && { marginBottom: 6 },
-                  ]}
-                >
-                  <View style={styles.detectionInfo}>
-                    <View style={[styles.colorIndicator, {
-                      backgroundColor: isActive
-                        ? '#f59e0b'
-                        : spec.qcStatus === 'flagged'
-                          ? '#ef4444'
-                          : '#10b981'
-                    }]} />
-                    <View style={styles.specimenTexts}>
-                      <Text style={styles.specimenScientific}>{spec.species}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {spec.commonName !== spec.species && (
-                          <Text style={styles.specimenCommon}>{spec.commonName}</Text>
-                        )}
-                        <View style={[
-                          styles.qcBadge,
-                          spec.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+            {specimens.map((spec, idx) => (
+              <View
+                key={spec.id || idx}
+                style={[
+                  styles.detectionCard,
+                  specimens.length > 1 && { marginBottom: 6 },
+                ]}
+              >
+                <View style={styles.detectionInfo}>
+                  <View style={[styles.colorIndicator, {
+                    backgroundColor: spec.qcStatus === 'flagged' ? '#ef4444' : '#10b981'
+                  }]} />
+                  <View style={styles.specimenTexts}>
+                    <Text style={styles.specimenScientific}>{spec.species}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {spec.commonName !== spec.species && (
+                        <Text style={styles.specimenCommon}>{spec.commonName}</Text>
+                      )}
+                      <View style={[
+                        styles.qcBadge,
+                        spec.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+                      ]}>
+                        <Text style={[
+                          styles.qcBadgeText,
+                          spec.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
                         ]}>
-                          <Text style={[
-                            styles.qcBadgeText,
-                            spec.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
-                          ]}>
-                            {spec.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
-                          </Text>
-                        </View>
+                          {spec.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+                        </Text>
                       </View>
-
-                      {/* Parts breakdown with color-coded pills */}
-                      {Object.keys(spec.partsFound).length > 0 && (
-                        <View style={styles.partsBreakdown}>
-                          {Object.entries(spec.partsFound).map(([partName, count]) => (
-                            <View
-                              key={partName}
-                              style={[styles.partPill, { borderColor: PART_COLORS[partName] || '#888' }]}
-                            >
-                              <View style={[styles.partPillDot, { backgroundColor: PART_COLORS[partName] || '#888' }]} />
-                              <Text style={[styles.partPillText, { color: PART_COLORS[partName] || '#888' }]}>
-                                {count} {partName}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      {/* Required vs found comparison */}
-                      {spec.partsRequired && Object.keys(spec.partsRequired).length > 0 && (
-                        <Text style={styles.requiredText}>
-                          Required: {Object.entries(spec.partsRequired).map(([k, v]) => `${v} ${k}`).join(', ')}
-                        </Text>
-                      )}
-
-                      {isDone && (
-                        <Text style={[styles.tapHint, spec.qcStatus === 'flagged' ? { color: '#ef4444' } : { color: '#10b981' }]}>
-                          {spec.qcStatus === 'flagged' ? `⚠ Logged ${tally} to session (Flagged)` : `✓ Logged ${tally} to session`}
-                        </Text>
-                      )}
                     </View>
+
+                    {/* Parts breakdown with color-coded pills */}
+                    {Object.keys(spec.partsFound).length > 0 && (
+                      <View style={styles.partsBreakdown}>
+                        {Object.entries(spec.partsFound).map(([partName, count]) => (
+                          <View
+                            key={partName}
+                            style={[styles.partPill, { borderColor: PART_COLORS[partName] || '#888' }]}
+                          >
+                            <View style={[styles.partPillDot, { backgroundColor: PART_COLORS[partName] || '#888' }]} />
+                            <Text style={[styles.partPillText, { color: PART_COLORS[partName] || '#888' }]}>
+                              {count} {partName}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Required vs found comparison */}
+                    {spec.partsRequired && Object.keys(spec.partsRequired).length > 0 && (
+                      <Text style={styles.requiredText}>
+                        Required: {Object.entries(spec.partsRequired).map(([k, v]) => `${v} ${k}`).join(', ')}
+                      </Text>
+                    )}
                   </View>
-                  {(isActive || isDone) && (
-                    <View style={styles.rightMeta}>
-                      {isActive ? (
-                        <Animated.View style={[styles.tallyBadge, { transform: [{ scale: tallyScale }] }]}>
-                          <Hash size={12} color={SKY} style={{ marginBottom: 1 }} />
-                          <Text style={styles.tallyNum}>{tally}</Text>
-                          <Text style={styles.tallyLabel}>counted</Text>
-                        </Animated.View>
-                      ) : (
-                        <View style={styles.doneBadge}>
-                          <CheckCircle size={14} color="#10b981" />
-                          <Text style={styles.doneText}>{tally}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
                 </View>
-              );
-            })}
+              </View>
+            ))}
           </ScrollView>
         ) : (
           <View style={styles.emptyState}>
@@ -1403,30 +1277,18 @@ export default function YoloCameraModule({ navigation, route }) {
           </View>
         )}
 
-        {/* Counting live summary */}
-        {isCounting && selectedSpecimen && (
-          <View style={styles.countingSummaryRow}>
-            <View style={styles.countingDot} />
-            <Text style={styles.countingSummaryText}>
-              Counting <Text style={styles.countingSummaryBold}>{selectedSpecimen.species}</Text> — {tally} detected so far
-            </Text>
-          </View>
-        )}
-
-        {/* ── Session Log ── */}
-        {sessionLog.length > 0 && (
+        {/* ── Pending Scans: kept captures awaiting Confirm. Nothing here
+            has been saved to Supabase/the stage log yet. ── */}
+        {pendingScans.length > 0 && (
           <View style={styles.sessionLogContainer}>
 
             <View style={styles.sessionLogHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.sessionLogTitle}>Session Log</Text>
+                <Text style={styles.sessionLogTitle}>Pending Scans</Text>
                 <View style={styles.sessionCountBadge}>
-                  <Text style={styles.sessionCountText}>{sessionLog.length}</Text>
+                  <Text style={styles.sessionCountText}>{pendingScans.length}</Text>
                 </View>
               </View>
-              <TouchableOpacity onPress={handleClearSession} style={styles.clearLogButton}>
-                <Trash2 size={13} color="#ef4444" />
-              </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -1434,123 +1296,64 @@ export default function YoloCameraModule({ navigation, route }) {
               nestedScrollEnabled
               showsVerticalScrollIndicator={false}
             >
-              {sessionLog.map((entry, idx) => (
-                <View
-                  key={entry.id}
-                  style={[
-                    styles.sessionLogEntry,
-                    idx === 0 && (entry.qcStatus === 'flagged' ? styles.sessionLogEntryLatestFlagged : styles.sessionLogEntryLatest),
-                  ]}
-                >
-                  <View style={styles.sessionEntryLeft}>
-                    <View style={[
-                      styles.sessionEntryDot,
-                      idx === 0 && { backgroundColor: entry.qcStatus === 'flagged' ? '#ef4444' : '#10b981' }
-                    ]} />
-                    <View>
-                      <Text style={styles.sessionEntrySpecies}>{entry.species}</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 1 }}>
-                        <Text style={styles.sessionEntryMeta}>{entry.commonName} · {entry.timestamp}</Text>
-                        {entry.qcStatus && (
-                          <View style={[
-                            styles.qcBadgeMini,
-                            entry.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
-                          ]}>
-                            <Text style={[
-                              styles.qcBadgeTextMini,
-                              entry.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
-                            ]}>
-                              {entry.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+              {pendingScans.map((entry, idx) => {
+                const primary = entry.specimens[0];
+                const flaggedCount = entry.specimens.filter(s => s.qcStatus !== 'pass').length;
+                return (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.sessionLogEntry,
+                      idx === 0 && (flaggedCount > 0 ? styles.sessionLogEntryLatestFlagged : styles.sessionLogEntryLatest),
+                    ]}
+                  >
+                    <View style={styles.sessionEntryLeft}>
+                      <View style={[
+                        styles.sessionEntryDot,
+                        idx === 0 && { backgroundColor: flaggedCount > 0 ? '#ef4444' : '#10b981' }
+                      ]} />
+                      <View>
+                        <Text style={styles.sessionEntrySpecies}>
+                          {primary.species}{entry.specimens.length > 1 ? ` +${entry.specimens.length - 1} more` : ''}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 1 }}>
+                          <Text style={styles.sessionEntryMeta}>{primary.commonName} · {entry.timestamp}</Text>
+                          <View style={[styles.qcBadgeMini, flaggedCount > 0 ? styles.qcBadgeFlagged : styles.qcBadgePass]}>
+                            <Text style={[styles.qcBadgeTextMini, flaggedCount > 0 ? styles.qcBadgeTextFlagged : styles.qcBadgeTextPass]}>
+                              {flaggedCount > 0 ? 'FLAGGED' : 'PASS'}
                             </Text>
                           </View>
-                        )}
-                      </View>
-
-                      {/* Show parts found in session log */}
-                      {entry.partsFound && Object.keys(entry.partsFound).length > 0 && (
-                        <View style={[styles.partsBreakdown, { marginTop: 3 }]}>
-                          {Object.entries(entry.partsFound).map(([partName, count]) => (
-                            <View
-                              key={partName}
-                              style={[styles.partPillMini, { borderColor: PART_COLORS[partName] || '#888' }]}
-                            >
-                              <Text style={[styles.partPillTextMini, { color: PART_COLORS[partName] || '#888' }]}>
-                                {count} {partName}
-                              </Text>
-                            </View>
-                          ))}
                         </View>
-                      )}
+                      </View>
                     </View>
+                    <TouchableOpacity onPress={() => handleDeletePending(entry.id)} style={styles.clearLogButton}>
+                      <Trash2 size={15} color="#ef4444" />
+                    </TouchableOpacity>
                   </View>
-                  <View style={styles.sessionEntryRight}>
-                    <Text style={styles.sessionEntryCount}>+{entry.count}</Text>
-                    {entry.source === 'api' && (
-                      <Text style={[styles.sourceTag, styles.sourceTagAi, { fontSize: 8 }]}>AI</Text>
-                    )}
-                    {entry.source === 'simulation' && (
-                      <Text style={[styles.sourceTag, { fontSize: 8 }]}>SIM</Text>
-                    )}
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
 
-            {/* Sync bar */}
+            {/* Confirm bar -- nothing above this has touched Supabase or the
+                stage log yet. This is the only action that actually saves. */}
             <View style={styles.syncBar}>
-              {syncStatus === 'success' && (
-                <View style={styles.syncStatusRow}>
-                  <CheckCircle size={14} color="#10b981" />
-                  <Text style={[styles.syncStatusText, { color: '#10b981' }]}>Synced to database!</Text>
-                </View>
-              )}
-              {syncStatus === 'partial' && (
-                <View style={styles.syncStatusRow}>
-                  <AlertCircle size={14} color="#f59e0b" />
-                  <Text style={[styles.syncStatusText, { color: '#f59e0b' }]}>Partially synced</Text>
-                </View>
-              )}
-              {syncStatus === 'error' && (
-                <View style={styles.syncStatusRow}>
-                  <AlertCircle size={14} color="#ef4444" />
-                  <Text style={[styles.syncStatusText, { color: '#ef4444' }]}>Sync failed</Text>
-                </View>
-              )}
               <TouchableOpacity
-                style={[
-                  styles.syncButton,
-                  isSyncing && styles.syncButtonDisabled,
-                  syncStatus === 'success' && styles.syncButtonSuccess,
-                ]}
-                onPress={handleSyncSession}
-                disabled={isSyncing || sessionLog.length === 0}
+                style={[styles.syncButton, isConfirming && styles.syncButtonDisabled]}
+                onPress={handleConfirmSession}
+                disabled={isConfirming || pendingScans.length === 0}
               >
-                {isSyncing ? (
+                {isConfirming ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Upload size={14} color="#fff" style={{ marginRight: 6 }} />
                 )}
                 <Text style={styles.syncButtonText}>
-                  {isSyncing ? 'Syncing…' : syncStatus === 'success' ? 'Re-Sync' : 'Sync to Database'}
+                  {isConfirming ? 'Confirming…' : `Confirm ${pendingScans.length} Scan${pendingScans.length === 1 ? '' : 's'}`}
                 </Text>
               </TouchableOpacity>
             </View>
 
           </View>
-        )}
-
-        {/* ── Add to Batch / Confirm Re-Scan (batch mode only) ── */}
-        {batchId && specimens.length > 0 && !isLoading && (
-          <TouchableOpacity
-            style={styles.addToBatchBtn}
-            onPress={handleAddToBatch}
-            activeOpacity={0.85}
-          >
-            <CheckCircle size={15} color="#fff" />
-            <Text style={styles.addToBatchBtnText}>
-              {scanMode === 'rescan' ? 'Confirm Re-Scan' : 'Add to Batch'}
-            </Text>
-          </TouchableOpacity>
         )}
 
       </View>
@@ -1873,31 +1676,6 @@ const styles = StyleSheet.create({
     borderLeftColor: '#5B21D9',
     marginBottom: 6,
   },
-  detectionCardCounting: {
-    borderColor: '#f59e0b',
-    borderWidth: 1.5,
-  },
-  detectionCardDone: {
-    borderColor: 'rgba(16,185,129,0.4)',
-    borderWidth: 1.5,
-    backgroundColor: 'rgba(16,185,129,0.04)',
-  },
-  doneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    borderRadius: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(16,185,129,0.3)',
-  },
-  doneText: {
-    color: '#10b981',
-    fontWeight: '800',
-    fontSize: 14,
-  },
   detectionInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1951,120 +1729,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
   },
-  partPillMini: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderRadius: 0,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  partPillTextMini: {
-    fontSize: 8,
-    fontWeight: '600',
-  },
   requiredText: {
     color: '#7C3AED',
     fontSize: 9,
     fontWeight: '500',
     marginTop: 3,
-    fontStyle: 'italic',
-  },
-  tapHint: {
-    color: '#7C3AED',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  rightMeta: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  confidenceBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
-  },
-  confidenceText: {
-    color: '#10b981',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-
-  // ── Tally badge ──
-  tallyBadge: {
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1.5,
-    borderColor: '#f59e0b',
-    minWidth: 52,
-  },
-  tallyNum: {
-    color: '#f59e0b',
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 24,
-  },
-  tallyLabel: {
-    color: '#6B7280',
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  sourceTag: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 0,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  sourceTagAi: {
-    color: '#111827',
-    borderColor: 'rgba(200,216,228,0.2)',
-    backgroundColor: 'rgba(143,164,184,0.08)',
-  },
-
-  // ── Counting summary ──
-  countingSummaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    backgroundColor: 'rgba(245,158,11,0.08)',
-    borderRadius: 0,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.2)',
-    gap: 8,
-  },
-  countingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 0,
-    backgroundColor: '#f59e0b',
-  },
-  countingSummaryText: {
-    color: '#6B7280',
-    fontSize: 11,
-    flex: 1,
-  },
-  countingSummaryBold: {
-    color: '#f59e0b',
-    fontWeight: '700',
     fontStyle: 'italic',
   },
 
@@ -2151,16 +1820,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 1,
   },
-  sessionEntryRight: {
-    alignItems: 'flex-end',
-    gap: 3,
-  },
-  sessionEntryCount: {
-    color: '#10b981',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-
   // ── Sync Bar ──
   syncBar: {
     flexDirection: 'row',
@@ -2171,16 +1830,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     gap: 10,
-  },
-  syncStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    flex: 1,
-  },
-  syncStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
   },
   syncButton: {
     flexDirection: 'row',
@@ -2193,9 +1842,6 @@ const styles = StyleSheet.create({
   },
   syncButtonDisabled: {
     opacity: 0.5,
-  },
-  syncButtonSuccess: {
-    borderColor: '#10b981',
   },
   syncButtonText: {
     color: '#F5F5F7',
@@ -2392,24 +2038,5 @@ const styles = StyleSheet.create({
     color: '#5B21D9',
     fontWeight: '500',
     marginTop: 1,
-  },
-
-  // ── Add to Batch button ──
-  addToBatchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#5B21D9',
-    borderRadius: 0,
-    paddingVertical: 12,
-    marginTop: 8,
-  },
-  addToBatchBtnText: {
-    color: '#F5F5F7',
-    fontWeight: '800',
-    fontSize: 14,
-    letterSpacing: 3,
-    textTransform: 'uppercase',
   },
 });
