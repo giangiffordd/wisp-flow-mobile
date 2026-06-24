@@ -56,12 +56,11 @@ const STAGES = [
   { id: 8,  name: 'Framing',                  type: 'manual' },
   { id: 9,  name: 'Initial Quality Control',  type: 'scan'   },
   { id: 10, name: 'Finishing',                type: 'manual' },
-  // Final Quality Control moved to the manager dashboard -- the manager
-  // reviews the annotated images (with part bounding boxes) from Initial
-  // Quality Control there instead of a second physical scan, which is
-  // faster for checking specimen completeness. Shown here grayed out so
-  // workers know it still exists in the pipeline, just not in this app.
-  { id: 11, name: 'Final Quality Control',    type: 'scan', disabled: true },
+  // Final Quality Control is a mobile YOLOv8 scan checkpoint per the project
+  // objectives (Initial QC, Final QC, Packaging are the three scan stages).
+  // The scan submits a pending batch for manager approval just like Initial
+  // QC; the manager still does the final image review on the web dashboard.
+  { id: 11, name: 'Final Quality Control',    type: 'scan'   },
   { id: 12, name: 'Packaging & Barcoding',    type: 'scan'   },
 ];
 
@@ -704,30 +703,6 @@ export default function ProductionStagesScreen({ navigation }) {
           const hasActivity = stageHasActivity(stage);
           const isScan       = stage.type === 'scan';
           const isLast       = idx === STAGES.length - 1;
-
-          // Final Quality Control: shown so the pipeline still reads as 12
-          // stages, but greyed out and inert -- it's handled in the
-          // manager dashboard now, not tappable here at all.
-          if (stage.disabled) {
-            return (
-              <View key={stage.id} style={styles.stageRow}>
-                <View style={styles.timelineSide}>
-                  <View style={[styles.stageDot, styles.stageDotDisabled]}>
-                    <Text style={[styles.stageDotNum, styles.stageDotNumDisabled]}>{stage.id}</Text>
-                  </View>
-                  {!isLast && <View style={styles.timelineLine} />}
-                </View>
-                <View style={[styles.stageCard, styles.stageCardDisabled]}>
-                  <View style={styles.stageCardHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.stageName, styles.stageNameDisabled]}>{stage.name}</Text>
-                      <Text style={styles.disabledStageNote}>Handled in the Manager Dashboard</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            );
-          }
 
           return (
             <View key={stage.id} style={styles.stageRow}>

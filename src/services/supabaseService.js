@@ -176,6 +176,22 @@ export async function isSessionActive(workerId, token) {
 //  Scan Batches — YoLo QC results saved for web dashboard approval
 // ─────────────────────────────────────────────────────────────────
 
+export async function fetchWorkerScanBatches(workerName) {
+  if (!supabase || !workerName) return [];
+  try {
+    const { data, error } = await supabase
+      .from('scan_batches')
+      .select('id, status, species_display, stage_name, worker_name, total_scanned, pass_count, flagged_count')
+      .eq('worker_name', workerName)
+      .limit(30);
+    if (error) { console.error('fetchWorkerScanBatches error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('fetchWorkerScanBatches exception:', e);
+    return [];
+  }
+}
+
 export async function fetchBatchStatuses(supabaseIds) {
   if (!supabase || !supabaseIds?.length) return [];
   try {
@@ -201,6 +217,10 @@ export async function submitScanBatch(batchData) {
         species_display: batchData.species_display || batchData.species,
         stage_number:    batchData.stage_number || 9,
         stage_name:      batchData.stage_name || 'Quality Control',
+        // Links this pending QC scan to its 12-stage production batch, so
+        // the manager dashboard (and the stage's scan-count) can tie scans
+        // to the right batch. Null for any non-stage scan.
+        production_batch_id: batchData.production_batch_id || null,
         status:          'pending_approval',
         specimens:       batchData.specimens || [],
         total_scanned:   batchData.total_scanned || 0,

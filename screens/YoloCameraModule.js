@@ -15,9 +15,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
-import { supabase } from '../src/services/supabaseService';
+import { supabase, submitScanBatch } from '../src/services/supabaseService';
 import { getWorkerSession } from '../src/services/workerSession';
-import { checkHealth, predictImage, WISP_API_KEY } from '../src/services/yoloApiService';
+import { checkHealth, predictImage, getApiUrl, WISP_API_KEY } from '../src/services/yoloApiService';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import ApiSettingsModal from '../components/ApiSettingsModal';
 
@@ -682,77 +682,64 @@ export default function YoloCameraModule({ navigation, route }) {
     navigation.goBack();
   };
 
-  // ── Sync one kept capture to Supabase (inventory/defects) + local stage
-  // log. Only runs at Confirm time, once per pending entry -- nothing here
-  // fires automatically anymore. ──
-  const syncOneCapture = async (entry) => {
-    const detectedSpecimens = entry.specimens;
-    const base64Image = entry.base64Image;
-    let passedThisScan = 0;
-    const scannedThisScan = detectedSpecimens.length;
+  // ── Submit one species group as a PENDING scan batch (Human-in-the-Loop).
+  // Per the project's scope, the mobile app NEVER writes inventory directly:
+  // it submits the QC scan for manager approval, and inventory is applied
+  // server-side by a Supabase trigger only when the manager approves (see
+  // supabase/qc_approval_migration.sql). Side effects: flagged push-notify,
+  // annotated images to the backend for the manager's image review, and the
+  // local stage scan-count pill. ──
+  const submitSpeciesGroup = async (species, entries) => {
+    const allSpecs = entries.flatMap(e => e.specimens);
+    const passCount = allSpecs.filter(s => s.qcStatus === 'pass').length;
+    const flaggedCount = allSpecs.length - passCount;
+    const primary = entries[0].specimens[0];
 
     if (supabase) {
-      for (const spec of detectedSpecimens) {
-        // Match the EXACT specimen (genus + species epithet), not a fuzzy
-        // genus substring. The old `%genus%` match credited the FIRST row
-        // whose genus merely contained this text (e.g. any "Papilio"),
-        // regardless of species -- so "Papilio blumei" and "Papilio thoas"
-        // both incremented the same wrong row. No exact match -> no update.
-        const _nameParts = spec.species.trim().split(/\s+/);
-        const genus = _nameParts[0] || '';
-        const speciesEpithet = _nameParts.slice(1).join(' ');
-
-        if (spec.qcStatus === 'pass') {
-          passedThisScan++;
-          if (isRepairMode) {
-            await supabase
-              .from('defects')
-              .insert({
-                 species: spec.species,
-                 missing_parts: 'Fixed (Pending Approval)',
-                 status: 'pending_approval',
-                 worker: workerName || 'Unknown'
-              });
-          } else {
-            let invQuery = supabase
-              .from('inventory')
-              .select('id, quantity, stock')
-              .ilike('genus', genus);
-            if (speciesEpithet) invQuery = invQuery.ilike('species', speciesEpithet);
-            const { data: rows, error: fetchErr } = await invQuery.limit(1);
-
-            if (!fetchErr && rows && rows.length > 0) {
-              const row = rows[0];
-              const quantityKey = 'quantity' in row ? 'quantity' : 'stock';
-              const currentQty = row[quantityKey] ?? 0;
-              await supabase
-                .from('inventory')
-                .update({ [quantityKey]: currentQty + 1 })
-                .eq('id', row.id);
-            }
-          }
-        } else {
-          const missing = describeMissingParts(spec.partsRequired, spec.partsFound);
-
-          await supabase
-            .from('defects')
-            .insert({
-               species: spec.species,
-               missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
-               status: 'new',
-               worker: workerName || 'Unknown'
-            });
-        }
-      }
+      await submitScanBatch({
+        species,
+        species_display: primary?.commonName || species,
+        stage_number: stepId || 9,
+        stage_name: stepTitle || 'Quality Control',
+        production_batch_id: batchId || null,
+        worker_name: workerName || 'Worker',
+        total_scanned: allSpecs.length,
+        pass_count: passCount,
+        flagged_count: flaggedCount,
+        specimens: allSpecs.map(s => ({
+          species: s.species,
+          status: s.qcStatus,
+          confidence: s.confidence,
+          parts_found: s.partsFound || {},
+          parts_required: s.partsRequired || {},
+          missing_parts: s.qcStatus !== 'pass' ? describeMissingParts(s.partsRequired, s.partsFound) : [],
+          scanned_at: new Date().toISOString(),
+        })),
+      });
+      if (flaggedCount > 0) await notifySpecimenFlagged(species);
     }
 
-    setDailyStats(prev => ({
-       scanned: prev.scanned + scannedThisScan,
-       passed: prev.passed + passedThisScan
-    }));
+    // Annotated images -> backend so the manager can review them on approval.
+    // (Previously read a never-set `api_host` key, so images were silently
+    // dropped; now uses the real configured API host.)
+    for (const e of entries) {
+      if (!e.base64Image) continue;
+      try {
+        const base = await getApiUrl();
+        await fetch(`${base}/save_scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': WISP_API_KEY },
+          body: JSON.stringify({
+            annotated_image_base64: e.base64Image,
+            species: e.specimens[0]?.species,
+            confidence: e.specimens[0]?.confidence,
+            qa_status: e.specimens[0]?.qcStatus === 'pass' ? 'PASS' : 'FLAGGED',
+          }),
+        });
+      } catch {}
+    }
 
-    if (detectedSpecimens.length > 0) {
-      const primary = detectedSpecimens[0];
+    if (primary) {
       const info = SPECIES_INFO[primary.rawSpecies];
       await AsyncStorage.setItem('last_detected_species', JSON.stringify({
         species: primary.species,
@@ -760,43 +747,24 @@ export default function YoloCameraModule({ navigation, route }) {
       })).catch(() => {});
     }
 
-    if (base64Image) {
-      const primary = detectedSpecimens[0];
-      const payload = {
-        annotated_image_base64: base64Image,
-        species: primary.species,
-        confidence: primary.confidence,
-        qa_status: primary.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'
-      };
-
-      const apiHost = await AsyncStorage.getItem('api_host');
-      if (apiHost) {
-        await fetch(`http://${apiHost}/save_scan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-API-Key': WISP_API_KEY },
-          body: JSON.stringify(payload)
-        });
-      }
-    }
-
-    if (scanMode === 'standalone' && batchId && stepId) {
+    // Local stage scan-count pill (per batch + stage). Counts captures
+    // submitted; the canonical record is the pending scan_batches in Supabase.
+    if (batchId && stepId) {
       const countKey = `stage_scan_count_${batchId}_${stepId}`;
       const logKey   = `stage_scan_log_${batchId}_${stepId}`;
-      const prevCount = await AsyncStorage.getItem(countKey).catch(() => null);
-      await AsyncStorage.setItem(countKey, String((parseInt(prevCount || '0', 10) + 1))).catch(() => {});
+      const prevCount = parseInt((await AsyncStorage.getItem(countKey).catch(() => null)) || '0', 10);
+      await AsyncStorage.setItem(countKey, String(prevCount + entries.length)).catch(() => {});
       const logRaw = await AsyncStorage.getItem(logKey).catch(() => null);
       const existing = logRaw ? JSON.parse(logRaw) : [];
-      const primary = detectedSpecimens[0];
       const logEntry = {
-        timestamp:    new Date().toISOString(),
-        species:      primary?.species      || 'Unknown',
-        passCount:    detectedSpecimens.filter(s => s.qcStatus === 'pass').length,
-        flaggedCount: detectedSpecimens.filter(s => s.qcStatus !== 'pass').length,
-        total:        detectedSpecimens.length,
-        type:         'yolo',
+        timestamp: new Date().toISOString(),
+        species, passCount, flaggedCount, total: allSpecs.length,
+        type: 'yolo', status: 'pending_approval',
       };
       await AsyncStorage.setItem(logKey, JSON.stringify([logEntry, ...existing].slice(0, 50))).catch(() => {});
     }
+
+    return { passCount, total: allSpecs.length };
   };
 
   // ── Confirm: commit every kept-but-unconfirmed scan. WorkflowModule's
@@ -838,20 +806,31 @@ export default function YoloCameraModule({ navigation, route }) {
     }
 
     setIsConfirming(true);
-    const count = pendingScans.length;
     try {
-      for (const entry of pendingScans) {
-        await syncOneCapture(entry);
+      // Group kept captures by AI-detected species; each species becomes one
+      // pending scan batch submitted for manager approval.
+      const groups = {};
+      for (const e of pendingScans) {
+        const sp = e.specimens[0]?.species || 'Unknown';
+        (groups[sp] = groups[sp] || []).push(e);
       }
+      let totalAll = 0, totalPass = 0;
+      for (const species of Object.keys(groups)) {
+        const { passCount, total } = await submitSpeciesGroup(species, groups[species]);
+        totalAll += total; totalPass += passCount;
+      }
+      setDailyStats(prev => ({ scanned: prev.scanned + totalAll, passed: prev.passed + totalPass }));
       setPendingScans([]);
       setIsCooldown(true);
       setTimeout(() => setIsCooldown(false), 3000);
-      setToastMessage(`✅ Confirmed ${count} scan${count === 1 ? '' : 's'}`);
-      setTimeout(() => setToastMessage(null), 3000);
+      // Honest wording: nothing is in inventory yet -- it's awaiting the
+      // manager's approval (human-in-the-loop).
+      setToastMessage(`Submitted ${totalAll} scan${totalAll === 1 ? '' : 's'} for approval`);
+      setTimeout(() => setToastMessage(null), 3500);
       handleStopScan();
     } catch (err) {
       console.error('Error confirming session:', err);
-      Alert.alert('Error', 'Failed to save or sync some scans. Please try again.');
+      Alert.alert('Error', 'Failed to submit some scans. Please try again.');
     } finally {
       setIsConfirming(false);
     }
