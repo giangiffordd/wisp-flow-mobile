@@ -781,11 +781,14 @@ export default function ProductionStagesScreen({ navigation }) {
                   </View>
                 )}
 
-                {/* Action buttons — every stage is open; skip/edit/add in any
-                    order. EDIT replaces the old sequential "STAGE DONE", and
-                    stays available even on a completed batch so a mistake
-                    (wrong count, wrong species) can still be fixed or
-                    removed -- completing a batch shouldn't lock in errors. */}
+                {/* Action buttons — every stage is open; add/edit in any
+                    order. EDIT only renders once the stage has at least one
+                    logged entry: on an empty stage it just opened a "nothing
+                    logged yet" modal, so showing it on all 12 stages was pure
+                    redundancy. When entries exist, EDIT stays available even
+                    on a completed batch so a mistake (wrong count, wrong
+                    species) can still be fixed -- completing a batch
+                    shouldn't lock in errors. */}
                 <View style={styles.stageActions}>
                   {!isCompleted && isScan && (
                     <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
@@ -800,9 +803,11 @@ export default function ProductionStagesScreen({ navigation }) {
                         <Text style={styles.btnLogText} numberOfLines={1}>ADD LOG</Text>
                       </TouchableOpacity>
                     )}
-                    <TouchableOpacity style={styles.btnEdit} onPress={() => openEditModal(stage)}>
-                      <Text style={styles.btnEditText} numberOfLines={1}>EDIT</Text>
-                    </TouchableOpacity>
+                    {logs.length > 0 && (
+                      <TouchableOpacity style={styles.btnEdit} onPress={() => openEditModal(stage)}>
+                        <Text style={styles.btnEditText} numberOfLines={1}>EDIT</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               </View>
