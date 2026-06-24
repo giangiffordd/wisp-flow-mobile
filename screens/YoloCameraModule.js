@@ -10,7 +10,6 @@ import {
   Easing,
   ScrollView,
   Image,
-  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -563,7 +562,11 @@ export default function YoloCameraModule({ navigation, route }) {
   // ── Keep: add the reviewed capture to the pending session list, then
   // return to live camera for the next one. Nothing is saved yet. ──
   const handleKeepScan = () => {
-    if (pendingReview && pendingReview.specimens.length > 0) {
+    // Defensive: the UI hides the Keep button whenever anything is
+    // flagged, but never accept a flagged capture even if this is somehow
+    // called anyway -- it needs the artisan to fix it first, not a save.
+    const hasFlagged = pendingReview?.specimens.some(s => s.qcStatus !== 'pass');
+    if (pendingReview && pendingReview.specimens.length > 0 && !hasFlagged) {
       setPendingScans(prev => [
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -831,98 +834,6 @@ export default function YoloCameraModule({ navigation, route }) {
         </View>
       )}
 
-      {/* ── Scan Review Sheet: Retake discards this capture, Keep adds it
-          to the pending session list below. Nothing is saved yet either
-          way -- only Confirm actually writes anything. Anchored to the
-          bottom with no backdrop dimming so the annotated camera frame
-          with bounding boxes stays fully visible above it -- a centered
-          modal with a dark backdrop was blocking the actual scan result. ── */}
-      <Modal visible={!!pendingReview} transparent animationType="slide">
-        <View style={{ flex: 1, justifyContent: 'flex-end' }} pointerEvents="box-none">
-          <ScrollView
-            style={{ maxHeight: '28%' }}
-            contentContainerStyle={{
-              backgroundColor: '#FFFFFF', padding: 14, borderTopWidth: 1, borderColor: '#E5E7EB',
-              shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 12,
-            }}
-          >
-            {pendingReview && (() => {
-              const revSpecimens = pendingReview.specimens;
-
-              if (revSpecimens.length === 0) {
-                return (
-                  <>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-                      <AlertCircle color="#f59e0b" size={20} />
-                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={{ width: '100%', paddingVertical: 12, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
-                      onPress={handleRetake}
-                    >
-                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Retake</Text>
-                    </TouchableOpacity>
-                  </>
-                );
-              }
-
-              const passCount = revSpecimens.filter(s => s.qcStatus === 'pass').length;
-              const flaggedItems = revSpecimens.filter(s => s.qcStatus !== 'pass');
-              const itemWording = revSpecimens.length === 1 ? 'specimen' : 'specimens';
-
-              return (
-                <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                      Detected {revSpecimens.length} {itemWording}
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <CheckCircle color="#10b981" size={14} />
-                        <Text style={{ color: '#10b981', fontSize: 13, fontWeight: '700' }}>{passCount}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <AlertCircle color={flaggedItems.length > 0 ? "#ef4444" : "#4A6070"} size={14} />
-                        <Text style={{ color: flaggedItems.length > 0 ? "#ef4444" : "#4A6070", fontSize: 13, fontWeight: '700' }}>{flaggedItems.length}</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {flaggedItems.length > 0 && (
-                    <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
-                      {flaggedItems.map((f, idx) => {
-                        const required = Object.keys(f.partsRequired || {});
-                        const found = Object.keys(f.partsFound || {});
-                        const missing = required.filter(p => !found.includes(p));
-                        return (
-                          <Text key={idx} style={{ color: '#7f1d1d', fontSize: 12, marginBottom: 2 }}>
-                            • <Text style={{ fontWeight: '700' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
-                          </Text>
-                        );
-                      })}
-                    </View>
-                  )}
-
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 12, borderRadius: 0, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' }}
-                      onPress={handleRetake}
-                    >
-                      <Text style={{ color: '#5B21D9', fontSize: 13, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Retake</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 12, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
-                      onPress={handleKeepScan}
-                    >
-                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Keep</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              );
-            })()}
-          </ScrollView>
-        </View>
-      </Modal>
 
 
       {/* ── Header ── */}
@@ -1173,116 +1084,193 @@ export default function YoloCameraModule({ navigation, route }) {
       {/* ── Results Panel ── */}
       <View style={[styles.resultsContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
 
-        {/* Live Detection header */}
-        <View style={styles.resultsHeader}>
-          <Text style={styles.resultsTitle}>Live Detection</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {source === 'api' && (
-              <View style={styles.aiSourceBadge}>
-                <Text style={styles.aiSourceText}>AI</Text>
-              </View>
-            )}
-            {source === 'simulation' && (
-              <View style={styles.simSourceBadge}>
-                <Text style={styles.simSourceText}>SIM</Text>
-              </View>
-            )}
-            <View style={[styles.detectionCount, specimens.length === 0 && styles.detectionCountZero]}>
-              <Text style={styles.detectionCountText}>{specimens.length}</Text>
-            </View>
-          </View>
-        </View>
+        {pendingReview ? (
+          /* ── Scan Review: fills this whole panel (the space between the
+             camera and where it ends, right above Pending Scans) instead
+             of floating over the camera. Retake discards; Keep is only
+             offered when nothing is flagged -- a flagged specimen needs
+             the artisan to physically fix it first, so there's nothing
+             valid to keep yet. ── */
+          (() => {
+            const revSpecimens = pendingReview.specimens;
+            const flaggedItems = revSpecimens.filter(s => s.qcStatus !== 'pass');
+            const hasFlagged = flaggedItems.length > 0;
 
-        {source === 'simulation' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: '#F59E0B', marginHorizontal: 0, marginBottom: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
-            <AlertCircle size={13} color="#F59E0B" />
-            <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>SIMULATION MODE — results are not from the AI model</Text>
-          </View>
-        )}
-
-        {isLoading ? (
-          <View style={styles.detectionLoadingRow}>
-            <ActivityIndicator size="small" color={SKY} />
-            <Text style={styles.emptyStateText}>
-              {apiStatus === 'connected' ? 'Sending frame to best.pt model…' : 'Running WISP-FLOW detection logic…'}
-            </Text>
-          </View>
-        ) : specimens.length > 0 ? (
-          <ScrollView
-            style={styles.specimensScroll}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
-          >
-            {specimens.map((spec, idx) => (
-              <View
-                key={spec.id || idx}
-                style={[
-                  styles.detectionCard,
-                  specimens.length > 1 && { marginBottom: 6 },
-                ]}
-              >
-                <View style={styles.detectionInfo}>
-                  <View style={[styles.colorIndicator, {
-                    backgroundColor: spec.qcStatus === 'flagged' ? '#ef4444' : '#10b981'
-                  }]} />
-                  <View style={styles.specimenTexts}>
-                    <Text style={styles.specimenScientific}>{spec.species}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      {spec.commonName !== spec.species && (
-                        <Text style={styles.specimenCommon}>{spec.commonName}</Text>
-                      )}
-                      <View style={[
-                        styles.qcBadge,
-                        spec.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
-                      ]}>
-                        <Text style={[
-                          styles.qcBadgeText,
-                          spec.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
-                        ]}>
-                          {spec.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
-                        </Text>
-                      </View>
+            return (
+              <View style={{ flex: 1, justifyContent: 'space-between' }}>
+                <View>
+                  {revSpecimens.length === 0 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <AlertCircle color="#f59e0b" size={20} />
+                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
                     </View>
-
-                    {/* Parts breakdown with color-coded pills */}
-                    {Object.keys(spec.partsFound).length > 0 && (
-                      <View style={styles.partsBreakdown}>
-                        {Object.entries(spec.partsFound).map(([partName, count]) => (
-                          <View
-                            key={partName}
-                            style={[styles.partPill, { borderColor: PART_COLORS[partName] || '#888' }]}
-                          >
-                            <View style={[styles.partPillDot, { backgroundColor: PART_COLORS[partName] || '#888' }]} />
-                            <Text style={[styles.partPillText, { color: PART_COLORS[partName] || '#888' }]}>
-                              {count} {partName}
-                            </Text>
-                          </View>
-                        ))}
+                  ) : hasFlagged ? (
+                    <>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <AlertCircle color="#ef4444" size={20} />
+                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Flagged — Needs Fixing</Text>
                       </View>
-                    )}
-
-                    {/* Required vs found comparison */}
-                    {spec.partsRequired && Object.keys(spec.partsRequired).length > 0 && (
-                      <Text style={styles.requiredText}>
-                        Required: {Object.entries(spec.partsRequired).map(([k, v]) => `${v} ${k}`).join(', ')}
+                      <Text style={{ color: '#6B7280', fontSize: 13, marginBottom: 10 }}>
+                        Have the artisan fix the specimen below, then retake. Flagged specimens can't be kept.
                       </Text>
-                    )}
-                  </View>
+                      <ScrollView style={{ maxHeight: 110 }} nestedScrollEnabled>
+                        <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
+                          {flaggedItems.map((f, idx) => {
+                            const required = Object.keys(f.partsRequired || {});
+                            const found = Object.keys(f.partsFound || {});
+                            const missing = required.filter(p => !found.includes(p));
+                            return (
+                              <Text key={idx} style={{ color: '#7f1d1d', fontSize: 13, marginBottom: 3 }}>
+                                • <Text style={{ fontWeight: '700' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
+                              </Text>
+                            );
+                          })}
+                        </View>
+                      </ScrollView>
+                    </>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <CheckCircle color="#10b981" size={20} />
+                      <Text style={{ color: '#111827', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                        {revSpecimens.length} {revSpecimens.length === 1 ? 'Specimen' : 'Specimens'} Passed
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity
+                    style={[{ flex: 1, paddingVertical: 13, borderRadius: 0, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }, (revSpecimens.length === 0 || hasFlagged) && { flex: 1 }]}
+                    onPress={handleRetake}
+                  >
+                    <Text style={{ color: '#5B21D9', fontSize: 13, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Retake</Text>
+                  </TouchableOpacity>
+                  {revSpecimens.length > 0 && !hasFlagged && (
+                    <TouchableOpacity
+                      style={{ flex: 1, paddingVertical: 13, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
+                      onPress={handleKeepScan}
+                    >
+                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Keep</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
-            ))}
-          </ScrollView>
+            );
+          })()
         ) : (
-          <View style={styles.emptyState}>
-            <AlertCircle size={28} color={isScanning ? SKY : '#7C3AED'} />
-            <Text style={styles.emptyStateText}>
-              {scanError
-                ? scanError
-                : isScanning
-                  ? 'Running WISP-FLOW detection…'
-                  : 'Press Start Scan to detect specimens'}
-            </Text>
-          </View>
+          <>
+            {/* Live Detection header */}
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultsTitle}>Live Detection</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {source === 'api' && (
+                  <View style={styles.aiSourceBadge}>
+                    <Text style={styles.aiSourceText}>AI</Text>
+                  </View>
+                )}
+                {source === 'simulation' && (
+                  <View style={styles.simSourceBadge}>
+                    <Text style={styles.simSourceText}>SIM</Text>
+                  </View>
+                )}
+                <View style={[styles.detectionCount, specimens.length === 0 && styles.detectionCountZero]}>
+                  <Text style={styles.detectionCountText}>{specimens.length}</Text>
+                </View>
+              </View>
+            </View>
+
+            {source === 'simulation' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: '#F59E0B', marginHorizontal: 0, marginBottom: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <AlertCircle size={13} color="#F59E0B" />
+                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>SIMULATION MODE — results are not from the AI model</Text>
+              </View>
+            )}
+
+            {isLoading ? (
+              <View style={styles.detectionLoadingRow}>
+                <ActivityIndicator size="small" color={SKY} />
+                <Text style={styles.emptyStateText}>
+                  {apiStatus === 'connected' ? 'Sending frame to best.pt model…' : 'Running WISP-FLOW detection logic…'}
+                </Text>
+              </View>
+            ) : specimens.length > 0 ? (
+              <ScrollView
+                style={styles.specimensScroll}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                {specimens.map((spec, idx) => (
+                  <View
+                    key={spec.id || idx}
+                    style={[
+                      styles.detectionCard,
+                      specimens.length > 1 && { marginBottom: 6 },
+                    ]}
+                  >
+                    <View style={styles.detectionInfo}>
+                      <View style={[styles.colorIndicator, {
+                        backgroundColor: spec.qcStatus === 'flagged' ? '#ef4444' : '#10b981'
+                      }]} />
+                      <View style={styles.specimenTexts}>
+                        <Text style={styles.specimenScientific}>{spec.species}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {spec.commonName !== spec.species && (
+                            <Text style={styles.specimenCommon}>{spec.commonName}</Text>
+                          )}
+                          <View style={[
+                            styles.qcBadge,
+                            spec.qcStatus === 'pass' ? styles.qcBadgePass : styles.qcBadgeFlagged
+                          ]}>
+                            <Text style={[
+                              styles.qcBadgeText,
+                              spec.qcStatus === 'pass' ? styles.qcBadgeTextPass : styles.qcBadgeTextFlagged
+                            ]}>
+                              {spec.qcStatus === 'pass' ? 'PASS' : 'FLAGGED'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Parts breakdown with color-coded pills */}
+                        {Object.keys(spec.partsFound).length > 0 && (
+                          <View style={styles.partsBreakdown}>
+                            {Object.entries(spec.partsFound).map(([partName, count]) => (
+                              <View
+                                key={partName}
+                                style={[styles.partPill, { borderColor: PART_COLORS[partName] || '#888' }]}
+                              >
+                                <View style={[styles.partPillDot, { backgroundColor: PART_COLORS[partName] || '#888' }]} />
+                                <Text style={[styles.partPillText, { color: PART_COLORS[partName] || '#888' }]}>
+                                  {count} {partName}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+
+                        {/* Required vs found comparison */}
+                        {spec.partsRequired && Object.keys(spec.partsRequired).length > 0 && (
+                          <Text style={styles.requiredText}>
+                            Required: {Object.entries(spec.partsRequired).map(([k, v]) => `${v} ${k}`).join(', ')}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyState}>
+                <AlertCircle size={28} color={isScanning ? SKY : '#7C3AED'} />
+                <Text style={styles.emptyStateText}>
+                  {scanError
+                    ? scanError
+                    : isScanning
+                      ? 'Running WISP-FLOW detection…'
+                      : 'Press Start Scan to detect specimens'}
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         {/* ── Pending Scans: kept captures awaiting Confirm. Nothing here
