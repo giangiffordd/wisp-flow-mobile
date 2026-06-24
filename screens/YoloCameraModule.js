@@ -1122,9 +1122,6 @@ export default function YoloCameraModule({ navigation, route }) {
                         <AlertCircle color="#ef4444" size={20} />
                         <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Flagged — Needs Fixing</Text>
                       </View>
-                      <Text style={{ color: '#6B7280', fontSize: 13, marginBottom: 10 }}>
-                        Have the artisan fix the specimen below, then retake. Flagged specimens can't be kept.
-                      </Text>
                       <ScrollView style={{ maxHeight: 110 }} nestedScrollEnabled>
                         <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
                           {flaggedItems.map((f, idx) => {
