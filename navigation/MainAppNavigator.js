@@ -8,11 +8,12 @@ import WorkflowModule from '../screens/WorkflowModule';
 import TaskHistoryPendingLogs from '../screens/TaskHistoryPendingLogs';
 import ProductionStagesScreen from '../screens/ProductionStagesScreen';
 import GlobalHeader from '../components/GlobalHeader';
-import { clearWorkerSession } from '../src/services/workerSession';
-import { fetchStaffAlerts } from '../src/services/supabaseService';
+import { clearWorkerSession, getWorkerSession } from '../src/services/workerSession';
+import { fetchStaffAlerts, isSessionActive } from '../src/services/supabaseService';
 
 const Tab = createBottomTabNavigator();
 const UNREAD_POLL_MS = 30000;
+const SESSION_POLL_MS = 30000;
 
 export default function MainAppNavigator({ navigation }) {
   const [hasUnread, setHasUnread] = useState(false);
@@ -27,6 +28,27 @@ export default function MainAppNavigator({ navigation }) {
     };
     checkUnread();
     const interval = setInterval(checkUnread, UNREAD_POLL_MS);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Single-session enforcement: if this worker logged in on another device,
+  // this device's token stops being the active one -- log it out here.
+  useEffect(() => {
+    let cancelled = false;
+    const checkSession = async () => {
+      const session = await getWorkerSession();
+      if (!session?.id || !session?.sessionToken) return;
+      const active = await isSessionActive(session.id, session.sessionToken);
+      if (!active && !cancelled) {
+        await clearWorkerSession();
+        Alert.alert(
+          'Logged Out',
+          'Your account was signed in on another device, so this session has been logged out.'
+        );
+        navigation.replace('Login');
+      }
+    };
+    const interval = setInterval(checkSession, SESSION_POLL_MS);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
