@@ -857,7 +857,7 @@ export default function YoloCameraModule({ navigation, route }) {
       {/* ── Non-blocking Toast Notification ── */}
       {toastMessage && (
         <View style={{ position: 'absolute', top: insets.top + 10, alignSelf: 'center', backgroundColor: '#10b981', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 0, zIndex: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 }}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{toastMessage}</Text>
+          <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>{toastMessage}</Text>
         </View>
       )}
 
@@ -1062,7 +1062,7 @@ export default function YoloCameraModule({ navigation, route }) {
                 </Text>
                 {!permission?.granted && !isScanning && (
                   <TouchableOpacity onPress={requestPermission} style={{ marginTop: 8 }} activeOpacity={0.7}>
-                    <Text style={{ color: SKY, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' }}>
+                    <Text style={{ color: SKY, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' }}>
                       Enable Camera Access
                     </Text>
                   </TouchableOpacity>
@@ -1153,21 +1153,21 @@ export default function YoloCameraModule({ navigation, route }) {
                   {revSpecimens.length === 0 ? (
                     <View style={{ alignItems: 'center', gap: 8 }}>
                       <AlertCircle color="#f59e0b" size={34} />
-                      <Text style={{ color: '#111827', fontSize: 15, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
-                      <Text style={{ color: '#6B7280', fontSize: 13, textAlign: 'center' }}>Aim at the specimen and retake.</Text>
+                      <Text style={{ color: '#111827', fontSize: 17, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
+                      <Text style={{ color: '#6B7280', fontSize: 15, textAlign: 'center' }}>Aim at the specimen and retake.</Text>
                     </View>
                   ) : hasFlagged ? (
                     <>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                         <AlertCircle color="#ef4444" size={20} />
-                        <Text style={{ color: '#ef4444', fontSize: 14, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Flagged — Needs Fixing</Text>
+                        <Text style={{ color: '#ef4444', fontSize: 16, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Flagged — Needs Fixing</Text>
                       </View>
                       <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled>
                         <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 0, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
                           {flaggedItems.map((f, idx) => {
                             const missing = describeMissingParts(f.partsRequired, f.partsFound);
                             return (
-                              <Text key={idx} style={{ color: '#7f1d1d', fontSize: 13, marginBottom: 3 }}>
+                              <Text key={idx} style={{ color: '#7f1d1d', fontSize: 15, marginBottom: 3 }}>
                                 • <Text style={{ fontWeight: '700' }}>{f.species}</Text>: Missing {missing.length > 0 ? missing.join(', ') : 'unknown'}
                               </Text>
                             );
@@ -1179,7 +1179,7 @@ export default function YoloCameraModule({ navigation, route }) {
                     <View style={{ alignItems: 'center', gap: 10 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <CheckCircle color="#10b981" size={26} />
-                        <Text style={{ color: '#10b981', fontSize: 16, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                        <Text style={{ color: '#10b981', fontSize: 18, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
                           {revSpecimens.length} {revSpecimens.length === 1 ? 'Specimen' : 'Specimens'} Passed
                         </Text>
                       </View>
@@ -1187,12 +1187,12 @@ export default function YoloCameraModule({ navigation, route }) {
                           informative, not just a lone checkmark. */}
                       {revSpecimens.map((s, i) => (
                         <View key={i} style={{ width: '100%', backgroundColor: 'rgba(16,185,129,0.06)', borderWidth: 1, borderColor: 'rgba(16,185,129,0.25)', padding: 12 }}>
-                          <Text style={{ fontSize: 15, fontWeight: '700', fontStyle: 'italic', color: '#111827', textAlign: 'center' }}>{s.species}</Text>
+                          <Text style={{ fontSize: 17, fontWeight: '700', fontStyle: 'italic', color: '#111827', textAlign: 'center' }}>{s.species}</Text>
                           {s.commonName && s.commonName !== s.species && (
-                            <Text style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 2 }}>{s.commonName}</Text>
+                            <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 2 }}>{s.commonName}</Text>
                           )}
                           {s.partsFound && Object.keys(s.partsFound).length > 0 && (
-                            <Text style={{ fontSize: 12, color: '#10b981', fontWeight: '600', textAlign: 'center', marginTop: 6 }}>
+                            <Text style={{ fontSize: 14, color: '#10b981', fontWeight: '600', textAlign: 'center', marginTop: 6 }}>
                               {Object.entries(s.partsFound).map(([k, v]) => `${v} ${k}`).join(' · ')}
                             </Text>
                           )}
@@ -1203,7 +1203,7 @@ export default function YoloCameraModule({ navigation, route }) {
                 </View>
 
                 {pendingScans.length > 0 && (
-                  <Text style={{ color: '#6B7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>
+                  <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: '700', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' }}>
                     {pendingScans.length} kept this session
                   </Text>
                 )}
@@ -1212,14 +1212,14 @@ export default function YoloCameraModule({ navigation, route }) {
                     style={[{ flex: 1, paddingVertical: 13, borderRadius: 0, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#FFFFFF' }, (revSpecimens.length === 0 || hasFlagged) && { flex: 1 }]}
                     onPress={handleRetake}
                   >
-                    <Text style={{ color: '#5B21D9', fontSize: 13, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Retake</Text>
+                    <Text style={{ color: '#5B21D9', fontSize: 15, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' }}>Retake</Text>
                   </TouchableOpacity>
                   {revSpecimens.length > 0 && !hasFlagged && (
                     <TouchableOpacity
                       style={{ flex: 1, paddingVertical: 13, borderRadius: 0, backgroundColor: '#5B21D9', alignItems: 'center' }}
                       onPress={handleKeepScan}
                     >
-                      <Text style={{ color: '#F5F5F7', fontSize: 13, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Keep</Text>
+                      <Text style={{ color: '#F5F5F7', fontSize: 15, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' }}>Keep</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1251,7 +1251,7 @@ export default function YoloCameraModule({ navigation, route }) {
             {source === 'simulation' && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(245,158,11,0.12)', borderWidth: 1, borderColor: '#F59E0B', marginHorizontal: 0, marginBottom: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
                 <AlertCircle size={13} color="#F59E0B" />
-                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>SIMULATION MODE — results are not from the AI model</Text>
+                <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: '700', letterSpacing: 1 }}>SIMULATION MODE — results are not from the AI model</Text>
               </View>
             )}
 
@@ -1468,7 +1468,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#111827',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
     letterSpacing: 1,
     paddingLeft: 1,
@@ -1478,7 +1478,7 @@ const styles = StyleSheet.create({
   },
   headerSub: {
     color: '#111827',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '500',
     marginTop: 2,
     letterSpacing: 0.5,
@@ -1512,7 +1512,7 @@ const styles = StyleSheet.create({
   },
   apiStatusText: {
     color: '#6B7280',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
@@ -1527,7 +1527,7 @@ const styles = StyleSheet.create({
   tallyHeaderNum: {
     color: '#fff',
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: 18,
   },
 
   // ── Operator Bar ──
@@ -1543,13 +1543,13 @@ const styles = StyleSheet.create({
   },
   workerBarName: {
     color: '#6B7280',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.6,
   },
   workerBarStats: {
     color: SKY,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
   },
 
@@ -1568,7 +1568,7 @@ const styles = StyleSheet.create({
   cameraText: {
     color: '#6B7280',
     marginTop: 14,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
     paddingHorizontal: 20,
@@ -1653,7 +1653,7 @@ const styles = StyleSheet.create({
   mainButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
     includeFontPadding: false,
   },
 
@@ -1677,7 +1677,7 @@ const styles = StyleSheet.create({
   },
   resultsTitle: {
     color: '#111827',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
   },
   aiSourceBadge: {
@@ -1690,7 +1690,7 @@ const styles = StyleSheet.create({
   },
   aiSourceText: {
     color: '#5B21D9',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -1704,7 +1704,7 @@ const styles = StyleSheet.create({
   },
   simSourceText: {
     color: '#f59e0b',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -1725,7 +1725,7 @@ const styles = StyleSheet.create({
   detectionCountText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 15,
   },
   detectionLoadingRow: {
     flexDirection: 'row',
@@ -1769,14 +1769,14 @@ const styles = StyleSheet.create({
   },
   specimenScientific: {
     color: '#111827',
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     fontStyle: 'italic',
     marginBottom: 2,
   },
   specimenCommon: {
     color: '#6B7280',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
   },
 
@@ -1803,12 +1803,12 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   partPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   requiredText: {
     color: '#7C3AED',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '500',
     marginTop: 3,
     fontStyle: 'italic',
@@ -1834,9 +1834,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  speciesGroupName: { flex: 1, fontSize: 12, fontWeight: '800', fontStyle: 'italic', color: '#5B21D9', letterSpacing: 0.3, marginRight: 8 },
+  speciesGroupName: { flex: 1, fontSize: 14, fontWeight: '800', fontStyle: 'italic', color: '#5B21D9', letterSpacing: 0.3, marginRight: 8 },
   speciesGroupCount: { backgroundColor: '#5B21D9', paddingHorizontal: 8, paddingVertical: 2 },
-  speciesGroupCountText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  speciesGroupCountText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
   sessionLogHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1848,7 +1848,7 @@ const styles = StyleSheet.create({
   },
   sessionLogTitle: {
     color: '#6B7280',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
@@ -1863,7 +1863,7 @@ const styles = StyleSheet.create({
   },
   sessionCountText: {
     color: SKY,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   clearLogButton: {
@@ -1902,13 +1902,13 @@ const styles = StyleSheet.create({
   },
   sessionEntrySpecies: {
     color: '#e2e8f0',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     fontStyle: 'italic',
   },
   sessionEntryMeta: {
     color: '#7C3AED',
-    fontSize: 10,
+    fontSize: 12,
     marginTop: 1,
   },
   // ── Sync Bar ──
@@ -1937,7 +1937,7 @@ const styles = StyleSheet.create({
   syncButtonText: {
     color: '#F5F5F7',
     fontWeight: '800',
-    fontSize: 12,
+    fontSize: 14,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
@@ -1952,7 +1952,7 @@ const styles = StyleSheet.create({
   emptyStateText: {
     color: '#5B21D9',
     marginTop: 12,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -2001,7 +2001,7 @@ const styles = StyleSheet.create({
   },
   offlineCardTitle: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 1,
     textAlign: 'center',
@@ -2009,7 +2009,7 @@ const styles = StyleSheet.create({
   },
   offlineCardSub: {
     color: '#cbd5e1',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
     marginTop: 6,
@@ -2023,14 +2023,14 @@ const styles = StyleSheet.create({
   },
   offlineCardBtnText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
     letterSpacing: 1.5,
     includeFontPadding: false,
   },
   glassBadgeText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     letterSpacing: 1.5,
     includeFontPadding: false,
@@ -2058,7 +2058,7 @@ const styles = StyleSheet.create({
   specimenBannerText: {
     color: '#065f46',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 15,
     letterSpacing: 0.2,
   },
 
@@ -2091,7 +2091,7 @@ const styles = StyleSheet.create({
   },
   boundingBoxText: {
     color: '#000000',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
 
@@ -2112,7 +2112,7 @@ const styles = StyleSheet.create({
   },
   partBoxText: {
     color: '#000000',
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '800',
   },
 
@@ -2132,7 +2132,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239,68,68,0.6)',
   },
   qcBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
   },
   qcBadgeTextPass: {
@@ -2148,7 +2148,7 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
   },
   qcBadgeTextMini: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '700',
   },
   sessionLogEntryLatestFlagged: {
@@ -2167,14 +2167,14 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(245,158,11,0.25)',
   },
   rescanBannerTitle: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '800',
     color: '#F59E0B',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
   rescanBannerSub: {
-    fontSize: 11,
+    fontSize: 13,
     color: '#5B21D9',
     fontWeight: '500',
     marginTop: 1,

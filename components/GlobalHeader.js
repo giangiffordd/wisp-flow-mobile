@@ -82,18 +82,18 @@ const styles = StyleSheet.create({
   brandText: {
     color: '#5B21D9',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 18,
     letterSpacing: 0.2,
   },
   brandDash: {
     color: '#9CA3AF',
     fontWeight: '300',
-    fontSize: 16,
+    fontSize: 18,
   },
   brandSubtext: {
     color: '#5B21D9',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 18,
     letterSpacing: 0.2,
   },
   rightSection: {

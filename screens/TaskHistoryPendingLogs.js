@@ -10,6 +10,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import { getWorkerSession } from '../src/services/workerSession';
+import { fetchWorkerScanBatches } from '../src/services/supabaseService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -69,12 +70,33 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
   useEffect(() => {
     async function loadScanHistory() {
       try {
-        const session = await getWorkerSession();
-        const prefix  = session?.employee_id || 'default';
+        const session    = await getWorkerSession();
+        const prefix     = session?.employee_id || 'default';
+        const workerName = session?.name || null;
+        const statusMap  = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
+
+        // Primary: fetch live statuses from Supabase
+        if (workerName) {
+          const liveBatches = await fetchWorkerScanBatches(workerName);
+          if (liveBatches.length > 0) {
+            const mapped = liveBatches.map(b => ({
+              id:        b.id,
+              batchId:   b.id.slice(-6).toUpperCase(),
+              stage:     b.stage_name || 'Quality Control',
+              timestamp: '--',
+              status:    statusMap[b.status] || 'pending',
+              operator:  b.worker_name || 'Worker',
+              notes:     `${b.species_display || 'Unknown'} — ${b.total_scanned || 0} scanned, ${b.pass_count || 0} passed, ${b.flagged_count || 0} flagged.`,
+            }));
+            setLogs(mapped);
+            return;
+          }
+        }
+
+        // Fallback: local AsyncStorage cache
         const raw = await AsyncStorage.getItem(`${prefix}_recent_batches`);
         if (!raw) return;
         const batches = JSON.parse(raw);
-        const statusMap = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
         const mapped = batches.map(b => {
           const passCount    = (b.specimens || []).filter(s => s.status === 'pass').length;
           const flaggedCount = (b.specimens || []).filter(s => s.status === 'flagged' || s.status === 'escalated').length;
@@ -90,7 +112,7 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
         });
         setLogs(mapped);
       } catch (err) {
-        console.warn('AsyncStorage read failed:', err);
+        console.warn('loadScanHistory failed:', err);
       }
     }
     loadScanHistory();
@@ -277,7 +299,7 @@ const styles = StyleSheet.create({
     color: B.textPri,
     fontWeight: '800',
     letterSpacing: 2,
-    fontSize: 14,
+    fontSize: 16,
     textTransform: 'uppercase',
   },
 
@@ -311,7 +333,7 @@ const styles = StyleSheet.create({
     borderColor: B.accent,
   },
   tabText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: B.textMuted,
   },
@@ -338,14 +360,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   batchLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
     color: B.accentDim,
     textTransform: 'uppercase',
     letterSpacing: 2.5,
   },
   batchIdText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     color: B.textPri,
     marginTop: 2,
@@ -359,7 +381,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -383,14 +405,14 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   infoItemLabel: {
-    fontSize: 9,
+    fontSize: 11,
     color: B.accentDim,
     fontWeight: '700',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
   infoItemVal: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: B.textPri,
   },
@@ -402,13 +424,13 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   timestampText: {
-    fontSize: 11,
+    fontSize: 13,
     color: B.textMuted,
     fontWeight: '500',
   },
   flexSpacer: { flex: 1 },
   expandText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
     color: B.accent,
     marginRight: 4,
@@ -424,7 +446,7 @@ const styles = StyleSheet.create({
     borderTopColor: B.border,
   },
   notesSectionTitle: {
-    fontSize: 9,
+    fontSize: 11,
     color: B.accent,
     fontWeight: '700',
     letterSpacing: 2.5,
@@ -436,14 +458,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   operatorLabel: {
-    fontSize: 9,
+    fontSize: 11,
     color: B.accentDim,
     fontWeight: '700',
     letterSpacing: 2.5,
     textTransform: 'uppercase',
   },
   operatorValue: {
-    fontSize: 11,
+    fontSize: 13,
     color: B.textPri,
     fontWeight: '600',
   },
@@ -455,7 +477,7 @@ const styles = StyleSheet.create({
     borderColor: B.border,
   },
   noteText: {
-    fontSize: 12,
+    fontSize: 14,
     color: B.textMuted,
     lineHeight: 17,
     fontStyle: 'italic',
@@ -468,7 +490,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     color: B.textPri,
     marginBottom: 4,
@@ -476,7 +498,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   emptySubtitle: {
-    fontSize: 12,
+    fontSize: 14,
     color: B.textMuted,
     textAlign: 'center',
     paddingHorizontal: 24,

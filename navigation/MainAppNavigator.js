@@ -46,12 +46,8 @@ export default function MainAppNavigator({ navigation }) {
     let cancelled = false;
     const checkSession = async () => {
       const session = await getWorkerSession();
-      if (!session?.id || !session?.sessionToken) {
-        console.warn('[session-check] no session or sessionToken stored locally -- skipping check', session);
-        return;
-      }
+      if (!session?.id || !session?.sessionToken) return;
       const active = await isSessionActive(session.id, session.sessionToken);
-      console.warn('[session-check] worker', session.id, 'active:', active);
       if (!active && !cancelled) {
         await clearWorkerSession();
         Alert.alert(

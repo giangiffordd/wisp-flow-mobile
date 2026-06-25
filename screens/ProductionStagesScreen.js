@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import {
-  Plus, ChevronRight, ChevronLeft, CheckCircle2,
+  Plus, ChevronRight, ChevronLeft, ChevronDown, CheckCircle2,
   Circle, ScanLine, ClipboardList, AlertTriangle, Trash2, X, Clock,
 } from 'lucide-react-native';
 import {
@@ -64,6 +64,10 @@ const STAGES = [
 ];
 
 const formatBatchDate = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+// Optional note character cap -- long enough for a real remark, short enough
+// that it can't become a wall of text in a one-line log entry.
+const NOTE_MAX = 200;
 
 // Existing batches were named with the short month ("Jun 24, 2026").
 // Expand the short month token to its full name for display ("June 24,
@@ -167,6 +171,7 @@ export default function ProductionStagesScreen({ navigation }) {
   const [stageScanCounts, setStageScanCounts] = useState({});
   const [stageScanLogs,   setStageScanLogs]   = useState({});
   const [scanLogModal,    setScanLogModal]     = useState(null); // stageId of open modal
+  const [expandedStageId, setExpandedStageId]  = useState(null); // accordion: which stage card is open
 
   // Quick batch creation -- no modal, no species: tapping the FAB creates a
   // date-named batch immediately and opens its (always-open) 12 stages.
@@ -539,7 +544,7 @@ export default function ProductionStagesScreen({ navigation }) {
         >
           {/* Section header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4, gap: 8 }}>
-            <Text style={{ fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 2.5 }}>[ PRODUCTION BATCHES ]</Text>
+            <Text style={{ fontSize: 11, color: B.accent, fontWeight: '700', letterSpacing: 2.5 }}>[ PRODUCTION BATCHES ]</Text>
             <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
           </View>
           <Text style={styles.pageSubtitle}>Track insect batches through the production lifecycle</Text>
@@ -657,7 +662,7 @@ export default function ProductionStagesScreen({ navigation }) {
 
           if (allSpecies.length === 0) {
             return (
-              <Text style={{ padding: 16, color: B.textMuted, fontSize: 12 }}>
+              <Text style={{ padding: 16, color: B.textMuted, fontSize: 14 }}>
                 {speciesLoading ? 'Loading species…' : 'No species available.'}
               </Text>
             );
@@ -668,12 +673,12 @@ export default function ProductionStagesScreen({ navigation }) {
           const closest = findClosestSpecies(speciesPickerSearch, allSpecies);
           return (
             <View style={{ padding: 16, gap: 10 }}>
-              <Text style={{ color: B.textMuted, fontSize: 12 }}>
+              <Text style={{ color: B.textMuted, fontSize: 14 }}>
                 No matches for "{speciesPickerSearch.trim()}".
               </Text>
               {closest && (
                 <TouchableOpacity onPress={() => selectSpeciesForPicker(closest)} activeOpacity={0.7}>
-                  <Text style={{ fontSize: 13, color: B.textMuted }}>
+                  <Text style={{ fontSize: 15, color: B.textMuted }}>
                     Did you mean <Text style={styles.didYouMeanLink}>{closest.commonName} ({closest.species})</Text>?
                   </Text>
                 </TouchableOpacity>
@@ -728,6 +733,7 @@ export default function ProductionStagesScreen({ navigation }) {
           const hasActivity = stageHasActivity(stage);
           const isScan       = stage.type === 'scan';
           const isLast       = idx === STAGES.length - 1;
+          const isExpanded   = expandedStageId === stage.id;
 
           // Manager-only stage (Final Quality Control): shown so the pipeline
           // still reads as 12 stages, but grayed out and inert -- only the
@@ -767,9 +773,15 @@ export default function ProductionStagesScreen({ navigation }) {
                 {!isLast && <View style={[styles.timelineLine, hasActivity && styles.timelineLineDone]} />}
               </View>
 
-              {/* Stage card */}
+              {/* Stage card — accordion: collapsed shows just the header;
+                  tap to expand the logs + action buttons, so all 12 stages
+                  aren't showing redundant buttons at once. */}
               <View style={[styles.stageCard, hasActivity && styles.stageCardDone]}>
-                <View style={styles.stageCardHeader}>
+                <TouchableOpacity
+                  style={styles.stageCardHeader}
+                  activeOpacity={0.6}
+                  onPress={() => setExpandedStageId(isExpanded ? null : stage.id)}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.stageName}>{stage.name}</Text>
                     {isScan && stage.id !== 12 && (
@@ -804,8 +816,15 @@ export default function ProductionStagesScreen({ navigation }) {
                     </TouchableOpacity>
                   )}
                   {hasActivity && <CheckCircle2 size={18} color={B.success} />}
-                </View>
+                  {/* expand/collapse chevron */}
+                  <ChevronDown
+                    size={18}
+                    color={B.textMuted}
+                    style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}
+                  />
+                </TouchableOpacity>
 
+                {isExpanded && (<>
                 {/* Existing logs for this stage */}
                 {logs.length > 0 && (
                   <View style={styles.logsContainer}>
@@ -818,14 +837,10 @@ export default function ProductionStagesScreen({ navigation }) {
                   </View>
                 )}
 
-                {/* Action buttons — every stage is open; add/edit in any
-                    order. EDIT only renders once the stage has at least one
-                    logged entry: on an empty stage it just opened a "nothing
-                    logged yet" modal, so showing it on all 12 stages was pure
-                    redundancy. When entries exist, EDIT stays available even
-                    on a completed batch so a mistake (wrong count, wrong
-                    species) can still be fixed -- completing a batch
-                    shouldn't lock in errors. */}
+                {/* Action buttons — EDIT only renders once the stage has at
+                    least one logged entry. When entries exist, EDIT stays
+                    available even on a completed batch so a mistake (wrong
+                    count, wrong species) can still be fixed. */}
                 <View style={styles.stageActions}>
                   {!isCompleted && isScan && (
                     <TouchableOpacity style={styles.btnScanFull} onPress={() => handleLaunchScanner(stage)}>
@@ -847,6 +862,7 @@ export default function ProductionStagesScreen({ navigation }) {
                     )}
                   </View>
                 </View>
+                </>)}
               </View>
             </View>
           );
@@ -908,33 +924,38 @@ export default function ProductionStagesScreen({ navigation }) {
             <ScrollView style={{ padding: 20 }} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               <Text style={styles.inputLabel}>[ SPECIMENS LOGGED ]</Text>
               {logRows.map((row) => (
-                <View key={row.key} style={styles.logRow}>
-                  <View style={styles.stepperGroup}>
-                    <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustLogRowQty(row.key, -1)} activeOpacity={0.7}>
-                      <Text style={styles.stepperBtnText}>−</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.stepperInput}
-                      value={String(row.quantity)}
-                      onChangeText={(t) => setLogRowQtyDirect(row.key, t)}
-                      keyboardType="number-pad"
-                    />
-                    <TouchableOpacity style={styles.stepperBtn} onPress={() => adjustLogRowQty(row.key, 1)} activeOpacity={0.7}>
-                      <Text style={styles.stepperBtnText}>+</Text>
-                    </TouchableOpacity>
-                  </View>
+                <View key={row.key} style={styles.logRowCard}>
+                  {/* Species choice on top */}
                   <TouchableOpacity
-                    style={[styles.speciesPickerBtn, row.species && styles.speciesPickerBtnFilled]}
+                    style={[styles.speciesPickerBtn, styles.speciesPickerBtnTop, row.species && styles.speciesPickerBtnFilled]}
                     onPress={() => openSpeciesPickerForRow(row.key)}
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.speciesPickerBtnText, row.species && styles.speciesPickerBtnTextFilled]} numberOfLines={1}>
                       {row.speciesDisplay || 'Choose species…'}
                     </Text>
+                    <ChevronDown size={16} color={row.species ? B.accent : B.textMuted} />
                   </TouchableOpacity>
+
+                  {/* Quantity counter, centered in the middle */}
+                  <View style={styles.stepperGroupBig}>
+                    <TouchableOpacity style={styles.stepperBtnBig} onPress={() => adjustLogRowQty(row.key, -1)} activeOpacity={0.7}>
+                      <Text style={styles.stepperBtnTextBig}>−</Text>
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.stepperInputBig}
+                      value={String(row.quantity)}
+                      onChangeText={(t) => setLogRowQtyDirect(row.key, t)}
+                      keyboardType="number-pad"
+                    />
+                    <TouchableOpacity style={styles.stepperBtnBig} onPress={() => adjustLogRowQty(row.key, 1)} activeOpacity={0.7}>
+                      <Text style={styles.stepperBtnTextBig}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {logRows.length > 1 && (
-                    <TouchableOpacity style={styles.logRowRemove} onPress={() => removeLogRow(row.key)} activeOpacity={0.7}>
-                      <Text style={styles.logRowRemoveText}>✕</Text>
+                    <TouchableOpacity style={styles.logRowRemoveLink} onPress={() => removeLogRow(row.key)} activeOpacity={0.7}>
+                      <Text style={styles.logRowRemoveLinkText}>✕ REMOVE</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -952,9 +973,10 @@ export default function ProductionStagesScreen({ navigation }) {
                 value={logNote}
                 onChangeText={setLogNote}
                 multiline
-                numberOfLines={3}
                 textAlignVertical="top"
+                maxLength={NOTE_MAX}
               />
+              <Text style={styles.noteCounter}>{logNote.length}/{NOTE_MAX}</Text>
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.btnSecondary} onPress={() => { Keyboard.dismiss(); setShowLogModal(false); }}>
                   <Text style={styles.btnSecondaryText}>CANCEL</Text>
@@ -996,7 +1018,7 @@ export default function ProductionStagesScreen({ navigation }) {
             </View>
             <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ padding: 16, gap: 10 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
               {editStage && logsForStage(editStage.id).length === 0 ? (
-                <Text style={{ color: B.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: 20 }}>
+                <Text style={{ color: B.textMuted, fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>
                   No entries logged yet for this stage.
                 </Text>
               ) : editStage && logsForStage(editStage.id).map(entry => (
@@ -1103,7 +1125,7 @@ export default function ProductionStagesScreen({ navigation }) {
               {(stageScanLogs[scanLogModal] || []).length === 0 ? (
                 <View style={{ alignItems: 'center', paddingVertical: 24, gap: 8 }}>
                   <ScanLine size={28} color={B.textMuted} />
-                  <Text style={{ color: B.textMuted, fontSize: 13, textAlign: 'center', fontWeight: '500' }}>
+                  <Text style={{ color: B.textMuted, fontSize: 15, textAlign: 'center', fontWeight: '500' }}>
                     Detailed scan logs will appear here for scans made during this session.
                   </Text>
                 </View>
@@ -1162,11 +1184,11 @@ const styles = StyleSheet.create({
 
   // Batch list
   listContent:    { padding: 16, paddingBottom: 100 },
-  pageSubtitle:   { fontSize: 12, color: B.textMuted, marginBottom: 20, marginTop: 4 },
+  pageSubtitle:   { fontSize: 14, color: B.textMuted, marginBottom: 20, marginTop: 4 },
 
   emptyState:     { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle:     { fontSize: 15, fontWeight: '700', color: B.textPri, letterSpacing: 1 },
-  emptyBody:      { fontSize: 13, color: B.textMuted, textAlign: 'center', maxWidth: 260 },
+  emptyTitle:     { fontSize: 17, fontWeight: '700', color: B.textPri, letterSpacing: 1 },
+  emptyBody:      { fontSize: 15, color: B.textMuted, textAlign: 'center', maxWidth: 260 },
 
   batchCard: {
     backgroundColor: B.bgCard,
@@ -1177,14 +1199,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   batchCardRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 0 },
-  batchCardName:  { fontSize: 14, fontWeight: '700', color: B.textPri },
+  batchCardName:  { fontSize: 16, fontWeight: '700', color: B.textPri },
   batchCardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
-  batchCardMeta:  { fontSize: 11, color: B.textMuted, fontWeight: '500' },
+  batchCardMeta:  { fontSize: 13, color: B.textMuted, fontWeight: '500' },
 
   statusBadge:    { borderRadius: 0, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   badgeActive:    { backgroundColor: 'rgba(143,164,184,0.12)', borderColor: B.accent },
   badgeDone:      { backgroundColor: B.successBg, borderColor: B.success },
-  statusBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
   badgeActiveText: { color: B.accent },
   badgeDoneText:  { color: B.success },
 
@@ -1220,8 +1242,8 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     padding: 6,
   },
-  detailTitle:    { fontSize: 14, fontWeight: '800', color: B.textPri, letterSpacing: 1, textTransform: 'uppercase' },
-  detailSubtitle: { fontSize: 12, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
+  detailTitle:    { fontSize: 16, fontWeight: '800', color: B.textPri, letterSpacing: 1, textTransform: 'uppercase' },
+  detailSubtitle: { fontSize: 14, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
   completedBadge: {
     backgroundColor: B.successBg,
     borderRadius: 0,
@@ -1230,7 +1252,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  completedBadgeText: { fontSize: 9, fontWeight: '700', color: B.success, letterSpacing: 1.5, textTransform: 'uppercase' },
+  completedBadgeText: { fontSize: 11, fontWeight: '700', color: B.success, letterSpacing: 1.5, textTransform: 'uppercase' },
   deleteBatchBtn: {
     padding: 6,
     borderWidth: 1,
@@ -1252,7 +1274,7 @@ const styles = StyleSheet.create({
   },
   stageDotDone:   { backgroundColor: B.success },
   stageDotDisabled: { backgroundColor: B.border },
-  stageDotNum:    { fontSize: 11, fontWeight: '800', color: B.bg },
+  stageDotNum:    { fontSize: 13, fontWeight: '800', color: B.bg },
   stageDotNumDisabled: { color: B.textMuted },
   timelineLine:   { width: 2, flex: 1, minHeight: 16, backgroundColor: B.border, marginTop: 2 },
   timelineLineDone: { backgroundColor: B.success },
@@ -1271,12 +1293,12 @@ const styles = StyleSheet.create({
   stageCardDisabled: { opacity: 0.45 },
 
   stageCardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, padding: 12, paddingLeft: 16, gap: 10 },
-  stageName:      { fontSize: 13, fontWeight: '700', color: B.textPri },
+  stageName:      { fontSize: 15, fontWeight: '700', color: B.textPri },
   stageNameDisabled: { color: B.textMuted },
-  disabledStageNote: { fontSize: 10, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
+  disabledStageNote: { fontSize: 12, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
 
   scanTag:        { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  scanTagText:    { fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 1.5 },
+  scanTagText:    { fontSize: 11, color: B.accent, fontWeight: '700', letterSpacing: 1.5 },
 
   logsContainer: {
     borderTopWidth: 1,
@@ -1295,8 +1317,8 @@ const styles = StyleSheet.create({
     padding: 8,
     paddingLeft: 10,
   },
-  logText:  { fontSize: 12, color: B.textPri, lineHeight: 18 },
-  logTime:  { fontSize: 10, color: B.textMuted, marginTop: 4 },
+  logText:  { fontSize: 14, color: B.textPri, lineHeight: 18 },
+  logTime:  { fontSize: 12, color: B.textMuted, marginTop: 4 },
 
   stageActions: {
     flexDirection: 'row',
@@ -1322,7 +1344,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0891B2',
   },
   scanCountPillText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: B.textMuted,
     letterSpacing: 0.8,
@@ -1359,16 +1381,16 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
   },
-  scanLogSpecies: { fontSize: 13, fontWeight: '700', color: B.textPri, flex: 1, fontStyle: 'italic' },
-  scanLogTime:    { fontSize: 10, color: B.textMuted, fontWeight: '500', flexShrink: 0 },
+  scanLogSpecies: { fontSize: 15, fontWeight: '700', color: B.textPri, flex: 1, fontStyle: 'italic' },
+  scanLogTime:    { fontSize: 12, color: B.textMuted, fontWeight: '500', flexShrink: 0 },
   scanLogMeta:    { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   scanLogBadge: {
     borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  scanLogBadgeText: { fontSize: 9, fontWeight: '700', letterSpacing: 1.5 },
-  scanLogTotal:     { fontSize: 11, color: B.textMuted, fontWeight: '500' },
+  scanLogBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
+  scanLogTotal:     { fontSize: 13, color: B.textMuted, fontWeight: '500' },
   scanCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1386,7 +1408,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(91,33,217,0.06)',
   },
   scanCountText: {
-    fontSize: 11,
+    fontSize: 13,
     color: B.textMuted,
     fontWeight: '500',
   },
@@ -1408,7 +1430,7 @@ const styles = StyleSheet.create({
     borderColor: B.accent,
     backgroundColor: 'transparent',
   },
-  btnLogText: { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
+  btnLogText: { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
   // When ADD LOG is the only action (stage has no entries yet, so no EDIT),
   // it shouldn't stretch edge-to-edge -- size to content and center it.
   btnLogAlone: { flex: 0, paddingHorizontal: 36 },
@@ -1421,7 +1443,7 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     backgroundColor: B.accent,
   },
-  btnScanText: { fontSize: 11, fontWeight: '800', color: B.bg, letterSpacing: 2 },
+  btnScanText: { fontSize: 13, fontWeight: '800', color: B.bg, letterSpacing: 2 },
   btnEdit: {
     flex: 1,
     minWidth: 130,
@@ -1436,11 +1458,11 @@ const styles = StyleSheet.create({
     borderColor: B.textMuted,
     backgroundColor: 'transparent',
   },
-  btnEditText: { fontSize: 11, fontWeight: '800', color: B.textMuted, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
+  btnEditText: { fontSize: 13, fontWeight: '800', color: B.textMuted, letterSpacing: 1.5, flexShrink: 1, textAlign: 'center' },
 
   completedBanner: { alignItems: 'center', paddingTop: 24, paddingHorizontal: 24, gap: 8 },
-  completedBannerText: { fontSize: 14, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
-  completedBannerSub:  { fontSize: 13, color: B.textMuted, textAlign: 'center' },
+  completedBannerText: { fontSize: 16, fontWeight: '800', color: B.success, letterSpacing: 2, textTransform: 'uppercase' },
+  completedBannerSub:  { fontSize: 15, color: B.textMuted, textAlign: 'center' },
   btnMarkComplete: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1452,7 +1474,7 @@ const styles = StyleSheet.create({
     backgroundColor: B.success,
   },
   btnMarkCompleteDisabled: { backgroundColor: B.bgEl, borderWidth: 1, borderColor: B.border },
-  btnMarkCompleteText: { fontSize: 12, fontWeight: '800', color: B.bg, letterSpacing: 2, textTransform: 'uppercase' },
+  btnMarkCompleteText: { fontSize: 14, fontWeight: '800', color: B.bg, letterSpacing: 2, textTransform: 'uppercase' },
 
   // Edit/remove stage log entries
   editEntryRow: {
@@ -1461,8 +1483,8 @@ const styles = StyleSheet.create({
     backgroundColor: B.bg,
     padding: 10,
   },
-  editLink:   { fontSize: 11, fontWeight: '800', color: B.accent, letterSpacing: 1 },
-  deleteLink: { fontSize: 11, fontWeight: '800', color: B.error, letterSpacing: 1 },
+  editLink:   { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 1 },
+  deleteLink: { fontSize: 13, fontWeight: '800', color: B.error, letterSpacing: 1 },
 
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', paddingHorizontal: 20 },
@@ -1492,9 +1514,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 10,
   },
-  modalTitle:    { fontSize: 12, fontWeight: '800', color: B.textPri, letterSpacing: 2, textTransform: 'uppercase' },
-  modalSubtitle: { fontSize: 12, color: B.textMuted, marginTop: 4 },
-  inputLabel:    { fontSize: 9, color: B.accentDim, fontWeight: '700', letterSpacing: 2.5, textTransform: 'uppercase' },
+  modalTitle:    { fontSize: 14, fontWeight: '800', color: B.textPri, letterSpacing: 2, textTransform: 'uppercase' },
+  modalSubtitle: { fontSize: 14, color: B.textMuted, marginTop: 4 },
+  inputLabel:    { fontSize: 11, color: B.accentDim, fontWeight: '700', letterSpacing: 2.5, textTransform: 'uppercase' },
 
   input: {
     backgroundColor: B.bg,
@@ -1503,7 +1525,7 @@ const styles = StyleSheet.create({
     borderColor: B.border,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    fontSize: 14,
+    fontSize: 16,
     color: B.textPri,
   },
   inputMultiline: { minHeight: 100 },
@@ -1527,12 +1549,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: B.bg,
   },
-  stepperBtnText: { fontSize: 18, fontWeight: '700', color: B.accent },
+  stepperBtnText: { fontSize: 20, fontWeight: '700', color: B.accent },
   stepperInput: {
     width: 44,
     height: 38,
     textAlign: 'center',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: B.textPri,
     borderLeftWidth: 1,
@@ -1552,17 +1574,57 @@ const styles = StyleSheet.create({
     borderColor: B.accent,
     backgroundColor: 'rgba(91,33,217,0.06)',
   },
-  speciesPickerBtnText: { fontSize: 13, fontWeight: '500', color: B.textMuted },
+  speciesPickerBtnText: { flex: 1, fontSize: 15, fontWeight: '500', color: B.textMuted },
   speciesPickerBtnTextFilled: { color: B.textPri, fontWeight: '700' },
-  logRowRemove: {
-    width: 34,
-    height: 38,
+
+  // ── New stacked log-row layout: species on top, big centered counter ──
+  logRowCard: {
+    borderWidth: 1,
+    borderColor: B.border,
+    backgroundColor: B.bgEl,
+    padding: 14,
+    gap: 14,
+    alignItems: 'center',
+  },
+  speciesPickerBtnTop: {
+    flex: 0,
+    width: '100%',
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepperGroupBig: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: B.border,
+    alignSelf: 'center',
+  },
+  stepperBtnBig: {
+    width: 56,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: B.bg,
   },
-  logRowRemoveText: { fontSize: 15, fontWeight: '700', color: B.error },
+  stepperBtnTextBig: { fontSize: 30, fontWeight: '700', color: B.accent },
+  stepperInputBig: {
+    width: 72,
+    height: 52,
+    textAlign: 'center',
+    fontSize: 24,
+    fontWeight: '800',
+    color: B.textPri,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: B.border,
+  },
+  logRowRemoveLink: { paddingVertical: 2 },
+  logRowRemoveLinkText: { fontSize: 13, fontWeight: '800', color: B.error, letterSpacing: 1.5 },
+  noteCounter: { fontSize: 12, color: B.textMuted, textAlign: 'right', marginTop: -6 },
   addRowLink: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '800',
     color: B.accent,
     letterSpacing: 1.5,
@@ -1584,7 +1646,7 @@ const styles = StyleSheet.create({
   // paddingLeft compensates for letterSpacing -- it adds a trailing gap
   // after the last character but nothing before the first, which shifts
   // the visible text left of true-center inside a centered button.
-  btnSecondaryText: { fontSize: 13, fontWeight: '800', color: B.accent, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
+  btnSecondaryText: { fontSize: 15, fontWeight: '800', color: B.accent, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
   btnPrimary: {
     flex: 1,
     alignItems: 'center',
@@ -1593,11 +1655,11 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     backgroundColor: B.accent,
   },
-  btnPrimaryText: { fontSize: 13, fontWeight: '800', color: B.bg, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
+  btnPrimaryText: { fontSize: 15, fontWeight: '800', color: B.bg, letterSpacing: 3, paddingLeft: 3, textTransform: 'uppercase' },
 
   // Species picker list (log-entry species picker)
   suggestionItem:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: B.border },
-  suggestionCommon:     { fontSize: 13, fontWeight: '700', color: B.textPri },
-  suggestionScientific: { fontSize: 11, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
+  suggestionCommon:     { fontSize: 15, fontWeight: '700', color: B.textPri },
+  suggestionScientific: { fontSize: 13, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
   didYouMeanLink:       { color: B.accent, fontWeight: '700' },
 });

@@ -119,7 +119,6 @@ export default function MobileStaffDashboard({ navigation }) {
         // any other device already logged in as them will get logged out
         // next time its periodic check runs (see MainAppNavigator).
         session.sessionToken = await claimWorkerSession(session.id);
-        console.warn('[login] worker', session.id, 'claimed sessionToken:', session.sessionToken);
         await setWorkerSession(session);
         Notifications.getExpoPushTokenAsync()
           .then(t => { if (t?.data) savePushToken(session.id, t.data); })
@@ -312,7 +311,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   panelLabel: {
-    fontSize: 10,
+    fontSize: 12,
     color: C.accent,
     letterSpacing: 2,
     fontWeight: '700',
@@ -336,12 +335,12 @@ const styles = StyleSheet.create({
   generalErrorText: {
     flex: 1,
     color: C.error,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
   },
   fieldError: {
     color: C.error,
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 5,
     letterSpacing: 0.5,
@@ -352,7 +351,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   label: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: C.accentDim,
     letterSpacing: 2.5,
@@ -375,7 +374,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 17,
     color: '#111827',
     fontWeight: '500',
   },
@@ -387,7 +386,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   forgotText: {
-    fontSize: 11,
+    fontSize: 13,
     color: C.accentDim,
     fontWeight: '600',
     letterSpacing: 0.5,
@@ -401,7 +400,7 @@ const styles = StyleSheet.create({
   },
   loginBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     letterSpacing: 4,
   },
@@ -418,14 +417,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   privacyText: {
-    fontSize: 10,
+    fontSize: 12,
     color: C.mutedText,
     letterSpacing: 1,
     textDecorationLine: 'underline',
   },
   footer: {
     textAlign: 'center',
-    fontSize: 10,
+    fontSize: 12,
     color: C.muted,
     fontWeight: '700',
     letterSpacing: 3,
