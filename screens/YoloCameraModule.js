@@ -472,13 +472,16 @@ export default function YoloCameraModule({ navigation, route }) {
         throw new Error('Camera ref not available');
       }
 
+      // Send the OS-processed photo AS-IS, with its EXIF orientation intact --
+      // the server's pipeline rotates by EXIF to see the specimen upright. We do
+      // NOT downscale via expo-image-manipulator: on Android BOTH its APIs (the
+      // new object API and the legacy manipulateAsync) strip EXIF WITHOUT baking
+      // the rotation into the pixels, so the server got sideways images and the
+      // model detected nothing on every scan. quality 0.6 shrinks the JPEG for
+      // cellular without touching dimensions or orientation; the 30s timeout +
+      // single retry in predictImage cover the rest.
       const photo = await cameraRef.current.takePictureAsync({
-        // skipProcessing bypasses the phone's normal photo pipeline --
-        // sharpening, noise reduction, multi-frame fusion, AND orientation
-        // correction. That's exactly why this camera path looked blurrier
-        // and "different" than the native camera app and test.py's clean
-        // captures. Let the OS process the photo normally.
-        quality: 0.9,
+        quality: 0.6,
         base64: false,
       });
       setCapturedPhotoUri(photo.uri);
@@ -521,6 +524,27 @@ export default function YoloCameraModule({ navigation, route }) {
 
       if (result && result.status === 'success' && result.specimens && result.specimens.length === 0) {
         setScanError('None detected — aim at the specimen and try again.');
+        setSpecimens([]);
+        setRawParts([]);
+        setSource('api');
+        setPendingReview({ specimens: [], base64Image: null });
+        return;
+      }
+
+      // A structured failure means the AI never actually looked at the
+      // photo (timeout / dropped connection / busy server) -- this is NOT
+      // the same as a clean "no specimen found" result, and must not be
+      // shown as one.
+      if (result && result.ok === false) {
+        let connectionError = 'Scan failed — check your connection and retake.';
+        if (result.reason === 'timeout') {
+          connectionError = 'Connection is slow — couldn\'t reach the scanner. Move to better signal and retake.';
+        } else if (result.reason === 'network') {
+          connectionError = 'Can\'t reach the scanner — check your connection and retake.';
+        } else if (result.reason === 'http') {
+          connectionError = 'Scanner is busy right now — please retake in a moment.';
+        }
+        setScanError(connectionError);
         setSpecimens([]);
         setRawParts([]);
         setSource('api');

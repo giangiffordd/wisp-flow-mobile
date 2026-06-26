@@ -17,8 +17,15 @@
 // binary, not something compiled from app.json. HTTPS is the only fix that
 // doesn't require giving up Expo Go for Android testing.
 const DEFAULT_API_URL = 'https://139-59-117-202.nip.io';
-const REQUEST_TIMEOUT = 12000;
+const REQUEST_TIMEOUT = 30000;
 export const WISP_API_KEY = 'wf-G9YTobnU300n3EyGVY_KFjfwGCm4iMbJ';
+
+// Transient-failure retry: a single retry on timeout/network errors only.
+// Slow cellular uploads can abort mid-flight even with a generous timeout --
+// one extra attempt after a short backoff recovers many of those without
+// making the user manually retake the photo.
+const MAX_ATTEMPTS = 2;
+const RETRY_BACKOFF_MS = 800;
 
 /**
  * @function getApiUrl
@@ -65,13 +72,15 @@ export async function checkHealth() {
 }
 
 /**
- * @function predictImage
- * @description Send a captured image to the backend for YOLOv8 detection and QA routing.
- * @param {string} imageUri - Local URI from CameraView.takePictureAsync
- * @returns {Promise<Object|null>} Detection result or null on failure
+ * @function predictImageOnce
+ * @description Single attempt at POSTing the image to /predict. Internal
+ * helper for predictImage's retry loop -- not exported.
+ * @param {string} baseUrl
+ * @param {string} imageUri
+ * @returns {Promise<Object>} Either the parsed success JSON, or a
+ * structured failure object: { ok: false, reason: 'timeout' | 'network' | 'http', status? }
  */
-export async function predictImage(imageUri) {
-  const baseUrl = await getApiUrl();
+async function predictImageOnce(baseUrl, imageUri) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
@@ -84,12 +93,36 @@ export async function predictImage(imageUri) {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!response.ok) return null;
+    if (!response.ok) return { ok: false, reason: 'http', status: response.status };
     return await response.json();
   } catch (fetchError) {
     clearTimeout(timeout);
-    if (fetchError.name === 'AbortError') console.warn('YOLO API request timed out');
-    else console.warn('YOLO API request failed:', fetchError.message);
-    return null;
+    if (fetchError.name === 'AbortError') {
+      console.warn('YOLO API request timed out');
+      return { ok: false, reason: 'timeout' };
+    }
+    console.warn('YOLO API request failed:', fetchError.message);
+    return { ok: false, reason: 'network' };
   }
+}
+
+/**
+ * @function predictImage
+ * @description Send a captured image to the backend for YOLOv8 detection and
+ * QA routing. Retries once (2 attempts total) on timeout/network errors only
+ * -- a clean HTTP error or a successful JSON response is never retried.
+ * @param {string} imageUri - Local URI from CameraView.takePictureAsync
+ * @returns {Promise<Object>} The parsed success JSON (has `.status`), or a
+ * structured failure object `{ ok: false, reason, status? }` (has `.ok === false`).
+ */
+export async function predictImage(imageUri) {
+  const baseUrl = await getApiUrl();
+  let result;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    result = await predictImageOnce(baseUrl, imageUri);
+    const isRetryable = result && result.ok === false && (result.reason === 'timeout' || result.reason === 'network');
+    if (!isRetryable || attempt === MAX_ATTEMPTS) break;
+    await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS));
+  }
+  return result;
 }

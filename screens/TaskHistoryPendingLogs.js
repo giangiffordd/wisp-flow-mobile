@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef } from 'react';
+﻿import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { getWorkerSession } from '../src/services/workerSession';
 import { fetchWorkerScanBatches, getStageLogsForBatch } from '../src/services/supabaseService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -65,7 +67,10 @@ const B = {
 export default function TaskHistoryPendingLogs({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
-  const screenFadeAnim = useRef(new Animated.Value(0)).current;
+  // Default to fully visible -- a freshly-focused (or even not-yet-focus-tracked)
+  // screen must never be stuck invisible. The fade-in below is a nicety on top
+  // of that safe default, not a gate the screen's visibility depends on.
+  const screenFadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (isFocused) {
@@ -75,8 +80,6 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
         duration: 250,
         useNativeDriver: true,
       }).start();
-    } else {
-      screenFadeAnim.setValue(0);
     }
   }, [isFocused, screenFadeAnim]);
 
@@ -90,53 +93,49 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
   // Manual stage-log entries (the ADD LOG notes from the Stages screen), fetched
   // lazily per production batch the first time one of its scans is expanded.
   const [stageLogsByBatch, setStageLogsByBatch] = useState({});
+  // 'loading' | 'error' | 'ready' -- drives the loading/error/empty render branches below.
+  const [loadState, setLoadState] = useState('loading');
+  // Tracks whether the screen is still focused/mounted for the in-flight load,
+  // shared between the focus-triggered load and manual retry/pull-to-refresh calls.
+  const activeRef = useRef(true);
 
-  useEffect(() => {
-    async function loadScanHistory() {
-      try {
-        const session    = await getWorkerSession();
-        const prefix     = session?.employee_id || 'default';
-        const workerName = session?.name || null;
-        const statusMap  = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
+  const loadScanHistory = useCallback(async () => {
+    activeRef.current = true;
+    setLoadState('loading');
+    try {
+      const session    = await getWorkerSession();
+      const prefix     = session?.employee_id || 'default';
+      const workerName = session?.name || null;
+      const statusMap  = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
 
-        // Primary: fetch live statuses from Supabase
-        if (workerName) {
-          const liveBatches = await fetchWorkerScanBatches(workerName);
-          if (liveBatches.length > 0) {
-            const mapped = liveBatches.map(b => {
-              // The table's timestamp column name isn't guaranteed, so accept
-              // any of the common creation fields; null falls into "UNDATED".
-              const createdAt = b.created_at || b.inserted_at || b.submitted_at || b.created || b.scanned_at || null;
-              return {
-                id:        b.id,
-                batchId:   b.id.slice(-6).toUpperCase(),
-                stage:     b.stage_name || 'Quality Control',
-                species:   b.species_display || b.species || 'Unknown',
-                scanned:   b.total_scanned || 0,
-                passCount: b.pass_count || 0,
-                flaggedCount: b.flagged_count || 0,
-                specimens: Array.isArray(b.specimens) ? b.specimens : [],
-                productionBatchId: b.production_batch_id || null,
-                createdAt,
-                timestamp: createdAt
-                  ? new Date(createdAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })
-                  : '--',
-                status:    statusMap[b.status] || 'pending',
-                operator:  b.worker_name || 'Worker',
-              };
-            });
-            // Server didn't order (no known timestamp column), so sort newest-first here.
-            mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-            setLogs(mapped);
-            return;
-          }
-        }
+      const mapLiveBatches = (liveBatches) => liveBatches.map(b => {
+        // The table's timestamp column name isn't guaranteed, so accept
+        // any of the common creation fields; null falls into "UNDATED".
+        const createdAt = b.created_at || b.inserted_at || b.submitted_at || b.created || b.scanned_at || null;
+        return {
+          id:        b.id,
+          batchId:   b.id.slice(-6).toUpperCase(),
+          stage:     b.stage_name || 'Quality Control',
+          species:   b.species_display || b.species || 'Unknown',
+          scanned:   b.total_scanned || 0,
+          passCount: b.pass_count || 0,
+          flaggedCount: b.flagged_count || 0,
+          specimens: Array.isArray(b.specimens) ? b.specimens : [],
+          productionBatchId: b.production_batch_id || null,
+          createdAt,
+          timestamp: createdAt
+            ? new Date(createdAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })
+            : '--',
+          status:    statusMap[b.status] || 'pending',
+          operator:  b.worker_name || 'Worker',
+        };
+      });
 
-        // Fallback: local AsyncStorage cache
+      const loadFromCache = async () => {
         const raw = await AsyncStorage.getItem(`${prefix}_recent_batches`);
-        if (!raw) return;
+        if (!raw) return [];
         const batches = JSON.parse(raw);
-        const mapped = batches.map(b => {
+        return batches.map(b => {
           const passCount    = (b.specimens || []).filter(s => s.status === 'pass').length;
           const flaggedCount = (b.specimens || []).filter(s => s.status === 'flagged' || s.status === 'escalated').length;
           return {
@@ -155,14 +154,65 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
             operator:  b.workerName || 'Worker',
           };
         });
-        mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-        setLogs(mapped);
-      } catch (err) {
-        console.warn('loadScanHistory failed:', err);
+      };
+
+      // Primary: fetch live statuses from Supabase
+      if (workerName) {
+        // Up to 3 attempts total: the cold-start race (worker session still
+        // hydrating, or a cold Supabase call) can return [] on the first try
+        // even though data genuinely exists, so retry a couple of times
+        // before trusting an empty result.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (!activeRef.current) return;
+          const liveBatches = await fetchWorkerScanBatches(workerName);
+          if (liveBatches.length > 0) {
+            const mapped = mapLiveBatches(liveBatches);
+            mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            if (activeRef.current) { setLogs(mapped); setLoadState('ready'); }
+            return;
+          }
+
+          // Live fetch came back empty -- check whether the local cache also
+          // looks empty. If so this is likely the cold-start race; retry.
+          const cached = await loadFromCache();
+          if (!activeRef.current) return;
+          if (cached.length > 0) {
+            cached.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            if (activeRef.current) { setLogs(cached); setLoadState('ready'); }
+            return;
+          }
+
+          if (attempt < 2) {
+            await new Promise(res => setTimeout(res, 700));
+            if (!activeRef.current) return;
+            continue;
+          }
+        }
+        // Genuinely empty after retries, with no error.
+        if (activeRef.current) { setLogs([]); setLoadState('ready'); }
+        return;
       }
+
+      // No worker session at all -- fall back straight to local cache.
+      const cached = await loadFromCache();
+      if (!activeRef.current) return;
+      cached.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setLogs(cached);
+      setLoadState('ready');
+    } catch (err) {
+      console.warn('loadScanHistory failed:', err);
+      if (activeRef.current) setLoadState('error');
     }
-    loadScanHistory();
-  }, [isFocused]);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadScanHistory();
+      return () => {
+        activeRef.current = false;
+      };
+    }, [loadScanHistory])
+  );
 
   const filteredLogs = useMemo(() => {
     if (activeTab === 'ALL') return logs;
@@ -267,8 +317,33 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
             ))}
           </View>
 
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-            {dayGroups.length > 0 ? (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={loadState === 'loading' && logs.length > 0}
+                onRefresh={loadScanHistory}
+                tintColor={B.accent}
+                colors={[B.accent]}
+              />
+            }
+          >
+            {loadState === 'loading' && logs.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color={B.accent} style={{ marginBottom: 10 }} />
+                <Text style={styles.loadingLabel}>Loading history…</Text>
+              </View>
+            ) : loadState === 'error' ? (
+              <View style={styles.emptyContainer}>
+                <XCircle size={32} color={B.error} style={{ marginBottom: 10 }} />
+                <Text style={styles.emptyTitle}>COULDN'T LOAD HISTORY</Text>
+                <Text style={styles.emptySubtitle}>Something went wrong while fetching your task logs.</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={loadScanHistory} activeOpacity={0.7}>
+                  <Text style={styles.retryButtonText}>RETRY</Text>
+                </TouchableOpacity>
+              </View>
+            ) : dayGroups.length > 0 ? (
               dayGroups.map((group) => {
                 const open = isGroupOpen(group.key);
                 return (
@@ -788,5 +863,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 24,
     lineHeight: 17,
+  },
+  loadingLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: B.textMuted,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingVertical: 9,
+    paddingHorizontal: 22,
+    borderWidth: 1,
+    borderColor: B.accent,
+    borderRadius: 0,
+    backgroundColor: B.accent,
+  },
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: B.white,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
 });

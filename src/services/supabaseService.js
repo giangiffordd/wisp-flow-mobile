@@ -245,6 +245,29 @@ export async function submitScanBatch(batchData) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  Finished Goods UID intake — Human-in-the-Loop manager approval
+// ─────────────────────────────────────────────────────────────────
+
+export async function submitFinishedGoodsIntake(uid, workerId, workerName) {
+  if (!supabase) return { ok: false, code: 'error', message: 'Network error' };
+  try {
+    const { data, error } = await supabase.rpc('submit_finished_goods_intake', {
+      p_uid: uid,
+      p_worker_id: workerId,
+      p_worker_name: workerName,
+    });
+    if (error) {
+      console.error('submitFinishedGoodsIntake error:', error.message);
+      return { ok: false, code: 'error', message: 'Network error' };
+    }
+    return data;
+  } catch (e) {
+    console.error('submitFinishedGoodsIntake exception:', e);
+    return { ok: false, code: 'error', message: 'Network error' };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Production Batches — 12-stage lifecycle tracking
 // ─────────────────────────────────────────────────────────────────
 
