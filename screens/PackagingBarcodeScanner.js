@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,34 +9,24 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { ArrowLeft, CheckCircle2, XCircle, Package, Clock } from 'lucide-react-native';
+import { ArrowLeft, CheckCircle2, XCircle, Package } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../src/services/supabaseService';
 import { getWorkerSession } from '../src/services/workerSession';
-import { getApiUrl, WISP_API_KEY } from '../src/services/yoloApiService';
 
 const B = {
-  bg:           '#F5F5F7',
-  bgEl:         '#FFFFFF',
-  bgCard:       '#FFFFFF',
-  border:       '#E5E7EB',
-  borderActive: '#5B21D9',
-  accent:       '#5B21D9',
-  accentDim:    '#7C3AED',
-  accentText:   '#FFFFFF',
-  textPri:      '#111827',
-  textMuted:    '#6B7280',
-  error:        '#EF4444',
-  errorBg:      'rgba(239,68,68,0.08)',
-  success:      '#10B981',
-  successBg:    'rgba(16,185,129,0.10)',
-  warning:      '#F59E0B',
-  warningBg:    'rgba(245,158,11,0.10)',
-  white:        '#FFFFFF',
+  bg:         '#F5F5F7',
+  bgEl:       '#FFFFFF',
+  border:     '#E5E7EB',
+  accent:     '#5B21D9',
+  accentText: '#FFFFFF',
+  textPri:    '#111827',
+  textMuted:  '#6B7280',
+  error:      '#EF4444',
+  success:    '#10B981',
 };
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -48,22 +38,22 @@ function normalizeLink(raw) {
   return raw.replace(/^https?:\/\//, '').trim();
 }
 
-const SCAN_TYPES = ['qr', 'code128', 'code39', 'ean13', 'ean8'];
-const BARCODE_SETTINGS = { barcodeTypes: SCAN_TYPES };
+// All types — let the camera be maximally sensitive
+const BARCODE_SETTINGS = {
+  barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'datamatrix', 'pdf417', 'aztec'],
+};
 
 export default function PackagingBarcodeScanner({ navigation, route }) {
   const batchId = route?.params?.batchId ?? null;
   const stageId = route?.params?.stageId ?? 12;
-  const insets = useSafeAreaInsets();
+  const insets  = useSafeAreaInsets();
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanState,   setScanState]   = useState('idle');   // idle|found|not_found|submitting|submitted
+  const [scanState,   setScanState]   = useState('idle'); // idle|found|not_found|submitting|submitted
   const [speciesData, setSpeciesData] = useState(null);
   const [errorMsg,    setErrorMsg]    = useState('');
-  const [capturedUri, setCapturedUri] = useState(null);     // frozen frame URI
-  const [isCapturing, setIsCapturing] = useState(false);    // while takePicture + scanFromURL runs
 
-  const cameraRef  = useRef(null);
-  const scannedRef = useRef(false);  // prevents double processing
+  const scannedRef = useRef(false);
 
   const laserAnim    = useRef(new Animated.Value(0)).current;
   const cardAnim     = useRef(new Animated.Value(80)).current;
@@ -82,11 +72,10 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     return () => laserLoop.current?.stop();
   }, []);
 
-  // Both showCard and processBarcode only use stable refs/setters — safe with empty deps
   const showCard = useCallback(() => {
     Animated.parallel([
-      Animated.timing(cardAnim,    { toValue: 0, duration: 380, easing: Easing.out(Easing.back(1.05)), useNativeDriver: true }),
-      Animated.timing(cardOpacity, { toValue: 1, duration: 380, useNativeDriver: true }),
+      Animated.timing(cardAnim,    { toValue: 0,  duration: 380, easing: Easing.out(Easing.back(1.05)), useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1,  duration: 380, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -99,7 +88,7 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
 
   const processBarcode = useCallback(async (data) => {
     const shortLink = normalizeLink(data);
-    console.log('[BarcodeScanner] processing:', shortLink);
+    console.log('[Barcode] processing:', shortLink);
 
     if (!supabase) {
       setScanState('not_found');
@@ -132,52 +121,33 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     }
   }, [showCard]);
 
-  // Continuous scan — fires automatically if camera detects barcode before user taps capture
   const handleBarcodeScanned = useCallback(async ({ data }) => {
     if (scannedRef.current) return;
+    // QR short links always contain letters; pure-numeric codes (EAN, GS1) do not
+    if (!/[a-zA-Z]/.test(data)) return;
     scannedRef.current = true;
-    console.log('[BarcodeScanner] auto-detected:', data);
     await processBarcode(data);
   }, [processBarcode]);
 
-  // Capture button — freeze frame then send to Python backend for reliable decoding
-  const handleCapture = async () => {
-    if (isCapturing || scannedRef.current || !cameraRef.current) return;
-    scannedRef.current = true;
-    setIsCapturing(true);
+  const handleReset = useCallback(() => {
+    hideCard(() => {
+      successScale.setValue(0);
+      setSpeciesData(null);
+      setErrorMsg('');
+      setScanState('idle');
+      scannedRef.current = false;
+    });
+  }, [hideCard]);
 
-    try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
-      setCapturedUri(photo.uri);
-
-      const baseUrl = await getApiUrl();
-      const form = new FormData();
-      form.append('file', { uri: photo.uri, type: 'image/jpeg', name: 'barcode.jpg' });
-
-      const res = await fetch(`${baseUrl}/decode_barcode`, {
-        method: 'POST',
-        body: form,
-        headers: { 'X-API-Key': WISP_API_KEY },
-      });
-      const json = await res.json();
-
-      if (!json.data) {
-        setScanState('not_found');
-        setErrorMsg(json.error || 'No barcode found.\nTry better lighting or move closer.');
-        showCard();
-        return;
-      }
-
-      await processBarcode(json.data);
-    } catch (e) {
-      console.error('[Capture]', e);
-      setScanState('not_found');
-      setErrorMsg('Could not reach the server. Check your connection.');
-      showCard();
-    } finally {
-      setIsCapturing(false);
-    }
-  };
+  const handleRetry = useCallback(() => {
+    // Force a clean slate — dismiss any visible card first, then unlock scanner
+    hideCard(() => {
+      setSpeciesData(null);
+      setErrorMsg('');
+      setScanState('idle');
+      scannedRef.current = false;
+    });
+  }, [hideCard]);
 
   const handleSubmit = async () => {
     if (!speciesData) return;
@@ -199,20 +169,17 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
       return;
     }
 
-    // Persist stage scan count + log for ProductionStagesScreen
     if (batchId) {
       const countKey = `stage_scan_count_${batchId}_${stageId}`;
       const logKey   = `stage_scan_log_${batchId}_${stageId}`;
       const prev = await AsyncStorage.getItem(countKey).catch(() => null);
       await AsyncStorage.setItem(countKey, String((parseInt(prev || '0', 10) + 1))).catch(() => {});
-      const logRaw = await AsyncStorage.getItem(logKey).catch(() => null);
+      const logRaw  = await AsyncStorage.getItem(logKey).catch(() => null);
       const existing = logRaw ? JSON.parse(logRaw) : [];
-      const entry = {
-        timestamp: new Date().toISOString(),
-        species:   speciesData.species_name,
-        type:      'barcode',
-      };
-      await AsyncStorage.setItem(logKey, JSON.stringify([entry, ...existing].slice(0, 50))).catch(() => {});
+      await AsyncStorage.setItem(logKey, JSON.stringify([
+        { timestamp: new Date().toISOString(), species: speciesData.species_name, type: 'barcode' },
+        ...existing,
+      ].slice(0, 50))).catch(() => {});
     }
 
     successScale.setValue(0);
@@ -220,33 +187,18 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     Animated.spring(successScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }).start();
   };
 
-  const handleReset = () => {
-    hideCard(() => {
-      successScale.setValue(0);
-      setSpeciesData(null);
-      setErrorMsg('');
-      setCapturedUri(null);
-      scannedRef.current = false;
-      setScanState('idle');
-    });
-  };
-
   if (!permission) return (
-    <View style={s.center}>
-      <ActivityIndicator color={B.accent} />
-    </View>
+    <View style={s.center}><ActivityIndicator color={B.accent} /></View>
   );
 
-  if (!permission.granted) {
-    return (
-      <View style={[s.container, s.center]}>
-        <Text style={s.permText}>Camera access is required to scan barcodes.</Text>
-        <TouchableOpacity style={s.permBtn} onPress={requestPermission} activeOpacity={0.8}>
-          <Text style={s.permBtnText}>GRANT PERMISSION</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  if (!permission.granted) return (
+    <View style={[s.container, s.center]}>
+      <Text style={s.permText}>Camera access is required to scan barcodes.</Text>
+      <TouchableOpacity style={s.permBtn} onPress={requestPermission} activeOpacity={0.8}>
+        <Text style={s.permBtnText}>GRANT PERMISSION</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   const isIdle       = scanState === 'idle';
   const isFound      = scanState === 'found';
@@ -257,59 +209,43 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
   return (
     <View style={s.container}>
 
-      {/* Live camera OR frozen captured frame */}
-      {capturedUri ? (
-        <Image source={{ uri: capturedUri }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-      ) : (
-        <CameraView
-          ref={cameraRef}
-          style={StyleSheet.absoluteFillObject}
-          facing="back"
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={BARCODE_SETTINGS}
-        />
-      )}
+      {/* Camera — always live, autofocus required for barcode detection */}
+      <CameraView
+        style={StyleSheet.absoluteFillObject}
+        facing="back"
+        autofocus="on"
+        onBarcodeScanned={handleBarcodeScanned}
+        barcodeScannerSettings={BARCODE_SETTINGS}
+      />
 
-      {/* Dark overlays around scan window */}
+      {/* Dark overlays around the scan window */}
       <View style={[s.overlay, { top: 0,          left: 0, right: 0, height: WIN_T }]} />
       <View style={[s.overlay, { top: WIN_T + WIN, left: 0, right: 0, bottom: 0 }]} />
-      <View style={[s.overlay, { top: WIN_T, left: 0,   width: WIN_L, height: WIN }]} />
-      <View style={[s.overlay, { top: WIN_T, right: 0,  width: WIN_L, height: WIN }]} />
+      <View style={[s.overlay, { top: WIN_T, left: 0,            width: WIN_L, height: WIN }]} />
+      <View style={[s.overlay, { top: WIN_T, right: 0,           width: WIN_L, height: WIN }]} />
 
-      {/* Grain overlay — inside overlay area, not on camera */}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: WIN_T, zIndex: 2 }}>
-      </View>
-
-      {/* Corner brackets — pale blue, sharp corners */}
+      {/* Corner brackets */}
       <View style={[s.corner, { top: WIN_T,            left: WIN_L,            borderTopWidth: 3,    borderLeftWidth: 3  }]} />
       <View style={[s.corner, { top: WIN_T,            left: WIN_L + WIN - 28, borderTopWidth: 3,    borderRightWidth: 3 }]} />
       <View style={[s.corner, { top: WIN_T + WIN - 28, left: WIN_L,            borderBottomWidth: 3, borderLeftWidth: 3  }]} />
       <View style={[s.corner, { top: WIN_T + WIN - 28, left: WIN_L + WIN - 28, borderBottomWidth: 3, borderRightWidth: 3 }]} />
 
-      {/* Laser — only when live camera is shown */}
-      {isIdle && !capturedUri && !isCapturing && (
+      {/* Laser sweep — only while idle */}
+      {isIdle && (
         <Animated.View style={[
           s.laser,
           { top: WIN_T + 2, left: WIN_L + 2, width: WIN - 4, transform: [{ translateY: laserAnim }] },
         ]} />
       )}
 
-      {/* Processing indicator */}
-      {isCapturing && (
-        <View style={[s.winOverlay, { top: WIN_T, left: WIN_L, width: WIN, height: WIN }]}>
-          <ActivityIndicator size="large" color={B.accent} />
-          <Text style={[s.winLabel, { color: B.accent, marginTop: 14 }]}>ANALYSING</Text>
-        </View>
-      )}
-
-      {/* Result overlays on the scan window */}
-      {!isCapturing && (isFound || isSubmitting || isSubmitted) && (
+      {/* Result overlays inside scan window */}
+      {(isFound || isSubmitting || isSubmitted) && (
         <View style={[s.winOverlay, { top: WIN_T, left: WIN_L, width: WIN, height: WIN }]}>
           <CheckCircle2 size={52} color={B.success} />
           <Text style={[s.winLabel, { color: B.success }]}>CAPTURED</Text>
         </View>
       )}
-      {!isCapturing && isNotFound && (
+      {isNotFound && (
         <View style={[s.winOverlay, { top: WIN_T, left: WIN_L, width: WIN, height: WIN }]}>
           <XCircle size={52} color={B.error} />
           <Text style={[s.winLabel, { color: B.error }]}>NOT FOUND</Text>
@@ -325,17 +261,17 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Hint text below scan window */}
-      {isIdle && !capturedUri && (
+      {/* Hint below scan window */}
+      {isIdle && (
         <View style={{ position: 'absolute', top: WIN_T + WIN + 16, left: 0, right: 0, alignItems: 'center' }}>
-          <Text style={s.hint}>Point at the barcode then tap CAPTURE</Text>
+          <Text style={s.hint}>Hold the QR code steady inside the frame</Text>
         </View>
       )}
 
       {/* Bottom panel */}
       <View style={[s.bottom, { paddingBottom: insets.bottom + 24 }]}>
 
-        {/* Result card — slides up */}
+        {/* Result card */}
         <Animated.View style={[s.card, { opacity: cardOpacity, transform: [{ translateY: cardAnim }] }]}>
           {isNotFound && (
             <>
@@ -350,12 +286,12 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
                 <Text style={s.cardTitle}>[ SPECIES IDENTIFIED ]</Text>
               </View>
               <Text style={s.cardSpecies}>{speciesData.species_name}</Text>
-              <Text style={s.cardSub}>Your request will be reviewed by a manager before the stock count is updated.</Text>
+              <Text style={s.cardSub}>A manager will review before the stock count is updated.</Text>
             </>
           )}
         </Animated.View>
 
-        {/* Success box — springs in after submit */}
+        {/* Success box */}
         {isSubmitted && speciesData && (
           <Animated.View style={[s.successBox, { transform: [{ scale: successScale }] }]}>
             <CheckCircle2 size={36} color={B.success} style={{ marginBottom: 10 }} />
@@ -365,45 +301,40 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
           </Animated.View>
         )}
 
-        {/* CAPTURE button — shown only when idle and camera is live */}
+        {/* Idle: retry button */}
         {isIdle && (
-          <View style={s.capWrap}>
-            <TouchableOpacity
-              style={[s.capBtn, isCapturing && { opacity: 0.5 }]}
-              onPress={handleCapture}
-              activeOpacity={0.85}
-              disabled={isCapturing}
-            >
-              {isCapturing
-                ? <ActivityIndicator color={B.bg} size="small" />
-                : <View style={s.capCore} />
-              }
-            </TouchableOpacity>
-            <Text style={s.capLabel}>CAPTURE</Text>
-          </View>
+          <TouchableOpacity style={s.retryBtn} onPress={handleRetry} activeOpacity={0.7}>
+            <Text style={s.retryBtnText}>Having trouble? Tap here to reset the scanner</Text>
+          </TouchableOpacity>
         )}
 
-        {/* Action buttons */}
+        {/* Found: submit */}
         {isFound && (
           <TouchableOpacity style={s.actionBtn} onPress={handleSubmit} activeOpacity={0.85}>
             <Text style={s.actionBtnText}>SUBMIT STOCK REQUEST</Text>
           </TouchableOpacity>
         )}
+
+        {/* Submitting: loading */}
         {isSubmitting && (
           <View style={[s.actionBtn, { opacity: 0.6 }]}>
             <ActivityIndicator color={B.bg} />
           </View>
         )}
+
+        {/* Submitted or not found: next action */}
         {(isSubmitted || isNotFound) && (
           <TouchableOpacity style={s.actionBtn} onPress={handleReset} activeOpacity={0.85}>
             <Text style={s.actionBtnText}>{isSubmitted ? 'SCAN ANOTHER' : 'TRY AGAIN'}</Text>
           </TouchableOpacity>
         )}
+
         {isSubmitted && (
           <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
             <Text style={s.cancelBtnText}>BACK TO STAGES</Text>
           </TouchableOpacity>
         )}
+
         {isFound && (
           <TouchableOpacity style={s.cancelBtn} onPress={handleReset} activeOpacity={0.7}>
             <Text style={s.cancelBtnText}>CANCEL</Text>
@@ -441,17 +372,12 @@ const s = StyleSheet.create({
 
   winOverlay: {
     position: 'absolute',
-    backgroundColor: 'rgba(0,0,0,0.52)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 20,
   },
-  winLabel: {
-    fontWeight: '800',
-    fontSize: 13,
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-  },
+  winLabel: { fontWeight: '800', fontSize: 13, letterSpacing: 3, textTransform: 'uppercase', marginTop: 8 },
 
   header: {
     position: 'absolute',
@@ -468,7 +394,6 @@ const s = StyleSheet.create({
   },
   backBtn: {
     width: 36, height: 36,
-    borderRadius: 0,
     backgroundColor: B.bgEl,
     borderWidth: 1,
     borderColor: B.border,
@@ -477,7 +402,7 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 14, fontWeight: '800', color: B.textPri, letterSpacing: 2, textTransform: 'uppercase' },
 
-  hint: { fontSize: 12, color: B.textMuted, textAlign: 'center', paddingHorizontal: 32, letterSpacing: 0.5 },
+  hint: { fontSize: 12, color: '#FFFFFF', textAlign: 'center', paddingHorizontal: 32, letterSpacing: 0.4 },
 
   bottom: {
     position: 'absolute',
@@ -494,7 +419,6 @@ const s = StyleSheet.create({
   card: {
     width: '100%',
     backgroundColor: B.bgEl,
-    borderRadius: 0,
     borderWidth: 1,
     borderColor: B.border,
     padding: 16,
@@ -508,7 +432,6 @@ const s = StyleSheet.create({
   successBox: {
     width: '100%',
     backgroundColor: B.bgEl,
-    borderRadius: 0,
     borderWidth: 1,
     borderColor: B.success,
     padding: 20,
@@ -516,27 +439,22 @@ const s = StyleSheet.create({
     marginBottom: 14,
   },
   successTitle:   { fontSize: 16, fontWeight: '800', color: B.success, marginBottom: 4, letterSpacing: 2, textTransform: 'uppercase' },
-  successSpecies: { fontSize: 14, fontWeight: '700', color: B.accentText, marginBottom: 6, fontStyle: 'italic' },
+  successSpecies: { fontSize: 14, fontWeight: '700', color: B.textPri, marginBottom: 6, fontStyle: 'italic' },
   successSub:     { fontSize: 12, color: B.textMuted, textAlign: 'center', lineHeight: 18 },
 
-  capWrap: { alignItems: 'center', marginBottom: 12 },
-  capBtn: {
-    width: 72, height: 72,
-    borderRadius: 0,
-    backgroundColor: 'rgba(143,164,184,0.12)',
-    borderWidth: 2,
-    borderColor: B.accent,
+  retryBtn: {
+    width: '100%',
+    paddingVertical: 13,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: B.border,
+    marginBottom: 4,
   },
-  capCore:  { width: 50, height: 50, borderRadius: 0, backgroundColor: B.accent },
-  capLabel: { color: B.accent, fontSize: 10, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' },
+  retryBtnText: { color: B.textMuted, fontSize: 12, fontWeight: '500' },
 
   actionBtn: {
     width: '100%',
     backgroundColor: B.accent,
-    borderRadius: 0,
     paddingVertical: 15,
     alignItems: 'center',
     marginBottom: 8,
@@ -547,14 +465,13 @@ const s = StyleSheet.create({
     width: '100%',
     paddingVertical: 13,
     alignItems: 'center',
-    borderRadius: 0,
     borderWidth: 1,
     borderColor: B.accent,
     backgroundColor: 'transparent',
   },
   cancelBtnText: { color: B.accent, fontSize: 13, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase' },
 
-  permText: { color: B.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 16 },
-  permBtn:  { backgroundColor: B.accent, borderRadius: 0, paddingVertical: 15, paddingHorizontal: 24 },
+  permText:    { color: B.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 16 },
+  permBtn:     { backgroundColor: B.accent, paddingVertical: 15, paddingHorizontal: 24 },
   permBtnText: { color: B.bg, fontWeight: '800', letterSpacing: 3, textTransform: 'uppercase', fontSize: 13 },
 });

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { ShieldCheck, AlertTriangle, Send } from 'lucide-react-native';
-import { COLORS, SHADOW_SM } from '../theme';
 
 export default function QualityControlModule() {
   const [qcNotes, setQcNotes] = useState('');
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [notesFocused, setNotesFocused] = useState(false);
 
   const handleSubmit = () => {
     if (!selectedStatus) {
@@ -28,7 +28,11 @@ export default function QualityControlModule() {
 
         {/* Inspection status card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Inspection Status</Text>
+          {/* Section divider */}
+          <View style={styles.sectionDivider}>
+            <Text style={styles.sectionDividerText}>[ INSPECTION STATUS ]</Text>
+            <View style={styles.sectionDividerLine} />
+          </View>
           <Text style={styles.cardSubtitle}>Batch #BT-9921</Text>
 
           <View style={styles.statusGrid}>
@@ -40,10 +44,13 @@ export default function QualityControlModule() {
               ]}
               onPress={() => setSelectedStatus('pass')}
             >
-              <ShieldCheck size={30} color={selectedStatus === 'pass' ? COLORS.white : COLORS.successGreen} />
+              <ShieldCheck
+                size={30}
+                color={selectedStatus === 'pass' ? '#F5F5F7' : '#10B981'}
+              />
               <Text style={[
                 styles.statusText,
-                { color: selectedStatus === 'pass' ? COLORS.white : COLORS.successGreen },
+                { color: selectedStatus === 'pass' ? '#F5F5F7' : '#10B981' },
               ]}>PASS</Text>
             </TouchableOpacity>
 
@@ -55,10 +62,13 @@ export default function QualityControlModule() {
               ]}
               onPress={() => setSelectedStatus('fail')}
             >
-              <AlertTriangle size={30} color={selectedStatus === 'fail' ? COLORS.white : COLORS.errorRed} />
+              <AlertTriangle
+                size={30}
+                color={selectedStatus === 'fail' ? '#F5F5F7' : '#EF4444'}
+              />
               <Text style={[
                 styles.statusText,
-                { color: selectedStatus === 'fail' ? COLORS.white : COLORS.errorRed },
+                { color: selectedStatus === 'fail' ? '#F5F5F7' : '#EF4444' },
               ]}>FAIL</Text>
             </TouchableOpacity>
           </View>
@@ -66,29 +76,35 @@ export default function QualityControlModule() {
 
         {/* QC notes card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>QC Notes</Text>
+          {/* Section divider */}
+          <View style={styles.sectionDivider}>
+            <Text style={styles.sectionDividerText}>[ QC NOTES ]</Text>
+            <View style={styles.sectionDividerLine} />
+          </View>
           <TextInput
-            style={styles.textArea}
+            style={[styles.textArea, notesFocused && styles.textAreaFocused]}
             multiline
             numberOfLines={4}
             placeholder="Enter any observations, defects, or general notes..."
-            placeholderTextColor={COLORS.textLight}
+            placeholderTextColor="#5A7080"
             value={qcNotes}
             onChangeText={setQcNotes}
+            onFocus={() => setNotesFocused(true)}
+            onBlur={() => setNotesFocused(false)}
             textAlignVertical="top"
           />
         </View>
 
-        {/* Submit button — ICPI blue primary */}
+        {/* Submit button — primary pale blue rectangular */}
         <TouchableOpacity
           style={[styles.submitButton, (!selectedStatus || isSubmitting) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={!selectedStatus || isSubmitting}
         >
           <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Submitting...' : 'Submit Report'}
+            {isSubmitting ? 'SUBMITTING...' : 'SUBMIT REPORT'}
           </Text>
-          {!isSubmitting && <Send size={16} color={COLORS.white} style={{ marginLeft: 8 }} />}
+          {!isSubmitting && <Send size={16} color="#080B0F" style={{ marginLeft: 8 }} />}
         </TouchableOpacity>
 
       </View>
@@ -99,31 +115,46 @@ export default function QualityControlModule() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: '#F5F5F7',
   },
   content: {
     padding: 14,
   },
   card: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: '#E5E7EB',
   },
-  cardTitle: {
-    fontSize: 15,
+
+  // ── Section Divider ──
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  sectionDividerText: {
+    fontSize: 9,
+    color: '#5B21D9',
     fontWeight: '700',
-    color: COLORS.textDark,
-    marginBottom: 3,
+    letterSpacing: 2.5,
   },
+  sectionDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+
   cardSubtitle: {
     fontSize: 13,
-    color: COLORS.textMuted,
+    color: '#6B7280',
     marginBottom: 16,
   },
+
+  // ── Status Grid ──
   statusGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -133,61 +164,72 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: 20,
-    borderRadius: 10,
+    borderRadius: 0,
     borderWidth: 1.5,
   },
+
+  // PASS — unselected: dark green-tinted bg, green border
   statusPass: {
-    backgroundColor: COLORS.successBg,
-    borderColor: COLORS.successBorder,
+    backgroundColor: 'rgba(16,185,129,0.08)',
+    borderColor: '#10B981',
   },
+  // PASS — selected: solid success green fill
   statusPassSelected: {
-    backgroundColor: COLORS.successGreen,
-    borderColor: COLORS.successGreen,
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
+
+  // FAIL — unselected: dark red-tinted bg, red border
   statusFail: {
-    backgroundColor: COLORS.errorBg,
-    borderColor: COLORS.errorBorder,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderColor: '#EF4444',
   },
+  // FAIL — selected: solid error red fill
   statusFailSelected: {
-    backgroundColor: COLORS.errorRed,
-    borderColor: COLORS.errorRed,
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
   },
+
   statusText: {
     marginTop: 10,
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
+
+  // ── Notes Input ──
   textArea: {
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: '#F5F5F7',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 8,
+    borderColor: '#E5E7EB',
+    borderRadius: 0,
     padding: 12,
-    color: COLORS.textMid,
+    color: '#111827',
     fontSize: 14,
     minHeight: 110,
   },
+  textAreaFocused: {
+    borderColor: '#5B21D9',
+  },
+
+  // ── Submit Button ──
   submitButton: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 8,
-    padding: 14,
+    backgroundColor: '#5B21D9',
+    borderRadius: 0,
+    paddingVertical: 15,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 3,
   },
   submitButtonDisabled: {
-    backgroundColor: COLORS.textLight,
-    shadowOpacity: 0,
-    elevation: 0,
+    opacity: 0.4,
   },
   submitButtonText: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#F5F5F7',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
 });

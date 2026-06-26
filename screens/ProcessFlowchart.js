@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -31,7 +31,27 @@ import {
   RotateCcw
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, SHADOW_SM } from '../theme';
+
+// ── Design tokens ──────────────────────────────────────────────
+const B = {
+  bg:           '#F5F5F7',
+  bgEl:         '#FFFFFF',
+  bgCard:       '#FFFFFF',
+  border:       '#E5E7EB',
+  borderActive: '#5B21D9',
+  accent:       '#5B21D9',
+  accentDim:    '#7C3AED',
+  accentText:   '#FFFFFF',
+  textPri:      '#111827',
+  textMuted:    '#6B7280',
+  error:        '#EF4444',
+  errorBg:      'rgba(239,68,68,0.08)',
+  success:      '#10B981',
+  successBg:    'rgba(16,185,129,0.10)',
+  warning:      '#F59E0B',
+  warningBg:    'rgba(245,158,11,0.10)',
+  white:        '#FFFFFF',
+};
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -90,21 +110,25 @@ export default function ProcessFlowchart({ navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* ── Dark Navy Header ── */}
+
+      {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <ArrowLeft size={20} color={COLORS.textOnDark} />
+          <ArrowLeft size={20} color={B.textPri} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Process Flowchart</Text>
+        <Text style={styles.headerTitle}>[ PROCESS FLOWCHART ]</Text>
         <View style={styles.progressPill}>
-          <Text style={styles.progressText}>{progressText}</Text>
+          <Text style={styles.progressText}>{progressText.toUpperCase()}</Text>
         </View>
       </View>
 
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
-        {/* Info card — ICPI-style white card */}
+        {/* Info card */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Manufacturing Pipeline</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+            <Text style={{ fontSize: 9, color: B.accent, fontWeight: '700', letterSpacing: 2.5 }}>[ MANUFACTURING PIPELINE ]</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+          </View>
           <Text style={styles.infoSubtitle}>
             Follow the 12-stage pipeline sequentially. Tap any stage node below to expand full operational requirements and SOPs.
           </Text>
@@ -117,77 +141,78 @@ export default function ProcessFlowchart({ navigation }) {
             const StageIcon   = stage.icon;
 
             // Timeline dot & line colours
-            let dotBg     = COLORS.borderLight;
-            let dotBorder = COLORS.borderMid;
-            let IconComp  = Circle;
-            let iconColor = COLORS.textLight;
-            let lineBg    = COLORS.borderLight;
+            let dotBg     = B.border;
+            let lineBg    = B.border;
 
             if (stage.status === 'completed') {
-              dotBg     = COLORS.successGreen;
-              dotBorder = COLORS.successGreen;
-              IconComp  = CheckCircle2;
-              iconColor = COLORS.white;
-              lineBg    = COLORS.successGreen;
+              dotBg  = B.success;
+              lineBg = B.success;
             } else if (stage.status === 'active') {
-              dotBg     = COLORS.primary;
-              dotBorder = COLORS.primaryLight;
-              IconComp  = Play;
-              iconColor = COLORS.white;
-              lineBg    = COLORS.borderLight;
+              dotBg  = B.accent;
+              lineBg = B.border;
             }
 
             return (
               <View key={stage.id} style={styles.nodeContainer}>
                 {/* Axis dot + line */}
                 <View style={styles.axisWrapper}>
-                  <View style={[
-                    styles.nodeDot,
-                    { backgroundColor: dotBg, borderColor: dotBorder },
-                    stage.status === 'active' && styles.activeDot
-                  ]}>
-                    <IconComp size={13} color={iconColor} style={stage.status === 'active' ? { marginLeft: 1 } : {}} />
+                  <View style={[styles.nodeDot, { backgroundColor: dotBg }]}>
+                    {stage.status === 'completed' ? (
+                      <CheckCircle2 size={12} color={B.bg} />
+                    ) : stage.status === 'active' ? (
+                      <Play size={11} color={B.bg} style={{ marginLeft: 1 }} />
+                    ) : (
+                      <Text style={styles.nodeDotNum}>{stage.id}</Text>
+                    )}
                   </View>
                   {index < stages.length - 1 && (
                     <View style={[styles.timelineLine, { backgroundColor: lineBg }]} />
                   )}
                 </View>
 
-                {/* Accordion card — ICPI card style */}
+                {/* Accordion card */}
                 <TouchableOpacity
                   style={[
                     styles.nodeCard,
                     isExpanded && styles.nodeCardExpanded,
                     stage.status === 'active' && styles.nodeCardActive,
+                    stage.status === 'completed' && styles.nodeCardCompleted,
                   ]}
                   onPress={() => toggleNode(stage.id)}
                   activeOpacity={0.9}
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.cardHeaderLeft}>
+                      {/* Stage number badge */}
                       <View style={[
-                        styles.iconCircle,
-                        stage.status === 'completed' && styles.iconCircleCompleted,
-                        stage.status === 'active' && styles.iconCircleActive,
+                        styles.stageBadge,
+                        stage.status === 'completed' && styles.stageBadgeCompleted,
+                        stage.status === 'active'    && styles.stageBadgeActive,
+                        stage.status === 'pending'   && styles.stageBadgePending,
                       ]}>
-                        <StageIcon size={15} color={
-                          stage.status === 'completed' ? COLORS.successGreen :
-                          stage.status === 'active'    ? COLORS.primary      : COLORS.textMuted
+                        <StageIcon size={13} color={
+                          stage.status === 'completed' ? B.bg :
+                          stage.status === 'active'    ? B.bg : B.accentDim
                         } />
                       </View>
-                      <Text style={[styles.nodeTitle, stage.status === 'active' && styles.nodeTitleActive]}>
+                      <Text style={[
+                        styles.nodeTitle,
+                        stage.status === 'active'    && styles.nodeTitleActive,
+                        stage.status === 'pending'   && styles.nodeTitlePending,
+                        stage.status === 'completed' && styles.nodeTitleCompleted,
+                      ]}>
                         {stage.title}
                       </Text>
                     </View>
                     {isExpanded
-                      ? <ChevronUp size={15} color={COLORS.textMuted} />
-                      : <ChevronDown size={15} color={COLORS.textMuted} />}
+                      ? <ChevronUp size={15} color={B.accent} />
+                      : <ChevronDown size={15} color={B.accentDim} />}
                   </View>
 
                   {isExpanded && (
                     <View style={styles.cardBody}>
                       <View style={styles.instructionContainer}>
-                        <Text style={styles.instructionLabel}>OPERATIONAL INSTRUCTION</Text>
+                        <Text style={styles.instructionLabel}>[ OPERATIONAL INSTRUCTION ]</Text>
                         <Text style={styles.instructionText}>{stage.instruction}</Text>
                       </View>
 
@@ -197,8 +222,8 @@ export default function ProcessFlowchart({ navigation }) {
                           onPress={() => handleComplete(stage.id)}
                           activeOpacity={0.8}
                         >
-                          <CheckCircle2 size={13} color={COLORS.white} style={{ marginRight: 6 }} />
-                          <Text style={styles.completeButtonText}>Complete Stage</Text>
+                          <CheckCircle2 size={13} color={B.bg} style={{ marginRight: 6 }} />
+                          <Text style={styles.completeButtonText}>COMPLETE STAGE</Text>
                         </TouchableOpacity>
                       )}
 
@@ -208,21 +233,23 @@ export default function ProcessFlowchart({ navigation }) {
                           onPress={() => handleRedo(stage.id)}
                           activeOpacity={0.8}
                         >
-                          <RotateCcw size={12} color={COLORS.textMuted} style={{ marginRight: 5 }} />
-                          <Text style={styles.redoButtonText}>Redo Stage</Text>
+                          <RotateCcw size={12} color={B.error} style={{ marginRight: 5 }} />
+                          <Text style={styles.redoButtonText}>REDO STAGE</Text>
                         </TouchableOpacity>
                       )}
 
                       <View style={styles.badgeRow}>
                         <View style={[
                           styles.statusBadge,
-                          stage.status === 'completed' && { backgroundColor: COLORS.successBg },
-                          stage.status === 'active'    && { backgroundColor: COLORS.primaryMuted },
+                          stage.status === 'completed' && { backgroundColor: B.successBg, borderColor: B.success },
+                          stage.status === 'active'    && { backgroundColor: 'rgba(143,164,184,0.12)', borderColor: B.accent },
+                          stage.status === 'pending'   && { backgroundColor: B.warningBg, borderColor: B.warning },
                         ]}>
                           <Text style={[
                             styles.statusBadgeText,
-                            stage.status === 'completed' && { color: '#065F46' },
-                            stage.status === 'active'    && { color: '#1E40AF' },
+                            stage.status === 'completed' && { color: B.success },
+                            stage.status === 'active'    && { color: B.accent },
+                            stage.status === 'pending'   && { color: B.warning },
                           ]}>
                             {stage.status.toUpperCase()}
                           </Text>
@@ -244,7 +271,7 @@ export default function ProcessFlowchart({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: B.bg,
   },
 
   // ── Header ──────────────────────────────────────────────────
@@ -252,32 +279,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.headerBg,
+    backgroundColor: B.bgEl,
     paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.headerBorder,
+    borderBottomColor: B.border,
   },
   backButton: {
-    padding: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 7,
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
+    borderRadius: 0,
+    padding: 8,
   },
   headerTitle: {
-    color: COLORS.textOnDark,
-    fontSize: 16,
-    fontWeight: '700',
+    color: B.textPri,
+    fontWeight: '800',
+    letterSpacing: 2,
+    fontSize: 14,
+    textTransform: 'uppercase',
   },
   progressPill: {
-    backgroundColor: COLORS.primaryMuted,
+    backgroundColor: 'rgba(143,164,184,0.12)',
+    borderWidth: 1,
+    borderColor: B.accent,
+    borderRadius: 0,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
   },
   progressText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: B.accent,
+    letterSpacing: 1.5,
   },
 
   scrollContainer: { flex: 1 },
@@ -285,23 +319,16 @@ const styles = StyleSheet.create({
 
   // ── Info card ─────────────────────────────────────────────
   infoCard: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 14,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
-  },
-  infoTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.textDark,
-    marginBottom: 5,
+    borderColor: B.border,
   },
   infoSubtitle: {
     fontSize: 12,
-    color: COLORS.textMuted,
+    color: B.textMuted,
     lineHeight: 17,
   },
 
@@ -317,15 +344,18 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   nodeDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.5,
     zIndex: 2,
   },
-  activeDot: { borderWidth: 3 },
+  nodeDotNum: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: B.textMuted,
+  },
   timelineLine: {
     width: 2,
     flex: 1,
@@ -337,20 +367,22 @@ const styles = StyleSheet.create({
   // ── Node card ─────────────────────────────────────────────
   nodeCard: {
     flex: 1,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 10,
+    backgroundColor: B.bgCard,
+    borderRadius: 0,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: B.border,
   },
   nodeCardActive: {
-    borderColor: COLORS.primaryLight,
+    borderColor: B.borderActive,
   },
   nodeCardExpanded: {
-    borderColor: COLORS.primary,
-    borderWidth: 1.5,
+    borderColor: B.accent,
+  },
+  nodeCardCompleted: {
+    borderColor: B.success,
+    opacity: 0.85,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -363,84 +395,102 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 6,
   },
-  iconCircle: {
+  stageBadge: {
     width: 28,
     height: 28,
-    borderRadius: 7,
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    backgroundColor: B.bg,
+    borderWidth: 1,
+    borderColor: B.border,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 9,
   },
-  iconCircleCompleted: { backgroundColor: COLORS.successBg },
-  iconCircleActive:    { backgroundColor: COLORS.primaryMuted },
+  stageBadgeCompleted: { backgroundColor: B.success, borderColor: B.success },
+  stageBadgeActive:    { backgroundColor: B.accent,  borderColor: B.accent },
+  stageBadgePending:   { backgroundColor: B.bg,      borderColor: B.border },
+
   nodeTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: COLORS.textMid,
+    color: B.textMuted,
+    flex: 1,
   },
   nodeTitleActive: {
-    color: COLORS.textDark,
+    color: B.accentText,
     fontWeight: '700',
+  },
+  nodeTitleCompleted: {
+    color: B.textPri,
+  },
+  nodeTitlePending: {
+    color: B.textMuted,
   },
 
   cardBody: {
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: COLORS.pageBg,
+    borderTopColor: B.border,
   },
   instructionContainer: {
-    backgroundColor: COLORS.pageBg,
-    borderRadius: 7,
+    backgroundColor: B.bg,
+    borderRadius: 0,
     padding: 10,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: B.border,
+    borderLeftWidth: 3,
+    borderLeftColor: B.accentDim,
   },
   instructionLabel: {
     fontSize: 9,
     fontWeight: '700',
-    color: COLORS.textLight,
-    letterSpacing: 0.7,
-    marginBottom: 3,
+    color: B.accentDim,
+    letterSpacing: 2.5,
+    marginBottom: 5,
+    textTransform: 'uppercase',
   },
   instructionText: {
     fontSize: 12,
-    color: COLORS.textMid,
+    color: B.textPri,
     lineHeight: 17,
     fontWeight: '500',
   },
 
   completeButton: {
-    backgroundColor: COLORS.successGreen,
+    backgroundColor: B.success,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 7,
+    paddingVertical: 13,
+    borderRadius: 0,
     marginBottom: 10,
   },
   completeButtonText: {
-    color: COLORS.white,
-    fontSize: 12,
-    fontWeight: '700',
+    color: B.bg,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
   redoButton: {
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: 'rgba(239,68,68,0.12)',
     borderWidth: 1,
-    borderColor: COLORS.borderMid,
+    borderColor: B.error,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 7,
-    borderRadius: 7,
+    paddingVertical: 11,
+    borderRadius: 0,
     marginBottom: 10,
   },
   redoButtonText: {
-    color: COLORS.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
+    color: B.error,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
   },
 
   badgeRow: {
@@ -449,19 +499,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusBadge: {
-    backgroundColor: COLORS.inputBg,
+    borderRadius: 0,
+    borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 5,
   },
   statusBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: COLORS.textMuted,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   sopCode: {
     fontSize: 10,
-    color: COLORS.textLight,
+    color: B.accentDim,
     fontWeight: '600',
+    letterSpacing: 1,
   },
 });

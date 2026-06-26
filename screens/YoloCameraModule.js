@@ -14,7 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Camera, AlertCircle, ArrowLeft, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff } from 'lucide-react-native';
+import { Camera, AlertCircle, ArrowLeft, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff, Sparkles } from 'lucide-react-native';
 import { supabase, submitScanBatch } from '../src/services/supabaseService';
 import { getWorkerSession } from '../src/services/workerSession';
 import { checkHealth, predictImage, getApiUrl, WISP_API_KEY } from '../src/services/yoloApiService';
@@ -406,6 +406,20 @@ export default function YoloCameraModule({ navigation, route }) {
     return () => pulse && pulse.stop();
   }, [isScanning]);
 
+  // ── Idle scan-sweep: keeps the empty-state illustration alive so the
+  //    onboarding panel reads as a live scanner, not a static placeholder. ──
+  const idleSweep = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(idleSweep, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(idleSweep, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
   // ── Bounding box + banner animation ──
   useEffect(() => {
     if (specimens.length > 0 && !isLoading) {
@@ -570,8 +584,8 @@ export default function YoloCameraModule({ navigation, route }) {
       // permission, say so honestly instead of inventing a specimen.
       setScanError(
         !permission?.granted
-          ? 'Camera permission required to scan.'
-          : 'AI server unreachable — reconnect and retake.'
+          ? 'Camera access is off. Turn it on so WISP-FLOW can see the specimen.'
+          : "Lost the AI server. Reconnect, then give it another go."
       );
       setPendingReview({ specimens: [], base64Image: null });
     }
@@ -874,7 +888,6 @@ export default function YoloCameraModule({ navigation, route }) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{stepTitle}</Text>
-          <Text style={styles.headerSub}>WISP-FLOW AI Scan</Text>
         </View>
 
         {/* Header right — pending scan count */}
@@ -1038,7 +1051,7 @@ export default function YoloCameraModule({ navigation, route }) {
               <View style={styles.offlineCard}>
                 <WifiOff size={30} color="#ef4444" style={{ marginBottom: 10 }} />
                 <Text style={styles.offlineCardTitle}>AI SERVER UNREACHABLE</Text>
-                <Text style={styles.offlineCardSub}>Check your connection, or contact your supervisor.</Text>
+                <Text style={styles.offlineCardSub}>We can't reach the AI right now. Check your Wi-Fi, or let your supervisor know.</Text>
                 <TouchableOpacity onPress={checkApiConnection} style={styles.offlineCardBtn} activeOpacity={0.8}>
                   <Text style={styles.offlineCardBtnText}>RETRY CONNECTION</Text>
                 </TouchableOpacity>
@@ -1079,8 +1092,11 @@ export default function YoloCameraModule({ navigation, route }) {
         </View>
 
         {/* Controls -- hidden during review so nothing floats over the frozen
-            frame; the review panel's Retake/Keep are the only actions then. */}
-        {!pendingReview && (
+            frame; the review panel's Retake/Keep are the only actions then.
+            Also hidden while the server is offline and idle: the AI SERVER
+            UNREACHABLE card above already owns that state with its own RETRY,
+            so the redundant grayed-out "Server Offline" button is dropped. */}
+        {!pendingReview && !(apiStatus === 'offline' && !isScanning) && (
         <View style={styles.cameraControls}>
           {!isScanning ? (
             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1153,8 +1169,8 @@ export default function YoloCameraModule({ navigation, route }) {
                   {revSpecimens.length === 0 ? (
                     <View style={{ alignItems: 'center', gap: 8 }}>
                       <AlertCircle color="#f59e0b" size={34} />
-                      <Text style={{ color: '#111827', fontSize: 17, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>No Specimen Detected</Text>
-                      <Text style={{ color: '#6B7280', fontSize: 15, textAlign: 'center' }}>Aim at the specimen and retake.</Text>
+                      <Text style={{ color: '#111827', fontSize: 17, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>Nothing in frame</Text>
+                      <Text style={{ color: '#6B7280', fontSize: 15, textAlign: 'center' }}>Center the specimen in the frame, then retake.</Text>
                     </View>
                   ) : hasFlagged ? (
                     <>
@@ -1228,9 +1244,9 @@ export default function YoloCameraModule({ navigation, route }) {
           })()
         ) : (
           <>
-            {/* Live Detection header */}
+            {/* Detection results header */}
             <View style={styles.resultsHeader}>
-              <Text style={styles.resultsTitle}>Live Detection</Text>
+              <Text style={styles.resultsTitle}>Detection Results</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 {source === 'api' && (
                   <View style={styles.aiSourceBadge}>
@@ -1327,17 +1343,80 @@ export default function YoloCameraModule({ navigation, route }) {
                   </View>
                 ))}
               </ScrollView>
-            ) : (
+            ) : scanError ? (
+              // ── Error state: human, on-brand, never a dead end — always a
+              //    way forward (enable the camera, or try the scan again). ──
               <View style={styles.emptyState}>
-                <AlertCircle size={28} color={isScanning ? SKY : '#7C3AED'} />
-                <Text style={styles.emptyStateText}>
-                  {scanError
-                    ? scanError
-                    : isScanning
-                      ? 'Running WISP-FLOW detection…'
-                      : 'Press Start Scan to detect specimens'}
-                </Text>
+                <View style={styles.emptyErrorBadge}>
+                  <AlertCircle size={30} color="#EF4444" />
+                </View>
+                <Text style={styles.emptyStateTitle}>Can't scan just yet</Text>
+                <Text style={styles.emptyStateSubtext}>{scanError}</Text>
+                <TouchableOpacity
+                  style={styles.onboardCta}
+                  onPress={scanError.toLowerCase().includes('camera') ? requestPermission : handleCapture}
+                  activeOpacity={0.85}
+                >
+                  <RefreshCw size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.onboardCtaText}>
+                    {scanError.toLowerCase().includes('camera') ? 'Enable Camera' : 'Try Again'}
+                  </Text>
+                </TouchableOpacity>
               </View>
+            ) : isScanning ? (
+              <View style={styles.emptyState}>
+                <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                  <Camera size={28} color="#5B21D9" />
+                </Animated.View>
+                <Text style={styles.emptyStateText}>Reading the frame…</Text>
+              </View>
+            ) : (
+              // ── Onboarding empty state: teaches the operator what this does
+              //    and how to use it BEFORE the first scan. Five rules:
+              //    illustration · human tone · context · onboarding · primary CTA. ──
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.emptyOnboard}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Alive viewfinder illustration — echoes the camera brackets
+                    above, with a sweeping scan line and an AI sparkle badge. */}
+                <View style={styles.illoFrame}>
+                  <View style={[styles.illoBracket, styles.illoTL]} />
+                  <View style={[styles.illoBracket, styles.illoTR]} />
+                  <View style={[styles.illoBracket, styles.illoBL]} />
+                  <View style={[styles.illoBracket, styles.illoBR]} />
+                  <Camera size={30} color="#DDD6FE" />
+                  <Animated.View
+                    style={[styles.illoSweep, {
+                      transform: [{ translateY: idleSweep.interpolate({ inputRange: [0, 1], outputRange: [-24, 24] }) }],
+                    }]}
+                  />
+                  <View style={styles.illoAiBadge}>
+                    <Sparkles size={11} color="#FFFFFF" />
+                  </View>
+                </View>
+
+                <Text style={styles.onboardTitle}>Ready to inspect</Text>
+                <Text style={styles.onboardContext}>
+                  No more counting by hand or writing in notebooks.
+                </Text>
+
+                <View style={styles.onboardSteps}>
+                  <View style={styles.onboardStep}>
+                    <View style={styles.onboardStepNum}><Text style={styles.onboardStepNumText}>1</Text></View>
+                    <Text style={styles.onboardStepText}>Lay one or more specimens inside the frame</Text>
+                  </View>
+                  <View style={styles.onboardStep}>
+                    <View style={styles.onboardStepNum}><Text style={styles.onboardStepNumText}>2</Text></View>
+                    <Text style={styles.onboardStepText}>Tap Start Scan</Text>
+                  </View>
+                  <View style={styles.onboardStep}>
+                    <View style={styles.onboardStepNum}><Text style={styles.onboardStepNumText}>3</Text></View>
+                    <Text style={styles.onboardStepText}>Keep the passes, flag anything missing</Text>
+                  </View>
+                </View>
+              </ScrollView>
             )}
           </>
         )}
@@ -1915,7 +1994,7 @@ const styles = StyleSheet.create({
   syncBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderTopWidth: 1,
@@ -1955,6 +2034,152 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  emptyStateTitle: {
+    color: '#111827',
+    marginTop: 12,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    color: '#6B7280',
+    marginTop: 4,
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 21,
+  },
+
+  // ── Error state badge ──
+  emptyErrorBadge: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+    marginBottom: 4,
+  },
+
+  // ── Onboarding empty state ──
+  emptyOnboard: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+  },
+  illoFrame: {
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  illoBracket: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderColor: '#5B21D9',
+  },
+  illoTL: { top: 0,    left: 0,  borderTopWidth: 2,    borderLeftWidth: 2 },
+  illoTR: { top: 0,    right: 0, borderTopWidth: 2,    borderRightWidth: 2 },
+  illoBL: { bottom: 0, left: 0,  borderBottomWidth: 2, borderLeftWidth: 2 },
+  illoBR: { bottom: 0, right: 0, borderBottomWidth: 2, borderRightWidth: 2 },
+  illoSweep: {
+    position: 'absolute',
+    width: 56,
+    height: 2,
+    backgroundColor: '#7C3AED',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 4,
+  },
+  illoAiBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onboardTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  onboardContext: {
+    color: '#6B7280',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    maxWidth: 360,
+  },
+  onboardSteps: {
+    alignSelf: 'stretch',
+    marginTop: 20,
+    marginBottom: 22,
+    gap: 12,
+    paddingHorizontal: 14,
+  },
+  onboardStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  onboardStepNum: {
+    width: 22,
+    height: 22,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onboardStepNumText: {
+    color: '#5B21D9',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  onboardStepText: {
+    flex: 1,
+    color: '#374151',
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 19,
+  },
+  onboardCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#5B21D9',
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    alignSelf: 'stretch',
+    marginHorizontal: 14,
+    marginTop: 8,
+  },
+  onboardCtaDisabled: {
+    backgroundColor: '#E5E7EB',
+  },
+  onboardCtaText: {
+    color: '#F5F5F7',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
 
   // ── Camera Permission & Overlay Styles ──

@@ -10,7 +10,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import { getWorkerSession } from '../src/services/workerSession';
-import { fetchWorkerScanBatches } from '../src/services/supabaseService';
+import { fetchWorkerScanBatches, getStageLogsForBatch } from '../src/services/supabaseService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -20,9 +20,26 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Calendar,
   Layers
 } from 'lucide-react-native';
+
+// Group a batch's ISO date into a per-day folder, bucketed by LOCAL calendar
+// day -- so a new folder begins at 12:00 AM. Returns a stable key (so a
+// worker's expand/collapse choice sticks across reloads), an uppercase
+// "MONTH DAY, YEAR" label, and a sort value (start-of-day ms, newest-first).
+// Batches with no usable date fall into a single "UNDATED" folder.
+function getDayFolder(iso) {
+  if (!iso) return { key: 'undated', label: 'UNDATED', sortVal: -Infinity };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { key: 'undated', label: 'UNDATED', sortVal: -Infinity };
+
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const label = startOfDay.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
+
+  return { key: String(startOfDay.getTime()), label, sortVal: startOfDay.getTime() };
+}
 
 const B = {
   bg:           '#F5F5F7',
@@ -66,6 +83,13 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
   const [logs, setLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('ALL');
   const [expandedLogId, setExpandedLogId] = useState(null);
+  // Per-day folder open/closed overrides, keyed by day. A day not in here uses
+  // the default rule (newest day open, the rest collapsed); a tap records an
+  // explicit choice that then sticks even when switching status tabs.
+  const [groupOverrides, setGroupOverrides] = useState({});
+  // Manual stage-log entries (the ADD LOG notes from the Stages screen), fetched
+  // lazily per production batch the first time one of its scans is expanded.
+  const [stageLogsByBatch, setStageLogsByBatch] = useState({});
 
   useEffect(() => {
     async function loadScanHistory() {
@@ -79,15 +103,30 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
         if (workerName) {
           const liveBatches = await fetchWorkerScanBatches(workerName);
           if (liveBatches.length > 0) {
-            const mapped = liveBatches.map(b => ({
-              id:        b.id,
-              batchId:   b.id.slice(-6).toUpperCase(),
-              stage:     b.stage_name || 'Quality Control',
-              timestamp: '--',
-              status:    statusMap[b.status] || 'pending',
-              operator:  b.worker_name || 'Worker',
-              notes:     `${b.species_display || 'Unknown'} — ${b.total_scanned || 0} scanned, ${b.pass_count || 0} passed, ${b.flagged_count || 0} flagged.`,
-            }));
+            const mapped = liveBatches.map(b => {
+              // The table's timestamp column name isn't guaranteed, so accept
+              // any of the common creation fields; null falls into "UNDATED".
+              const createdAt = b.created_at || b.inserted_at || b.submitted_at || b.created || b.scanned_at || null;
+              return {
+                id:        b.id,
+                batchId:   b.id.slice(-6).toUpperCase(),
+                stage:     b.stage_name || 'Quality Control',
+                species:   b.species_display || b.species || 'Unknown',
+                scanned:   b.total_scanned || 0,
+                passCount: b.pass_count || 0,
+                flaggedCount: b.flagged_count || 0,
+                specimens: Array.isArray(b.specimens) ? b.specimens : [],
+                productionBatchId: b.production_batch_id || null,
+                createdAt,
+                timestamp: createdAt
+                  ? new Date(createdAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })
+                  : '--',
+                status:    statusMap[b.status] || 'pending',
+                operator:  b.worker_name || 'Worker',
+              };
+            });
+            // Server didn't order (no known timestamp column), so sort newest-first here.
+            mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
             setLogs(mapped);
             return;
           }
@@ -104,12 +143,19 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
             id:        b.id,
             batchId:   b.id.slice(-6).toUpperCase(),
             stage:     b.stageName || 'Quality Control',
-            timestamp: b.submittedAt ? new Date(b.submittedAt).toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '--',
+            species:   b.species || 'Unknown',
+            scanned:   b.specimens?.length || 0,
+            passCount,
+            flaggedCount,
+            specimens: Array.isArray(b.specimens) ? b.specimens : [],
+            productionBatchId: b.productionBatchId || b.production_batch_id || null,
+            createdAt: b.submittedAt || null,
+            timestamp: b.submittedAt ? new Date(b.submittedAt).toLocaleString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '--',
             status:    statusMap[b.status] || 'pending',
             operator:  b.workerName || 'Worker',
-            notes:     `${b.species || 'Unknown'} — ${b.specimens?.length || 0} scanned, ${passCount} passed, ${flaggedCount} flagged.`,
           };
         });
+        mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
         setLogs(mapped);
       } catch (err) {
         console.warn('loadScanHistory failed:', err);
@@ -123,8 +169,40 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
     return logs.filter(log => log.status === activeTab.toLowerCase());
   }, [logs, activeTab]);
 
-  const toggleExpand = (id) => {
-    setExpandedLogId(prev => (prev === id ? null : id));
+  // Fold the (already newest-first) list into per-day folders, newest day first,
+  // tallying the day's pass/flag rollup so the header reads at a glance.
+  const dayGroups = useMemo(() => {
+    const byKey = new Map();
+    for (const log of filteredLogs) {
+      const folder = getDayFolder(log.createdAt);
+      if (!byKey.has(folder.key)) byKey.set(folder.key, { ...folder, logs: [], passed: 0, flagged: 0 });
+      const g = byKey.get(folder.key);
+      g.logs.push(log);
+      g.passed  += log.passCount || 0;
+      g.flagged += log.flaggedCount || 0;
+    }
+    return Array.from(byKey.values()).sort((a, b) => b.sortVal - a.sortVal);
+  }, [filteredLogs]);
+
+  const newestGroupKey = dayGroups[0]?.key;
+  const isGroupOpen = (key) => (key in groupOverrides ? groupOverrides[key] : key === newestGroupKey);
+  const toggleGroup = (key) => {
+    setGroupOverrides(prev => {
+      const open = key in prev ? prev[key] : key === newestGroupKey;
+      return { ...prev, [key]: !open };
+    });
+  };
+
+  const toggleExpand = (log) => {
+    const willOpen = expandedLogId !== log.id;
+    setExpandedLogId(willOpen ? log.id : null);
+    // Lazy-load the production batch's manual stage logs the first time we open
+    // one of its scans -- avoids 50+ requests on mount when most stay collapsed.
+    if (willOpen && log.productionBatchId && !(log.productionBatchId in stageLogsByBatch)) {
+      getStageLogsForBatch(log.productionBatchId)
+        .then(sl => setStageLogsByBatch(prev => ({ ...prev, [log.productionBatchId]: sl })))
+        .catch(() => {});
+    }
   };
 
   const getStatusBadge = (status) => {
@@ -190,65 +268,129 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
           </View>
 
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-            {filteredLogs.length > 0 ? (
-              filteredLogs.map((log) => {
-                const isExpanded = expandedLogId === log.id;
+            {dayGroups.length > 0 ? (
+              dayGroups.map((group) => {
+                const open = isGroupOpen(group.key);
                 return (
-                  <View key={log.id} style={styles.logCard}>
-                    {/* Top row: batch ID + status badge */}
-                    <View style={styles.cardTopRow}>
-                      <View>
-                        <Text style={styles.batchLabel}>[ BATCH ID ]</Text>
-                        <Text style={styles.batchIdText}>#{log.batchId}</Text>
-                      </View>
-                      {getStatusBadge(log.status)}
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    {/* Stage details + expand toggle */}
+                  <View key={group.key} style={styles.dayGroup}>
+                    {/* Day folder header — date + at-a-glance rollup for the day */}
                     <TouchableOpacity
-                      style={styles.cardDetailsButton}
-                      onPress={() => toggleExpand(log.id)}
-                      activeOpacity={0.9}
+                      style={[styles.dayHeader, open && styles.dayHeaderOpen]}
+                      onPress={() => toggleGroup(group.key)}
+                      activeOpacity={0.8}
                     >
-                      <View style={styles.infoGrid}>
-                        <View style={styles.infoItem}>
-                          <View style={styles.iconLabelRow}>
-                            <Layers size={12} color={B.accentDim} style={{ marginRight: 5 }} />
-                            <Text style={styles.infoItemLabel}>[ WORKFLOW STAGE ]</Text>
-                          </View>
-                          <Text style={styles.infoItemVal}>{log.stage}</Text>
-                        </View>
+                      <View style={styles.dayHeaderTop}>
+                        {open
+                          ? <ChevronDown size={16} color={B.accent} style={{ marginRight: 8 }} />
+                          : <ChevronRight size={16} color={B.textMuted} style={{ marginRight: 8 }} />}
+                        <Calendar size={13} color={open ? B.accent : B.textMuted} style={{ marginRight: 6 }} />
+                        <Text style={[styles.dayHeaderLabel, open && styles.dayHeaderLabelOpen]}>{group.label}</Text>
                       </View>
-
-                      <View style={styles.expandRow}>
-                        <Calendar size={11} color={B.textMuted} style={{ marginRight: 4 }} />
-                        <Text style={styles.timestampText}>{log.timestamp}</Text>
-                        <View style={styles.flexSpacer} />
-                        <Text style={styles.expandText}>{isExpanded ? 'HIDE' : 'DETAILS'}</Text>
-                        {isExpanded
-                          ? <ChevronUp size={13} color={B.accent} />
-                          : <ChevronDown size={13} color={B.accent} />}
+                      <View style={styles.dayRollupRow}>
+                        <Text style={styles.dayRollupText}>{group.logs.length} {group.logs.length === 1 ? 'batch' : 'batches'}</Text>
+                        <Text style={styles.dayRollupDot}>  ·  </Text>
+                        <Text style={[styles.dayRollupText, { color: B.success }]}>{group.passed} passed</Text>
+                        <Text style={styles.dayRollupDot}>  ·  </Text>
+                        <Text style={[styles.dayRollupText, { color: group.flagged > 0 ? B.error : B.textMuted }]}>{group.flagged} flagged</Text>
                       </View>
                     </TouchableOpacity>
 
-                    {/* Expanded notes panel */}
-                    {isExpanded && (
-                      <View style={styles.notesContainer}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 }}>
-                          <Text style={styles.notesSectionTitle}>[ AUDIT TRAIL ]</Text>
-                          <View style={{ flex: 1, height: 1, backgroundColor: B.border }} />
+                    {open && group.logs.map((log) => {
+                      const isExpanded = expandedLogId === log.id;
+                      const stageLogs  = log.productionBatchId ? stageLogsByBatch[log.productionBatchId] : null;
+                      return (
+                        <View key={log.id} style={styles.logCard}>
+                          {/* Top row: batch ID + status badge */}
+                          <View style={styles.cardTopRow}>
+                            <View>
+                              <Text style={styles.batchLabel}>[ BATCH ID ]</Text>
+                              <Text style={styles.batchIdText}>#{log.batchId}</Text>
+                            </View>
+                            {getStatusBadge(log.status)}
+                          </View>
+
+                          <View style={styles.divider} />
+
+                          {/* Species headline + one-look scan summary + expand toggle */}
+                          <TouchableOpacity
+                            style={styles.cardDetailsButton}
+                            onPress={() => toggleExpand(log)}
+                            activeOpacity={0.9}
+                          >
+                            <Text style={styles.speciesName} numberOfLines={1}>{log.species}</Text>
+                            <View style={styles.summaryRow}>
+                              <Text style={styles.summaryStrong}>{log.scanned}</Text>
+                              <Text style={styles.summaryMuted}> scanned</Text>
+                              <Text style={styles.summaryDot}>  ·  </Text>
+                              <Text style={[styles.summaryStrong, { color: B.success }]}>{log.passCount}</Text>
+                              <Text style={styles.summaryMuted}> passed</Text>
+                              <Text style={styles.summaryDot}>  ·  </Text>
+                              <Text style={[styles.summaryStrong, { color: log.flaggedCount > 0 ? B.error : B.textMuted }]}>{log.flaggedCount}</Text>
+                              <Text style={styles.summaryMuted}> flagged</Text>
+                            </View>
+
+                            <View style={styles.expandRow}>
+                              <Clock size={11} color={B.textMuted} style={{ marginRight: 4 }} />
+                              <Text style={styles.timestampText}>{log.timestamp}</Text>
+                              <View style={styles.flexSpacer} />
+                              <Text style={styles.expandText}>{isExpanded ? 'HIDE' : 'DETAILS'}</Text>
+                              {isExpanded
+                                ? <ChevronUp size={13} color={B.accent} />
+                                : <ChevronDown size={13} color={B.accent} />}
+                            </View>
+                          </TouchableOpacity>
+
+                          {/* Expanded: per-specimen result + any manual stage logs */}
+                          {isExpanded && (
+                            <View style={styles.notesContainer}>
+                              <View style={styles.sectionHeaderRow}>
+                                <Text style={styles.notesSectionTitle}>[ SPECIMENS ]</Text>
+                                <View style={styles.sectionRule} />
+                              </View>
+                              {log.specimens.length > 0 ? (
+                                log.specimens.map((s, i) => {
+                                  const passed  = String(s.status || '').toLowerCase() === 'pass';
+                                  const missing = Array.isArray(s.missing_parts) ? s.missing_parts : [];
+                                  return (
+                                    <View key={i} style={styles.specimenRow}>
+                                      <View style={[styles.specimenDot, { backgroundColor: passed ? B.success : B.error }]} />
+                                      <Text style={styles.specimenName} numberOfLines={1}>{s.species || 'Unknown'}</Text>
+                                      <View style={styles.flexSpacer} />
+                                      <Text style={[styles.specimenStatus, { color: passed ? B.success : B.error }]} numberOfLines={1}>
+                                        {passed ? 'PASS' : `FLAG${missing.length > 0 ? ` · missing ${missing.join(', ')}` : ''}`}
+                                      </Text>
+                                    </View>
+                                  );
+                                })
+                              ) : (
+                                <Text style={styles.noteText}>{log.scanned} scanned · {log.passCount} passed · {log.flaggedCount} flagged.</Text>
+                              )}
+
+                              {stageLogs && stageLogs.length > 0 && (
+                                <>
+                                  <View style={[styles.sectionHeaderRow, { marginTop: 12 }]}>
+                                    <Text style={styles.notesSectionTitle}>[ STAGE LOG ]</Text>
+                                    <View style={styles.sectionRule} />
+                                  </View>
+                                  {stageLogs.map((e, i) => (
+                                    <View key={e.id || i} style={styles.stageLogRow}>
+                                      <Text style={styles.stageLogStage}>{e.stage_name || `Stage ${e.stage_number}`}</Text>
+                                      <Text style={styles.stageLogText}>{e.log_text}</Text>
+                                    </View>
+                                  ))}
+                                </>
+                              )}
+
+                              <View style={styles.auditFooter}>
+                                <Text style={styles.auditFooterText}>
+                                  By {log.operator}{log.timestamp !== '--' ? ` · ${log.timestamp}` : ''}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
                         </View>
-                        <View style={styles.operatorRow}>
-                          <Text style={styles.operatorLabel}>[ SUBMITTED BY ]</Text>
-                          <Text style={styles.operatorValue}>{log.operator}</Text>
-                        </View>
-                        <View style={styles.noteContentBox}>
-                          <Text style={styles.noteText}>{log.notes}</Text>
-                        </View>
-                      </View>
-                    )}
+                      );
+                    })}
                   </View>
                 );
               })
@@ -344,6 +486,149 @@ const styles = StyleSheet.create({
 
   scrollView: { flex: 1 },
   scrollContent: { padding: 14, paddingBottom: 32 },
+
+  // ── Day folder ──────────────────────────────────────────────
+  dayGroup: {
+    marginBottom: 10,
+  },
+  dayHeader: {
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  dayHeaderTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dayHeaderOpen: {
+    borderColor: B.accent,
+    borderLeftWidth: 3,
+  },
+  dayHeaderLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: B.textMuted,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  dayHeaderLabelOpen: {
+    color: B.textPri,
+  },
+  dayRollupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginTop: 6,
+    marginLeft: 30,
+  },
+  dayRollupText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: B.textMuted,
+    letterSpacing: 0.3,
+  },
+  dayRollupDot: {
+    fontSize: 12,
+    color: B.border,
+    fontWeight: '700',
+  },
+
+  // ── Species headline + scan summary ─────────────────────────
+  speciesName: {
+    fontSize: 18,
+    fontWeight: '800',
+    fontStyle: 'italic',
+    color: B.textPri,
+    marginBottom: 6,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  summaryStrong: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: B.textPri,
+  },
+  summaryMuted: {
+    fontSize: 13,
+    color: B.textMuted,
+    fontWeight: '500',
+  },
+  summaryDot: {
+    fontSize: 13,
+    color: B.border,
+    fontWeight: '700',
+  },
+
+  // ── Expanded: specimens + stage log ─────────────────────────
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  sectionRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: B.border,
+  },
+  specimenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    gap: 8,
+  },
+  specimenDot: {
+    width: 8,
+    height: 8,
+  },
+  specimenName: {
+    fontSize: 13,
+    fontWeight: '700',
+    fontStyle: 'italic',
+    color: B.textPri,
+    maxWidth: '50%',
+  },
+  specimenStatus: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  stageLogRow: {
+    paddingVertical: 5,
+  },
+  stageLogStage: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: B.accentDim,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  stageLogText: {
+    fontSize: 13,
+    color: B.textPri,
+    fontWeight: '500',
+  },
+  auditFooter: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: B.border,
+  },
+  auditFooterText: {
+    fontSize: 12,
+    color: B.textMuted,
+    fontWeight: '600',
+  },
 
   // ── Log Card ────────────────────────────────────────────────
   logCard: {

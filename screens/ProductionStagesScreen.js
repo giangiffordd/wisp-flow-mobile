@@ -310,6 +310,7 @@ export default function ProductionStagesScreen({ navigation }) {
     setLogStage(stage);
     setLogRows([{ key: nextRowKey(), quantity: 0, species: null, speciesDisplay: null }]);
     setLogNote('');
+    setSpeciesPickerTarget(null); // always start on the log form, never the picker
     setShowLogModal(true);
   };
 
@@ -439,6 +440,7 @@ export default function ProductionStagesScreen({ navigation }) {
     setEditingText('');
     setEditingSpecies(null);
     setEditingSpeciesDisplay(null);
+    setSpeciesPickerTarget(null); // never leave the picker armed for the next open
   };
 
   // Structured "{qty} x {species}" entries edit with the same stepper +
@@ -638,13 +640,13 @@ export default function ProductionStagesScreen({ navigation }) {
       <ScrollView style={{ maxHeight: 165 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
         {(() => {
           const q = speciesPickerSearch.trim().toLowerCase();
-          // Capped at 3 so the keyboard (which on some Android keyboards
-          // already includes a number row, eating extra height) never
-          // has to fight a long list for space -- type a more specific
-          // search to narrow it down instead.
+          // The fixed-height ScrollView (maxHeight 165) shows ~3 rows at a
+          // time and scrolls through the rest, so the keyboard never has to
+          // fight a long list for space. Cap kept generous to avoid rendering
+          // the entire catalog at once -- narrow with search for the rest.
           const filtered = allSpecies.filter(s =>
             !q || s.species.toLowerCase().includes(q) || s.commonName.toLowerCase().includes(q)
-          ).slice(0, 3);
+          ).slice(0, 50);
 
           if (filtered.length > 0) {
             return filtered.map((s, i) => (
@@ -902,7 +904,15 @@ export default function ProductionStagesScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowLogModal(false); }}>
+          <TouchableWithoutFeedback onPress={() => {
+            Keyboard.dismiss();
+            // If the species picker is open, an outside tap should step back
+            // to the log form -- not tear down the whole modal while leaving
+            // speciesPickerTarget set (which made the next ADD LOG reopen
+            // straight into the picker).
+            if (speciesPickerTarget?.mode === 'row') setSpeciesPickerTarget(null);
+            else setShowLogModal(false);
+          }}>
             <View style={StyleSheet.absoluteFillObject} />
           </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
@@ -968,7 +978,7 @@ export default function ProductionStagesScreen({ navigation }) {
               <Text style={styles.inputLabel}>[ NOTE — OPTIONAL ]</Text>
               <TextInput
                 style={[styles.input, styles.inputMultiline]}
-                placeholder="Anything else to note... (optional)"
+                placeholder="Anything else to note..."
                 placeholderTextColor={B.textMuted}
                 value={logNote}
                 onChangeText={setLogNote}
@@ -1004,7 +1014,12 @@ export default function ProductionStagesScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <TouchableWithoutFeedback onPress={closeEditModal}>
+          <TouchableWithoutFeedback onPress={() => {
+            // Mirror the log modal: when the species picker is open, an outside
+            // tap returns to the edit form instead of closing the whole modal.
+            if (speciesPickerTarget?.mode === 'editing') { Keyboard.dismiss(); setSpeciesPickerTarget(null); }
+            else closeEditModal();
+          }}>
             <View style={StyleSheet.absoluteFillObject} />
           </TouchableWithoutFeedback>
           <View style={[styles.modalCard, { maxHeight: '80%' }]}>

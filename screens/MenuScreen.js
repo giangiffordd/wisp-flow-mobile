@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   Dimensions
 } from 'react-native';
-import { History, ChevronRight, Cpu } from 'lucide-react-native';
-import { COLORS, SHADOW_SM } from '../theme';
+import * as WebBrowser from 'expo-web-browser';
+import { History, ChevronRight, Cpu, Shield } from 'lucide-react-native';
+
+const PRIVACY_POLICY_URL =
+  'https://app.termly.io/policy-viewer/policy.html?policyUUID=1c0a8365-0ccf-4ffc-8f40-ee580a479fb3';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - 48) / 2;
@@ -21,17 +24,18 @@ export default function MenuScreen({ navigation }) {
       subtitle: 'Pending & Logs',
       screen: 'TaskHistoryPendingLogs',
       icon: History,
-      iconBg: '#FEF2F2',
-      iconColor: COLORS.errorRed,
       badge: 'Review',
-      badgeBg: '#FEF2F2',
-      badgeColor: COLORS.errorRed,
     },
   ];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Operations Modules</Text>
+
+      {/* Section divider */}
+      <View style={styles.sectionDivider}>
+        <Text style={styles.sectionDividerText}>[ OPERATIONS MODULES ]</Text>
+        <View style={styles.sectionDividerLine} />
+      </View>
 
       {/* Menu Grid */}
       <View style={styles.grid}>
@@ -45,12 +49,12 @@ export default function MenuScreen({ navigation }) {
               activeOpacity={0.75}
             >
               <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: item.iconBg }]}>
-                  <Icon size={22} color={item.iconColor} />
+                <View style={styles.iconContainer}>
+                  <Icon size={22} color="#5B21D9" />
                 </View>
                 {item.badge && (
-                  <View style={[styles.badge, { backgroundColor: item.badgeBg }]}>
-                    <Text style={[styles.badgeText, { color: item.badgeColor }]}>{item.badge}</Text>
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{item.badge}</Text>
                   </View>
                 )}
               </View>
@@ -62,7 +66,7 @@ export default function MenuScreen({ navigation }) {
 
               <View style={styles.cardFooter}>
                 <Text style={styles.launchText}>Open Module</Text>
-                <ChevronRight size={13} color={COLORS.textLight} />
+                <ChevronRight size={13} color="#5A7080" />
               </View>
             </TouchableOpacity>
           );
@@ -71,13 +75,23 @@ export default function MenuScreen({ navigation }) {
 
       {/* System Status Footer */}
       <View style={styles.systemStatusCard}>
-        <Cpu size={18} color={COLORS.textMuted} />
+        <Cpu size={18} color="#4A6070" />
         <View style={styles.systemStatusTextContainer}>
           <Text style={styles.systemStatusTitle}>Wisp Flow Diagnostics</Text>
           <Text style={styles.systemStatusSubtitle}>App Node: Online | Version: v1.0.0</Text>
         </View>
         <View style={styles.statusPulse} />
       </View>
+
+      {/* Privacy Policy Link */}
+      <TouchableOpacity
+        style={styles.privacyRow}
+        onPress={() => WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL)}
+        activeOpacity={0.6}
+      >
+        <Shield size={13} color="#5A7080" />
+        <Text style={styles.privacyText}>Privacy Policy</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -85,18 +99,28 @@ export default function MenuScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.pageBg,
+    backgroundColor: '#F5F5F7',
   },
   content: {
     padding: 16,
     paddingBottom: 32,
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.textDark,
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 14,
-    letterSpacing: 0.2,
+    gap: 8,
+  },
+  sectionDividerText: {
+    fontSize: 9,
+    color: '#5B21D9',
+    fontWeight: '700',
+    letterSpacing: 2.5,
+  },
+  sectionDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
   },
   grid: {
     flexDirection: 'row',
@@ -106,12 +130,11 @@ const styles = StyleSheet.create({
   },
   card: {
     width: cardWidth,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 0,
     padding: 14,
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    ...SHADOW_SM,
+    borderColor: '#E5E7EB',
     justifyContent: 'space-between',
     minHeight: 150,
   },
@@ -124,18 +147,27 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: 0,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
   badge: {
     paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 0,
+    backgroundColor: 'rgba(143,164,184,0.12)',
+    borderWidth: 1,
+    borderColor: '#5B21D9',
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
+    color: '#5B21D9',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   cardBody: {
     marginBottom: 14,
@@ -143,12 +175,12 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: COLORS.textDark,
+    color: '#111827',
     marginBottom: 3,
   },
   cardSubtitle: {
     fontSize: 12,
-    color: COLORS.textMuted,
+    color: '#6B7280',
     fontWeight: '500',
   },
   cardFooter: {
@@ -156,21 +188,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: 1,
-    borderTopColor: COLORS.pageBg,
+    borderTopColor: '#E5E7EB',
     paddingTop: 10,
   },
   launchText: {
     fontSize: 11,
     fontWeight: '600',
-    color: COLORS.textMuted,
+    color: '#6B7280',
   },
   systemStatusCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.cardBg,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    borderRadius: 10,
+    borderColor: '#E5E7EB',
+    borderRadius: 0,
     padding: 14,
     gap: 10,
   },
@@ -180,17 +212,31 @@ const styles = StyleSheet.create({
   systemStatusTitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: COLORS.textMid,
+    color: '#5B21D9',
   },
   systemStatusSubtitle: {
     fontSize: 11,
-    color: COLORS.textMuted,
+    color: '#6B7280',
     marginTop: 1,
   },
   statusPulse: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.successGreen,
+    borderRadius: 0,
+    backgroundColor: '#10B981',
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 16,
+    paddingVertical: 6,
+  },
+  privacyText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+    textDecorationLine: 'underline',
   },
 });

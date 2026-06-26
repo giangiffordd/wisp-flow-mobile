@@ -179,11 +179,16 @@ export async function isSessionActive(workerId, token) {
 export async function fetchWorkerScanBatches(workerName) {
   if (!supabase || !workerName) return [];
   try {
+    // NOTE: scan_batches has no guaranteed `created_at` column (the table was
+    // created outside the repo migrations), so we can't select/order by it
+    // without risking "column does not exist". Pull all columns and let the
+    // caller pick whatever timestamp field is actually present, ordering
+    // client-side. limit kept generous for the History day-folders.
     const { data, error } = await supabase
       .from('scan_batches')
-      .select('id, status, species_display, stage_name, worker_name, total_scanned, pass_count, flagged_count')
+      .select('*')
       .eq('worker_name', workerName)
-      .limit(30);
+      .limit(200);
     if (error) { console.error('fetchWorkerScanBatches error:', error.message); return []; }
     return data || [];
   } catch (e) {

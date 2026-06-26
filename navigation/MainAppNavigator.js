@@ -82,6 +82,10 @@ export default function MainAppNavigator({ navigation }) {
     <>
       <Tab.Navigator
         screenOptions={({ route, navigation: nav }) => ({
+          // Uniform cross-fade in BOTH directions when switching Stages <-> History.
+          // Without this, bottom-tabs only "faded" the first (lazy) mount of a tab,
+          // so Stages -> History animated but History -> Stages did not.
+          animation: 'fade',
           tabBarIcon: ({ focused, color, size }) => {
             if (route.name === 'Stages')    return <Layers        size={size} color={color} />;
             if (route.name === 'History')   return <ClipboardList size={size} color={color} />;
