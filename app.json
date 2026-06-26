@@ -17,7 +17,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.giangifford.wispflowmobile",
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "single",
@@ -48,8 +52,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "fc949fbc-8486-483b-8628-b02a83e5b720"
+        "projectId": "3a9c8dff-7d99-45e1-a9ac-4dafef4815ab"
       }
-    }
+    },
+    "owner": "giangiffordd"
   }
 }
