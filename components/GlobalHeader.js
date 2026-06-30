@@ -21,13 +21,8 @@ export default function GlobalHeader({ title, onBell, onProfile, onBrandPress, h
 
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
-      {/* Left: profile button + brand */}
+      {/* Left: brand only */}
       <View style={styles.leftSection}>
-        {onProfile && (
-          <TouchableOpacity onPress={onProfile} style={styles.iconButton} activeOpacity={0.7}>
-            <UserCircle size={17} color={COLORS.textOnDark} />
-          </TouchableOpacity>
-        )}
         <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
           <Animated.View style={[styles.brandWrapper, { transform: [{ scale: scaleAnim }] }]}>
             <View style={styles.brandTextGroup}>
@@ -39,12 +34,17 @@ export default function GlobalHeader({ title, onBell, onProfile, onBrandPress, h
         </TouchableOpacity>
       </View>
 
-      {/* Right: notification bell only */}
+      {/* Right: notification bell, then profile button to its right */}
       <View style={styles.rightSection}>
         {onBell && (
           <TouchableOpacity onPress={onBell} style={styles.iconButton} activeOpacity={0.7}>
             <Bell size={17} color={COLORS.textOnDark} />
             {hasUnread && <View style={styles.unreadDot} />}
+          </TouchableOpacity>
+        )}
+        {onProfile && (
+          <TouchableOpacity onPress={onProfile} style={styles.iconButton} activeOpacity={0.7}>
+            <UserCircle size={17} color={COLORS.textOnDark} />
           </TouchableOpacity>
         )}
       </View>
