@@ -25,16 +25,17 @@ Notifications.setNotificationHandler({
 });
 
 import MobileStaffDashboard from './screens/MobileStaffDashboard';
+import ForcePasswordChange from './screens/ForcePasswordChange';
 import MainAppNavigator from './navigation/MainAppNavigator';
 import YoloCameraModule from './screens/YoloCameraModule';
-import BatchSummary from './screens/BatchSummary';
 
 // Import newly created screens
 import PackagingBarcodeScanner from './screens/PackagingBarcodeScanner';
 import StaffAlertsNotifications from './screens/StaffAlertsNotifications';
-import ProcessFlowchart from './screens/ProcessFlowchart';
 import TaskHistoryPendingLogs from './screens/TaskHistoryPendingLogs';
-import OrderDetailScreen from './screens/OrderDetailScreen';
+import EmployeePerformanceReport from './screens/EmployeePerformanceReport';
+import ChangePassword from './screens/ChangePassword';
+import Profile from './screens/Profile';
 
 const Stack = createNativeStackNavigator();
 
@@ -70,14 +71,15 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Login" component={MobileStaffDashboard} />
+          <Stack.Screen name="ForcePasswordChange" component={ForcePasswordChange} />
+          <Stack.Screen name="ChangePassword" component={ChangePassword} />
           <Stack.Screen name="MainTabs" component={MainAppNavigator} />
+          <Stack.Screen name="Profile" component={Profile} />
           <Stack.Screen name="PackagingBarcodeScanner" component={PackagingBarcodeScanner} />
           <Stack.Screen name="StaffAlertsNotifications" component={StaffAlertsNotifications} />
-          <Stack.Screen name="ProcessFlowchart" component={ProcessFlowchart} />
           <Stack.Screen name="TaskHistoryPendingLogs" component={TaskHistoryPendingLogs} />
           <Stack.Screen name="YoloScan"      component={YoloCameraModule} />
-          <Stack.Screen name="BatchSummary"  component={BatchSummary}      />
-          <Stack.Screen name="OrderDetail"   component={OrderDetailScreen} />
+          <Stack.Screen name="EmployeePerformanceReport" component={EmployeePerformanceReport} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

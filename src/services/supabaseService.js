@@ -127,10 +127,23 @@ export async function loginWorker(employeeId, pin) {
     });
     if (error) { console.error('loginWorker error:', error.message); return null; }
     if (!data || data.length === 0) return null;
-    return data[0]; // { id, name, employee_id, role }
+    return data[0]; // { id, name, employee_id, role, must_change_password }
   } catch (e) {
     console.error('loginWorker exception:', e);
     return null;
+  }
+}
+
+export async function changeWorkerPassword(workerId, currentPin, newPin) {
+  if (!supabase) return { ok: false, message: 'Network error' };
+  try {
+    const { data, error } = await supabase.rpc('change_worker_password', {
+      p_worker_id: workerId, p_current_pin: currentPin, p_new_pin: newPin,
+    });
+    if (error) return { ok: false, message: error.message };
+    return { ok: !!data };
+  } catch (e) {
+    return { ok: false, message: 'Network error' };
   }
 }
 
@@ -197,6 +210,50 @@ export async function fetchWorkerScanBatches(workerName) {
   }
 }
 
+/**
+ * @function fetchEmployeePerformance
+ * @description Aggregates scan_batches by worker_name for the manager-only
+ * Employee Performance report. Same defensive shape as fetchWorkerScanBatches
+ * above -- scan_batches has no guaranteed `created_at` column, so we never
+ * order by it server-side, just pull a generous limit and aggregate in JS.
+ * @returns {Promise<Array<{ worker: string, batches: number, totalScanned: number, passed: number, flagged: number, passRate: number|null, approvedBatches: number }>>}
+ */
+export async function fetchEmployeePerformance() {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from('scan_batches')
+      .select('worker_name, total_scanned, pass_count, flagged_count, status')
+      .limit(1000);
+    if (error) { console.error('fetchEmployeePerformance error:', error.message); return []; }
+
+    const byWorker = {};
+    for (const row of data || []) {
+      const worker = row.worker_name || 'Unknown';
+      if (!byWorker[worker]) {
+        byWorker[worker] = { worker, batches: 0, totalScanned: 0, passed: 0, flagged: 0, approvedBatches: 0 };
+      }
+      const agg = byWorker[worker];
+      agg.batches += 1;
+      agg.totalScanned += row.total_scanned || 0;
+      agg.passed += row.pass_count || 0;
+      agg.flagged += row.flagged_count || 0;
+      if (row.status === 'approved') agg.approvedBatches += 1;
+    }
+
+    const rows = Object.values(byWorker).map(agg => ({
+      ...agg,
+      passRate: agg.totalScanned > 0 ? agg.passed / agg.totalScanned : null,
+    }));
+
+    rows.sort((a, b) => b.passed - a.passed);
+    return rows;
+  } catch (e) {
+    console.error('fetchEmployeePerformance exception:', e);
+    return [];
+  }
+}
+
 export async function fetchBatchStatuses(supabaseIds) {
   if (!supabase || !supabaseIds?.length) return [];
   try {
@@ -228,6 +285,7 @@ export async function submitScanBatch(batchData) {
         production_batch_id: batchData.production_batch_id || null,
         status:          'pending_approval',
         specimens:       batchData.specimens || [],
+        qc_images:       batchData.qc_images || [],
         total_scanned:   batchData.total_scanned || 0,
         pass_count:      batchData.pass_count || 0,
         flagged_count:   batchData.flagged_count || 0,
@@ -271,11 +329,13 @@ export async function submitFinishedGoodsIntake(uid, workerId, workerName) {
 //  Production Batches — 12-stage lifecycle tracking
 // ─────────────────────────────────────────────────────────────────
 
-export async function createProductionBatch(batchName, species, orderId = null, quantityPlanned = 0) {
+export async function createProductionBatch(batchName, species, orderId = null, quantityPlanned = 0, workerId = null, workerName = null) {
   if (!supabase) return null;
   try {
     const payload = { batch_name: batchName, species, current_stage: 1, status: 'in_progress', quantity_planned: quantityPlanned };
     if (orderId) payload.order_id = orderId;
+    if (workerId) payload.worker_id = workerId;
+    if (workerName) payload.worker_name = workerName;
     const { data, error } = await supabase
       .from('production_batches')
       .insert(payload)
@@ -289,12 +349,13 @@ export async function createProductionBatch(batchName, species, orderId = null, 
   }
 }
 
-export async function getProductionBatches() {
-  if (!supabase) return [];
+export async function getProductionBatches(workerName = null) {
+  if (!supabase || !workerName) return [];
   try {
     const { data, error } = await supabase
       .from('production_batches')
       .select('*')
+      .eq('worker_name', workerName)
       .order('created_at', { ascending: false });
     if (error) { console.error('getProductionBatches error:', error.message); return []; }
     return data || [];
@@ -336,12 +397,14 @@ export async function advanceBatchStage(batchId, newStage) {
   }
 }
 
-export async function addStageLog(batchId, stageNumber, stageName, logText, workerName = 'Worker') {
+export async function addStageLog(batchId, stageNumber, stageName, logText, workerName = 'Worker', note = null) {
   if (!supabase) return null;
   try {
+    const payload = { batch_id: batchId, stage_number: stageNumber, stage_name: stageName, log_text: logText, worker_name: workerName };
+    if (note) payload.note = note;
     const { data, error } = await supabase
       .from('stage_logs')
-      .insert({ batch_id: batchId, stage_number: stageNumber, stage_name: stageName, log_text: logText, worker_name: workerName })
+      .insert(payload)
       .select()
       .single();
     if (error) { console.error('addStageLog error:', error.message); return null; }
@@ -357,7 +420,7 @@ export async function updateStageLog(logId, newText) {
   try {
     const { error } = await supabase
       .from('stage_logs')
-      .update({ log_text: newText })
+      .update({ log_text: newText, status: 'pending_approval', reviewed_by: null, reviewed_at: null, reject_reason: null })
       .eq('id', logId);
     if (error) { console.error('updateStageLog error:', error.message); return false; }
     return true;
@@ -452,20 +515,42 @@ export async function updateOrderStatus(orderId, status) {
 //  Staff Alerts — manager-to-worker notifications
 // ─────────────────────────────────────────────────────────────────
 
-export async function fetchStaffAlerts() {
+export async function fetchStaffAlerts(workerName = null) {
   if (!supabase) return [];
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('alerts')
-      .select('id, title, message, type, severity, created_at')
+      .select('id, title, message, type, severity, created_at, worker_name, scan_batch_id')
       .eq('is_read', false)
       .order('created_at', { ascending: false })
       .limit(30);
+    if (workerName) {
+      query = query.or(`worker_name.is.null,worker_name.eq.${workerName}`);
+    } else {
+      query = query.is('worker_name', null);
+    }
+    const { data, error } = await query;
     if (error) { console.warn('fetchStaffAlerts:', error.message); return []; }
     return data || [];
   } catch (e) {
     console.warn('fetchStaffAlerts exception:', e);
     return [];
+  }
+}
+
+export async function fetchScanBatchImages(scanBatchId) {
+  if (!supabase || !scanBatchId) return { images: [], species: null };
+  try {
+    const { data, error } = await supabase
+      .from('scan_batches')
+      .select('qc_images, species, species_display')
+      .eq('id', scanBatchId)
+      .single();
+    if (error) { console.warn('fetchScanBatchImages:', error.message); return { images: [], species: null }; }
+    return { images: Array.isArray(data?.qc_images) ? data.qc_images : [], species: data?.species_display || data?.species || null };
+  } catch (e) {
+    console.warn('fetchScanBatchImages exception:', e);
+    return { images: [], species: null };
   }
 }
 
@@ -511,6 +596,23 @@ export async function getStageLogsForBatch(batchId) {
     return data || [];
   } catch (e) {
     console.error('getStageLogsForBatch exception:', e);
+    return [];
+  }
+}
+
+export async function getWorkerStageLogs(workerName) {
+  if (!supabase || !workerName) return [];
+  try {
+    const { data, error } = await supabase
+      .from('stage_logs')
+      .select('*')
+      .eq('worker_name', workerName)
+      .order('logged_at', { ascending: false })
+      .limit(200);
+    if (error) { console.error('getWorkerStageLogs error:', error.message); return []; }
+    return data || [];
+  } catch (e) {
+    console.error('getWorkerStageLogs exception:', e);
     return [];
   }
 }

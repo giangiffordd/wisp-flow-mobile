@@ -16,7 +16,7 @@ import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, AlertCircle, ArrowLeft, Square, CheckCircle, RefreshCw, Upload, Trash2, Wifi, WifiOff, Sparkles } from 'lucide-react-native';
 import { supabase, submitScanBatch } from '../src/services/supabaseService';
-import { getWorkerSession } from '../src/services/workerSession';
+import { getWorkerSession, workerLabel } from '../src/services/workerSession';
 import { checkHealth, predictImage, getApiUrl, WISP_API_KEY } from '../src/services/yoloApiService';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import ApiSettingsModal from '../components/ApiSettingsModal';
@@ -381,7 +381,7 @@ export default function YoloCameraModule({ navigation, route }) {
   }, [checkApiConnection]);
 
   useEffect(() => {
-    getWorkerSession().then(s => { if (s?.name) setWorkerName(s.name); });
+    getWorkerSession().then(s => { if (s) setWorkerName(workerLabel(s)); });
   }, []);
 
   const handleSettingsClose = useCallback(() => {
@@ -592,6 +592,12 @@ export default function YoloCameraModule({ navigation, route }) {
   // ── Capture a frame -- used for both the first capture and every
   // subsequent one in the same session (Retake/Keep both return here). ──
   const handleCapture = async () => {
+    // Still pinging the YOLO health endpoint -- the button should already be
+    // disabled during this window (see apiStatus === 'checking' gating below),
+    // but this guard stops any stray invocation from silently producing a
+    // fake instant "Nothing in frame" result with no loading state.
+    if (apiStatus === 'checking') return;
+
     setIsScanning(true);
     setSpecimens([]);
     setRawParts([]);
@@ -733,6 +739,26 @@ export default function YoloCameraModule({ navigation, route }) {
     const flaggedCount = allSpecs.length - passCount;
     const primary = entries[0].specimens[0];
 
+    // Re-fetch the session right at submit time rather than trusting the
+    // `workerName` state set on mount -- if a scan is confirmed before that
+    // effect resolves, `workerName` is still the 'Operator' placeholder and
+    // worker_name would land in Supabase as something other than the
+    // canonical "EMP001 — Name" label the procurement dashboard matches on.
+    const submitSession = await getWorkerSession();
+    const wl = submitSession ? workerLabel(submitSession) : (workerName || 'Worker');
+
+    // AI-annotated images for PASS captures only -- these feed the manager's
+    // dashboard Final QC review (bounding boxes already drawn by the YOLO
+    // service), alongside the parts-present checklist derived from specimens.
+    const qcImages = entries
+      .filter(e => e.base64Image && e.specimens?.some(s => s.qcStatus === 'pass'))
+      .map(e => ({
+        image: e.base64Image,
+        species: e.specimens[0]?.species,
+        confidence: e.specimens[0]?.confidence,
+        status: 'pass',
+      }));
+
     if (supabase) {
       await submitScanBatch({
         species,
@@ -740,10 +766,11 @@ export default function YoloCameraModule({ navigation, route }) {
         stage_number: stepId || 9,
         stage_name: stepTitle || 'Quality Control',
         production_batch_id: batchId || null,
-        worker_name: workerName || 'Worker',
+        worker_name: wl,
         total_scanned: allSpecs.length,
         pass_count: passCount,
         flagged_count: flaggedCount,
+        qc_images: qcImages,
         specimens: allSpecs.map(s => ({
           species: s.species,
           status: s.qcStatus,
@@ -763,7 +790,7 @@ export default function YoloCameraModule({ navigation, route }) {
           species: s.species,
           missing_parts: missing.length > 0 ? missing.join(', ') : 'unknown',
           status: 'new',
-          worker: workerName || 'Unknown',
+          worker: wl,
         });
       }
 
@@ -1131,30 +1158,36 @@ export default function YoloCameraModule({ navigation, route }) {
                   // app's amber accent, not dead gray -- it's a transient
                   // wait state, not a disabled one. Offline stays gray.
                   isCooldown && { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
-                  apiStatus === 'offline' && { backgroundColor: '#E5E7EB', borderColor: '#E5E7EB' },
-                  isRepairMode && apiStatus !== 'offline' && !isCooldown && { borderColor: '#f59e0b', borderWidth: 1.5 },
+                  (apiStatus === 'offline' || apiStatus === 'checking') && { backgroundColor: '#E5E7EB', borderColor: '#E5E7EB' },
+                  isRepairMode && apiStatus !== 'offline' && apiStatus !== 'checking' && !isCooldown && { borderColor: '#f59e0b', borderWidth: 1.5 },
                 ]}
                 onPress={handleCapture}
-                disabled={isCooldown || apiStatus === 'offline'}
+                disabled={isCooldown || apiStatus === 'offline' || apiStatus === 'checking'}
               >
-                {isRepairMode && apiStatus !== 'offline'
+                {isRepairMode && apiStatus !== 'offline' && apiStatus !== 'checking'
                   ? <RefreshCw size={18} color="#f59e0b" style={{ marginRight: 8 }} />
                   : <Camera size={18} color="#F5F5F7" style={{ marginRight: 8 }} />}
                 <Text style={[styles.mainButtonText, { color: '#F5F5F7', letterSpacing: 3, textTransform: 'uppercase' }]}>
                   {apiStatus === 'offline'
                     ? 'Server Offline'
-                    : isCooldown
-                      ? 'Clear Table...'
-                      : isRepairMode
-                        ? 'Start Re-Scan'
-                        : 'Start Scan'}
+                    : apiStatus === 'checking'
+                      ? 'Checking Server...'
+                      : isCooldown
+                        ? 'Clear Table...'
+                        : isRepairMode
+                          ? 'Start Re-Scan'
+                          : 'Start Scan'}
                 </Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.scanningControls}>
               {!isLoading && !pendingReview && (
-                <TouchableOpacity style={styles.scanNextButton} onPress={handleCapture}>
+                <TouchableOpacity
+                  style={styles.scanNextButton}
+                  onPress={handleCapture}
+                  disabled={apiStatus === 'checking' || apiStatus === 'offline'}
+                >
                   <Camera size={15} color="#5B21D9" style={{ marginRight: 6 }} />
                   <Text style={[styles.mainButtonText, { color: '#5B21D9' }]}>Capture</Text>
                 </TouchableOpacity>

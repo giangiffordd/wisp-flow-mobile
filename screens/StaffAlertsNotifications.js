@@ -8,11 +8,14 @@ import {
   ActivityIndicator,
   Platform,
   UIManager,
+  Image,
+  Modal,
 } from 'react-native';
-import { ArrowLeft, Bell, X, ShieldAlert, AlertCircle, CheckCircle2, Info, RefreshCw, WifiOff } from 'lucide-react-native';
+import { ArrowLeft, Bell, X, ShieldAlert, AlertCircle, CheckCircle2, Info, RefreshCw, WifiOff, Image as ImageIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { fetchStaffAlerts, dismissStaffAlert, dismissAllStaffAlerts } from '../src/services/supabaseService';
+import { fetchStaffAlerts, dismissStaffAlert, dismissAllStaffAlerts, fetchScanBatchImages } from '../src/services/supabaseService';
+import { getWorkerSession, workerLabel } from '../src/services/workerSession';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -43,11 +46,17 @@ export default function StaffAlertsNotifications({ navigation }) {
   const [loading,     setLoading]     = useState(true);
   const [fetchError,  setFetchError]  = useState(false);
 
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [imageModalLoading, setImageModalLoading] = useState(false);
+  const [modalImages,       setModalImages]        = useState([]);
+  const [modalSpecies,      setModalSpecies]       = useState(null);
+
   const loadAlerts = useCallback(async () => {
     setLoading(true);
     setFetchError(false);
     try {
-      const data = await fetchStaffAlerts();
+      const session = await getWorkerSession();
+      const data = await fetchStaffAlerts(session ? workerLabel(session) : null);
       setAlerts(data);
     } catch (e) {
       console.warn('loadAlerts error:', e);
@@ -68,6 +77,28 @@ export default function StaffAlertsNotifications({ navigation }) {
     const ids = alerts.map(a => a.id);
     setAlerts([]);
     await dismissAllStaffAlerts(ids);
+  };
+
+  const openFlaggedImage = async (scanBatchId) => {
+    setImageModalVisible(true);
+    setImageModalLoading(true);
+    setModalImages([]);
+    setModalSpecies(null);
+    try {
+      const { images, species } = await fetchScanBatchImages(scanBatchId);
+      setModalImages(images);
+      setModalSpecies(species);
+    } catch (e) {
+      console.warn('openFlaggedImage error:', e);
+    } finally {
+      setImageModalLoading(false);
+    }
+  };
+
+  const closeImageModal = () => {
+    setImageModalVisible(false);
+    setModalImages([]);
+    setModalSpecies(null);
   };
 
   return (
@@ -128,10 +159,26 @@ export default function StaffAlertsNotifications({ navigation }) {
                   </View>
                   <View style={styles.textWrapper}>
                     <View style={styles.titleRow}>
-                      <Text style={styles.cardTitle}>{alert.title}</Text>
+                      <View style={styles.titleWithBadge}>
+                        <Text style={styles.cardTitle}>{alert.title}</Text>
+                        {!!alert.worker_name && (
+                          <Text style={styles.forYouBadge}>FOR YOU</Text>
+                        )}
+                      </View>
                       <Text style={styles.timestamp}>{timeAgo(alert.created_at)}</Text>
                     </View>
                     <Text style={styles.cardDescription}>{alert.message}</Text>
+
+                    {!!alert.scan_batch_id && (
+                      <TouchableOpacity
+                        style={styles.viewImageButton}
+                        onPress={() => openFlaggedImage(alert.scan_batch_id)}
+                        activeOpacity={0.7}
+                      >
+                        <ImageIcon size={12} color="#5B21D9" />
+                        <Text style={styles.viewImageButtonText}>VIEW FLAGGED IMAGE</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
 
@@ -157,6 +204,56 @@ export default function StaffAlertsNotifications({ navigation }) {
           </Text>
         </View>
       )}
+
+      <Modal
+        visible={imageModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeImageModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { marginTop: insets.top + 24, marginBottom: insets.bottom + 24 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {modalSpecies ? modalSpecies.toUpperCase() : 'FLAGGED SPECIMEN'}
+              </Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={closeImageModal} activeOpacity={0.7}>
+                <X size={16} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            {imageModalLoading ? (
+              <View style={styles.modalCenterState}>
+                <ActivityIndicator size="large" color="#5B21D9" />
+                <Text style={styles.centerStateText}>Loading image…</Text>
+              </View>
+            ) : modalImages.length > 0 ? (
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                {modalImages.map((img, idx) => {
+                  if (!img?.image) return null;
+                  const uri = img.image.startsWith('data:')
+                    ? img.image
+                    : 'data:image/jpeg;base64,' + img.image;
+                  return (
+                    <View key={idx} style={styles.modalImageWrapper}>
+                      <Image source={{ uri }} style={styles.modalImage} resizeMode="contain" />
+                      {!!img.species && (
+                        <Text style={styles.modalImageCaption}>
+                          {img.species}{img.confidence ? ` · ${Math.round(img.confidence * 100)}%` : ''}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={styles.modalCenterState}>
+                <Text style={styles.centerStateText}>No image available for this alert.</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -227,7 +324,9 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     gap: 6,
   },
+  titleWithBadge:  { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   cardTitle:       { fontSize: 13, fontWeight: '700', color: '#111827' },
+  forYouBadge:     { fontSize: 10, fontWeight: '800', color: '#5B21D9', letterSpacing: 1 },
   timestamp:       { fontSize: 9, color: '#6B7280', fontWeight: '600', letterSpacing: 1.5, textTransform: 'uppercase' },
   cardDescription: { fontSize: 12, color: '#6B7280', lineHeight: 17 },
   dismissButton: {
@@ -254,4 +353,59 @@ const styles = StyleSheet.create({
   },
   emptyTitle:    { fontSize: 17, fontWeight: '800', color: '#111827', marginBottom: 7, letterSpacing: 1, textTransform: 'uppercase' },
   emptySubtitle: { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 19 },
+
+  viewImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#5B21D9',
+    backgroundColor: '#FFFFFF',
+  },
+  viewImageButtonText: { color: '#5B21D9', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: { fontSize: 13, fontWeight: '800', color: '#111827', letterSpacing: 1.5, flex: 1, marginRight: 12 },
+  modalCloseButton: {
+    padding: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  modalScroll:        { flexGrow: 0 },
+  modalScrollContent: { padding: 16, gap: 16 },
+  modalImageWrapper:  { marginBottom: 16 },
+  modalImage: {
+    width: '100%',
+    height: 320,
+    backgroundColor: '#111827',
+  },
+  modalImageCaption: { marginTop: 8, fontSize: 12, color: '#6B7280', fontWeight: '600', textAlign: 'center' },
+  modalCenterState: { padding: 32, alignItems: 'center', justifyContent: 'center', gap: 10 },
 });

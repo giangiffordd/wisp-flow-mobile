@@ -123,7 +123,15 @@ export default function MobileStaffDashboard({ navigation }) {
         Notifications.getExpoPushTokenAsync()
           .then(t => { if (t?.data) savePushToken(session.id, t.data); })
           .catch(() => {});
-        navigation.replace('MainTabs');
+        if (session.must_change_password) {
+          navigation.replace('ForcePasswordChange', {
+            workerId: session.id,
+            tempPin: pin.trim(),
+            name: session.name,
+          });
+        } else {
+          navigation.replace('MainTabs');
+        }
       } else {
         const newAttempts = loginAttempts + 1;
         setLoginAttempts(newAttempts);
@@ -230,11 +238,6 @@ export default function MobileStaffDashboard({ navigation }) {
             </View>
             {errors.pin ? <Text style={styles.fieldError}>{'! ' + errors.pin}</Text> : null}
           </View>
-
-          {/* Forgot */}
-          <TouchableOpacity style={styles.forgotRow} activeOpacity={0.7}>
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
 
           {/* Sign In */}
           <TouchableOpacity
@@ -377,19 +380,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: '#111827',
     fontWeight: '500',
-  },
-
-  // ── Forgot ──
-  forgotRow: {
-    alignItems: 'flex-end',
-    marginBottom: 22,
-    marginTop: 2,
-  },
-  forgotText: {
-    fontSize: 13,
-    color: C.accentDim,
-    fontWeight: '600',
-    letterSpacing: 0.5,
   },
 
   // ── Button ──

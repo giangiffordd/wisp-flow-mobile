@@ -45,3 +45,6 @@ expo_qr.png
 
 # local build / dev-server logs
 *.log
+
+# Nested web/docker repo — tracked separately, never commit into the mobile repo
+ICPI-Merged---Docker/

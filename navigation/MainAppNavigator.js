@@ -1,21 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Platform,
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-} from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClipboardList, Layers, LogOut } from 'lucide-react-native';
+import { ClipboardList, Layers, Users } from 'lucide-react-native';
 
 import TaskHistoryPendingLogs  from '../screens/TaskHistoryPendingLogs';
 import ProductionStagesScreen  from '../screens/ProductionStagesScreen';
+import EmployeePerformanceReport from '../screens/EmployeePerformanceReport';
 import GlobalHeader            from '../components/GlobalHeader';
-import { clearWorkerSession, getWorkerSession } from '../src/services/workerSession';
+import { clearWorkerSession, getWorkerSession, workerLabel } from '../src/services/workerSession';
 import { fetchStaffAlerts, isSessionActive }     from '../src/services/supabaseService';
 
 const Tab = createBottomTabNavigator();
@@ -23,17 +16,56 @@ const UNREAD_POLL_MS = 30000;
 const SESSION_POLL_MS = 30000;
 
 export default function MainAppNavigator({ navigation }) {
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
+  const [isManager, setIsManager] = useState(false);
   const insets = useSafeAreaInsets();
+  const seenAlertIdsRef = useRef(null); // null = not yet initialized (first check just baselines, doesn't pop)
+
+  // Manager-only "Team" tab gating — loaded once on mount from the worker
+  // session's role. Managers get a third bottom tab for the Employee
+  // Performance report; everyone else only sees Stages/History.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const session = await getWorkerSession();
+      if (cancelled) return;
+      const role = (session?.role || '').toLowerCase();
+      setIsManager(['manager', 'admin', 'supervisor'].includes(role));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Poll for unread alerts so the bell badge stays current across all tabs,
-  // not just whenever the alerts screen happens to be visited.
+  // not just whenever the alerts screen happens to be visited. Also pops a
+  // native alert the moment a genuinely NEW alert appears, so workers don't
+  // have to notice the silent badge to find out about it.
   useEffect(() => {
     let cancelled = false;
     const checkUnread = async () => {
-      const alerts = await fetchStaffAlerts();
-      if (!cancelled) setHasUnread(alerts.length > 0);
+      const session = await getWorkerSession();
+      const alerts = await fetchStaffAlerts(session ? workerLabel(session) : null);
+      if (cancelled) return;
+      setHasUnread(alerts.length > 0);
+
+      const currentIds = new Set(alerts.map(a => a.id));
+      if (seenAlertIdsRef.current === null) {
+        // First check this session -- just baseline, don't pop alerts for
+        // things that were already unread before the app opened.
+        seenAlertIdsRef.current = currentIds;
+        return;
+      }
+
+      const newOnes = alerts.filter(a => !seenAlertIdsRef.current.has(a.id));
+      seenAlertIdsRef.current = currentIds;
+
+      // Pop a native alert for each genuinely new notification, most recent
+      // first. Sequential native Alert.alert() calls queue automatically on
+      // both iOS and Android, so this is safe even if several arrive at once.
+      newOnes
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .forEach(a => {
+          Alert.alert(a.title, a.message, [{ text: 'OK' }]);
+        });
     };
     checkUnread();
     const interval = setInterval(checkUnread, UNREAD_POLL_MS);
@@ -65,14 +97,6 @@ export default function MainAppNavigator({ navigation }) {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  const handleLogout = () => setShowLogoutModal(true);
-
-  const confirmLogout = async () => {
-    setShowLogoutModal(false);
-    await clearWorkerSession();
-    navigation.replace('Login');
-  };
-
   const handleBell = () => navigation.navigate('StaffAlertsNotifications');
 
   const bottomPadding = Math.max(insets.bottom, 8);
@@ -82,13 +106,15 @@ export default function MainAppNavigator({ navigation }) {
     <>
       <Tab.Navigator
         screenOptions={({ route, navigation: nav }) => ({
-          // Uniform cross-fade in BOTH directions when switching Stages <-> History.
-          // Without this, bottom-tabs only "faded" the first (lazy) mount of a tab,
-          // so Stages -> History animated but History -> Stages did not.
-          animation: 'fade',
+          // No tab transition animation. The bottom-tabs 'fade' animation could get
+          // STUCK at opacity 0 (white screen) when tabs were switched rapidly, and
+          // wouldn't recover until the screen was re-mounted. Instant switching is
+          // stable under spam-tapping.
+          animation: 'none',
           tabBarIcon: ({ focused, color, size }) => {
             if (route.name === 'Stages')    return <Layers        size={size} color={color} />;
             if (route.name === 'History')   return <ClipboardList size={size} color={color} />;
+            if (route.name === 'Team')      return <Users         size={size} color={color} />;
           },
           tabBarActiveTintColor:   '#5B21D9',
           tabBarInactiveTintColor: '#9CA3AF',
@@ -109,8 +135,8 @@ export default function MainAppNavigator({ navigation }) {
           header: () => (
             <GlobalHeader
               title={route.name}
-              onLogout={handleLogout}
               onBell={handleBell}
+              onProfile={() => (nav.getParent() ?? nav).navigate('Profile')}
               onBrandPress={() => nav.navigate('Stages')}
               hasUnread={hasUnread}
             />
@@ -119,86 +145,11 @@ export default function MainAppNavigator({ navigation }) {
       >
         <Tab.Screen name="Stages"    component={ProductionStagesScreen} options={{ tabBarLabel: 'Stages' }} />
         <Tab.Screen name="History"   component={TaskHistoryPendingLogs} options={{ tabBarLabel: 'History' }} />
+        {isManager && (
+          <Tab.Screen name="Team" component={EmployeePerformanceReport} options={{ tabBarLabel: 'Team' }} />
+        )}
       </Tab.Navigator>
 
-      {/* Logout confirmation — custom modal stays portrait, native Alert does not */}
-      <Modal
-        visible={showLogoutModal}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        supportedOrientations={['portrait']}
-      >
-        <View style={m.overlay}>
-          <View style={m.card}>
-            <View style={m.iconRow}>
-              <LogOut size={22} color="#EF4444" />
-            </View>
-            <Text style={m.title}>Log Out</Text>
-            <Text style={m.body}>Are you sure you want to log out?</Text>
-            <View style={m.actions}>
-              <TouchableOpacity
-                style={m.cancelBtn}
-                onPress={() => setShowLogoutModal(false)}
-                activeOpacity={0.75}
-              >
-                <Text style={m.cancelText}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={m.confirmBtn}
-                onPress={confirmLogout}
-                activeOpacity={0.85}
-              >
-                <Text style={m.confirmText}>LOG OUT</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
-
-const m = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 24,
-    alignItems: 'center',
-  },
-  iconRow: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(239,68,68,0.08)',
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-  },
-  title:  { fontSize: 16, fontWeight: '800', color: '#111827', letterSpacing: 1, marginBottom: 8, textTransform: 'uppercase' },
-  body:   { fontSize: 13, color: '#6B7280', textAlign: 'center', lineHeight: 19, marginBottom: 24 },
-  actions: { flexDirection: 'row', gap: 10, width: '100%' },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cancelText:  { fontSize: 12, fontWeight: '800', color: '#6B7280', letterSpacing: 2 },
-  confirmBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    alignItems: 'center',
-    backgroundColor: '#EF4444',
-  },
-  confirmText: { fontSize: 12, fontWeight: '800', color: '#FFFFFF', letterSpacing: 2 },
-});

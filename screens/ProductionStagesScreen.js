@@ -23,6 +23,7 @@ import {
   getStageLogsForBatch,
   fetchProductsCatalog,
 } from '../src/services/supabaseService';
+import { getWorkerSession, workerLabel } from '../src/services/workerSession';
 
 // ── Design tokens ──────────────────────────────────────────────
 const B = {
@@ -168,6 +169,7 @@ export default function ProductionStagesScreen({ navigation }) {
   const [stageLogs,       setStageLogs]       = useState([]);
   const [isLoading,       setIsLoading]       = useState(true);
   const [isRefreshing,    setIsRefreshing]     = useState(false);
+  const [worker, setWorker] = useState(null);
   const [stageScanCounts, setStageScanCounts] = useState({});
   const [stageScanLogs,   setStageScanLogs]   = useState({});
   const [scanLogModal,    setScanLogModal]     = useState(null); // stageId of open modal
@@ -217,10 +219,10 @@ export default function ProductionStagesScreen({ navigation }) {
   const scanLogModalFade  = useFadeIn(scanLogModal !== null);
 
   const loadBatches = useCallback(async () => {
-    const data = await getProductionBatches();
+    const data = await getProductionBatches(workerLabel(worker));
     setBatches(data);
     setIsLoading(false);
-  }, []);
+  }, [worker]);
 
   const loadLogsForBatch = useCallback(async (batch) => {
     const logs = await getStageLogsForBatch(batch.id);
@@ -251,9 +253,13 @@ export default function ProductionStagesScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    if (!isFocused) return;
+    getWorkerSession().then(s => setWorker(s));
+  }, []);
+
+  useEffect(() => {
+    if (!isFocused || !worker?.name) return;
     loadBatches();
-  }, [isFocused, loadBatches]);
+  }, [isFocused, worker, loadBatches]);
 
   useEffect(() => {
     if (selectedBatch) {
@@ -295,7 +301,8 @@ export default function ProductionStagesScreen({ navigation }) {
   const handleQuickCreateBatch = async () => {
     if (isCreating) return;
     setIsCreating(true);
-    const created = await createProductionBatch(formatBatchDate(new Date()), 'Unspecified');
+    const session = await getWorkerSession();
+    const created = await createProductionBatch(formatBatchDate(new Date()), 'Unspecified', null, 0, session?.id, workerLabel(session));
     setIsCreating(false);
     if (!created) {
       Alert.alert('Error', 'Could not create batch. Check your connection.');
@@ -375,12 +382,11 @@ export default function ProductionStagesScreen({ navigation }) {
       return;
     }
     const note = logNote.trim();
+    const session = await getWorkerSession();
+    const label = workerLabel(session);
     setIsLoggingStage(true);
     for (const row of filledRows) {
-      await addStageLog(selectedBatch.id, logStage.id, logStage.name, `${row.quantity} × ${row.speciesDisplay}`);
-    }
-    if (note) {
-      await addStageLog(selectedBatch.id, logStage.id, logStage.name, note);
+      await addStageLog(selectedBatch.id, logStage.id, logStage.name, `${row.quantity} × ${row.speciesDisplay}`, label, note || null);
     }
     setIsLoggingStage(false);
     Keyboard.dismiss();
@@ -531,6 +537,20 @@ export default function ProductionStagesScreen({ navigation }) {
   // ─── Render helpers ──────────────────────────────────────────
 
   const logsForStage = (stageId) => stageLogs.filter(l => l.stage_number === stageId);
+
+  // Maps a stage_log status to display label + color tokens.
+  // null/undefined status means a legacy row that was backfilled to approved.
+  const getEntryStatusMeta = (status) => {
+    switch (status) {
+      case 'pending_approval':
+        return { label: 'PENDING',  color: B.warning, bg: B.warningBg };
+      case 'rejected':
+        return { label: 'REJECTED', color: B.error,   bg: B.errorBg };
+      case 'approved':
+      default:
+        return { label: 'APPROVED', color: B.success,  bg: B.successBg };
+    }
+  };
 
   const stageHasActivity = (stage) =>
     logsForStage(stage.id).length > 0 || (stage.type === 'scan' && (stageScanCounts[stage.id] || 0) > 0);
@@ -830,12 +850,28 @@ export default function ProductionStagesScreen({ navigation }) {
                 {/* Existing logs for this stage */}
                 {logs.length > 0 && (
                   <View style={styles.logsContainer}>
-                    {logs.map(log => (
-                      <View key={log.id} style={styles.logEntry}>
-                        <Text style={styles.logText}>{log.log_text}</Text>
-                        <Text style={styles.logTime}>{new Date(log.logged_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
-                      </View>
-                    ))}
+                    {logs.map(log => {
+                      const statusMeta = getEntryStatusMeta(log.status);
+                      const isRejected = log.status === 'rejected';
+                      return (
+                        <View key={log.id} style={[styles.logEntry, isRejected && { borderLeftColor: B.error }]}>
+                          <View style={styles.entryStatusRow}>
+                            <Text style={styles.logText}>{log.log_text}</Text>
+                            <View style={[styles.entryStatusPill, { backgroundColor: statusMeta.bg, borderColor: statusMeta.color }]}>
+                              <Text style={[styles.entryStatusText, { color: statusMeta.color }]}>{statusMeta.label}</Text>
+                            </View>
+                          </View>
+                          {!!log.note && <Text style={styles.logNoteText}>"{log.note}"</Text>}
+                          {isRejected && !!log.reject_reason && (
+                            <Text style={styles.rejectReasonText}>Reason: {log.reject_reason} — Edit to resubmit.</Text>
+                          )}
+                          {isRejected && !log.reject_reason && (
+                            <Text style={styles.rejectReasonText}>Edit to resubmit.</Text>
+                          )}
+                          <Text style={styles.logTime}>{new Date(log.logged_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
 
@@ -1086,13 +1122,27 @@ export default function ProductionStagesScreen({ navigation }) {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.logText}>{entry.log_text}</Text>
+                      <View style={styles.entryStatusRow}>
+                        <Text style={[styles.logText, { flex: 1 }]}>{entry.log_text}</Text>
+                        {(() => {
+                          const sm = getEntryStatusMeta(entry.status);
+                          return (
+                            <View style={[styles.entryStatusPill, { backgroundColor: sm.bg, borderColor: sm.color }]}>
+                              <Text style={[styles.entryStatusText, { color: sm.color }]}>{sm.label}</Text>
+                            </View>
+                          );
+                        })()}
+                      </View>
+                      {!!entry.note && <Text style={styles.logNoteText}>"{entry.note}"</Text>}
+                      {entry.status === 'rejected' && !!entry.reject_reason && (
+                        <Text style={styles.rejectReasonText}>Reason: {entry.reject_reason}</Text>
+                      )}
                       <Text style={styles.logTime}>
                         {new Date(entry.logged_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </Text>
                       <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
                         <TouchableOpacity onPress={() => startEditEntry(entry)} activeOpacity={0.7}>
-                          <Text style={styles.editLink}>EDIT</Text>
+                          <Text style={styles.editLink}>{entry.status === 'rejected' ? 'EDIT & RESUBMIT' : 'EDIT'}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleDeleteEntry(entry)} activeOpacity={0.7}>
                           <Text style={styles.deleteLink}>DELETE</Text>
@@ -1333,6 +1383,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
   },
   logText:  { fontSize: 14, color: B.textPri, lineHeight: 18 },
+  logNoteText: { fontSize: 13, color: B.textMuted, fontStyle: 'italic', marginTop: 2 },
   logTime:  { fontSize: 12, color: B.textMuted, marginTop: 4 },
 
   stageActions: {
@@ -1677,4 +1728,31 @@ const styles = StyleSheet.create({
   suggestionCommon:     { fontSize: 15, fontWeight: '700', color: B.textPri },
   suggestionScientific: { fontSize: 13, color: B.textMuted, fontStyle: 'italic', marginTop: 1 },
   didYouMeanLink:       { color: B.accent, fontWeight: '700' },
+
+  // Manager-approval status badges — per log entry in stage card and edit modal
+  entryStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  entryStatusPill: {
+    borderRadius: 0,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexShrink: 0,
+  },
+  entryStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  rejectReasonText: {
+    fontSize: 12,
+    color: B.error,
+    fontStyle: 'italic',
+    marginTop: 3,
+  },
 });

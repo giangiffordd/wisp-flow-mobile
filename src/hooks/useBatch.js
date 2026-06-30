@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 import { submitScanBatch, fetchBatchStatuses } from '../services/supabaseService';
-import { getWorkerSession } from '../services/workerSession';
+import { getWorkerSession, workerLabel } from '../services/workerSession';
 
 // ===== AI GENERATED: useBatch =====
 // Purpose: Encapsulates all batch lifecycle state and AsyncStorage persistence
@@ -23,7 +23,7 @@ export const MAX_RESCANS = 2;
  */
 export async function submitBatchToStorage(batch) {
   const session    = await getWorkerSession();
-  const workerName = session?.name        || 'Worker';
+  const workerName = session ? workerLabel(session) : 'Worker';
   const prefix     = session?.employee_id || 'default';
 
   const finalized = {
@@ -260,7 +260,7 @@ export default function useBatch() {
    */
   async function submitBatch(submittedBatch) {
     const session = await getWorkerSession();
-    const workerName = session?.name || 'Worker';
+    const workerName = session ? workerLabel(session) : 'Worker';
     const prefix = session?.employee_id || 'default';
 
     const finalizedBatch = {

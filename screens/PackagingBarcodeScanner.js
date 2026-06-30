@@ -13,9 +13,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ArrowLeft, CheckCircle2, XCircle, Package } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { submitFinishedGoodsIntake } from '../src/services/supabaseService';
-import { getWorkerSession } from '../src/services/workerSession';
-import { parseUid, speciesForUid } from '../src/services/specimenUid';
+import { supabase } from '../src/services/supabaseService';
+import { getWorkerSession, workerLabel } from '../src/services/workerSession';
+import { speciesForPrefix } from '../src/services/specimenUid';
 
 const B = {
   bg:         '#F5F5F7',
@@ -34,7 +34,7 @@ const WIN   = SW * 0.78;
 const WIN_L = (SW - WIN) / 2;
 const WIN_T = SH * 0.18;
 
-// UIDs are only ever encoded as QR codes
+// Species QR codes are only ever encoded as QR codes
 const BARCODE_SETTINGS = {
   barcodeTypes: ['qr'],
 };
@@ -45,16 +45,17 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
   const insets  = useSafeAreaInsets();
 
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanState,   setScanState]   = useState('idle'); // idle|found|not_found|submitting|submitted
-  const [uidData,     setUidData]     = useState(null); // { uid, species }
-  const [resultMsg,   setResultMsg]   = useState('');
-  const [errorMsg,    setErrorMsg]    = useState('');
-  const [errorTitle,  setErrorTitle]  = useState('NOT RECOGNISED');
+  const [scanState,       setScanState]       = useState('idle'); // idle | found | submitting | submitted | not_found
+  const [matchedSpecies,  setMatchedSpecies]  = useState(null); // { prefix, genus, species, display }
+  const [quantity,        setQuantity]        = useState(1);
+  const [resultMsg,       setResultMsg]       = useState('');
+  const [errorMsg,        setErrorMsg]        = useState('');
+  const [errorTitle,      setErrorTitle]      = useState('NOT RECOGNISED');
 
   const scannedRef = useRef(false);
-  // The UID we just handled (found/cancelled/failed). While this QR is still
-  // in the camera frame we ignore it, so cancelling doesn't instantly re-scan
-  // the same sticker straight back into the CAPTURED state.
+  // The prefix we just handled (found/cancelled/failed). While this QR is
+  // still in the camera frame we ignore it, so cancelling doesn't instantly
+  // re-scan the same sticker straight back into the CAPTURED state.
   const dismissedUidRef   = useRef(null);
   const lastScannedUidRef = useRef(null);
 
@@ -89,38 +90,41 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     ]).start(() => cb?.());
   }, []);
 
-  const processUid = useCallback(async (parsed) => {
-    console.log('[UID] processing:', parsed.uid);
-
+  const processScan = useCallback(async (prefix, entry) => {
     const session = await getWorkerSession();
     if (!session) {
       setScanState('not_found');
       setErrorTitle('SIGN IN REQUIRED');
-      setErrorMsg('Please log in as a worker to record intake.');
+      setErrorMsg('Please log in as a worker to record stock.');
       showCard();
       return;
     }
-
-    const species = speciesForUid(parsed.uid) || parsed.prefix;
-    setUidData({ uid: parsed.uid, species });
+    setMatchedSpecies({ prefix, genus: entry.genus, species: entry.species, display: entry.display });
+    setQuantity(1);
     setScanState('found');
     showCard();
   }, [showCard]);
 
   const handleBarcodeScanned = useCallback(async ({ data }) => {
     if (scannedRef.current) return;
-    const parsed = parseUid(data);
-    // Not a recognised UID pattern — keep the camera scanning, don't lock it
-    if (!parsed) return;
+    const match = speciesForPrefix(data);
+    // Not a recognised species prefix — keep the camera scanning, don't lock it
+    if (!match) return;
     // Same QR we just dismissed and is still sitting in the frame — ignore it
     // so CANCEL doesn't bounce straight back to CAPTURED. A different sticker
     // clears the guard and scans normally.
-    if (parsed.uid === dismissedUidRef.current) return;
+    if (match.prefix === dismissedUidRef.current) return;
     scannedRef.current = true;
     dismissedUidRef.current = null;
-    lastScannedUidRef.current = parsed.uid;
-    await processUid(parsed);
-  }, [processUid]);
+    lastScannedUidRef.current = match.prefix;
+    await processScan(match.prefix, match);
+  }, [processScan]);
+
+  const adjustQuantity = (delta) => setQuantity(q => Math.max(1, q + delta));
+  const setQuantityDirect = (text) => {
+    const n = parseInt(text, 10);
+    setQuantity(Number.isNaN(n) ? 1 : Math.max(1, n));
+  };
 
   const handleReset = useCallback(() => {
     // Remember the QR we're leaving so the live camera doesn't immediately
@@ -128,7 +132,8 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     if (lastScannedUidRef.current) dismissedUidRef.current = lastScannedUidRef.current;
     hideCard(() => {
       successScale.setValue(0);
-      setUidData(null);
+      setMatchedSpecies(null);
+      setQuantity(1);
       setResultMsg('');
       setErrorMsg('');
       setScanState('idle');
@@ -141,7 +146,8 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
     dismissedUidRef.current = null;
     lastScannedUidRef.current = null;
     hideCard(() => {
-      setUidData(null);
+      setMatchedSpecies(null);
+      setQuantity(1);
       setResultMsg('');
       setErrorMsg('');
       setScanState('idle');
@@ -150,21 +156,36 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
   }, [hideCard]);
 
   const handleSubmit = async () => {
-    if (!uidData) return;
+    if (!matchedSpecies) return;
     setScanState('submitting');
 
     const session = await getWorkerSession();
     if (!session) {
       setScanState('not_found');
       setErrorTitle('SIGN IN REQUIRED');
-      setErrorMsg('Please log in as a worker to record intake.');
+      setErrorMsg('Please log in as a worker to record stock.');
       showCard();
       return;
     }
 
-    const result = await submitFinishedGoodsIntake(uidData.uid, session.id, session.name);
+    try {
+      const { error } = await supabase.from('stock_requests').insert({
+        species_name: matchedSpecies.display,
+        short_link: matchedSpecies.prefix,
+        quantity: quantity,
+        worker_id: session.id,
+        worker_name: workerLabel(session),
+        status: 'pending',
+      });
 
-    if (result?.code === 'submitted') {
+      if (error) {
+        setScanState('not_found');
+        setErrorTitle('CONNECTION ISSUE');
+        setErrorMsg("Couldn't reach the server. Please try again.");
+        showCard();
+        return;
+      }
+
       if (batchId) {
         const countKey = `stage_scan_count_${batchId}_${stageId}`;
         const logKey   = `stage_scan_log_${batchId}_${stageId}`;
@@ -173,46 +194,21 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
         const logRaw  = await AsyncStorage.getItem(logKey).catch(() => null);
         const existing = logRaw ? JSON.parse(logRaw) : [];
         await AsyncStorage.setItem(logKey, JSON.stringify([
-          { timestamp: new Date().toISOString(), species: uidData.species, type: 'uid', uid: uidData.uid },
+          { timestamp: new Date().toISOString(), species: matchedSpecies.display, type: 'stock', quantity },
           ...existing,
         ].slice(0, 50))).catch(() => {});
       }
 
-      setResultMsg('+1 intake submitted — pending manager approval');
+      setResultMsg(`${quantity} unit(s) submitted — pending manager approval`);
       successScale.setValue(0);
       setScanState('submitted');
       Animated.spring(successScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }).start();
-      return;
-    }
-
-    if (result?.code === 'received') {
+    } catch (e) {
       setScanState('not_found');
-      setErrorTitle('ALREADY COUNTED');
-      setErrorMsg('This specimen has already been added to inventory.');
+      setErrorTitle('CONNECTION ISSUE');
+      setErrorMsg("Couldn't reach the server. Please try again.");
       showCard();
-      return;
     }
-
-    if (result?.code === 'duplicate') {
-      setScanState('not_found');
-      setErrorTitle('ALREADY SUBMITTED');
-      setErrorMsg("It's already pending a manager's approval.");
-      showCard();
-      return;
-    }
-
-    if (result?.code === 'unknown') {
-      setScanState('not_found');
-      setErrorTitle('NOT IN REGISTRY');
-      setErrorMsg("This UID hasn't been registered yet — check it was generated.");
-      showCard();
-      return;
-    }
-
-    setScanState('not_found');
-    setErrorTitle('CONNECTION ISSUE');
-    setErrorMsg("Couldn't reach the server. Please try again.");
-    showCard();
   };
 
   if (!permission) return (
@@ -221,7 +217,7 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
 
   if (!permission.granted) return (
     <View style={[s.container, s.center]}>
-      <Text style={s.permText}>Camera access is required to scan finished goods UIDs.</Text>
+      <Text style={s.permText}>Camera access is required to scan species QR codes.</Text>
       <TouchableOpacity style={s.permBtn} onPress={requestPermission} activeOpacity={0.8}>
         <Text style={s.permBtnText}>GRANT PERMISSION</Text>
       </TouchableOpacity>
@@ -285,14 +281,14 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <ArrowLeft size={20} color={B.textPri} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>SCAN UID</Text>
+        <Text style={s.headerTitle}>SCAN STOCK</Text>
         <View style={{ width: 36 }} />
       </View>
 
       {/* Hint below scan window */}
       {isIdle && (
         <View style={{ position: 'absolute', top: WIN_T + WIN + 16, left: 0, right: 0, alignItems: 'center' }}>
-          <Text style={s.hint}>Hold the finished goods UID QR code steady inside the frame</Text>
+          <Text style={s.hint}>Hold the species QR code steady inside the frame</Text>
         </View>
       )}
 
@@ -307,26 +303,46 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
               <Text style={s.cardSub}>{errorMsg}</Text>
             </>
           )}
-          {(isFound || isSubmitting) && uidData && (
+          {(isFound || isSubmitting) && matchedSpecies && (
             <>
               <View style={s.cardRow}>
                 <Package size={15} color={B.accent} style={{ marginRight: 8 }} />
-                <Text style={s.cardTitle}>[ UID IDENTIFIED ]</Text>
+                <Text style={s.cardTitle}>[ SPECIES IDENTIFIED ]</Text>
               </View>
-              <Text style={s.cardSpecies}>{uidData.species}</Text>
-              <Text style={s.cardUid}>{uidData.uid}</Text>
+              <Text style={s.cardSpecies}>{matchedSpecies.display}</Text>
+
+              {/* Quantity stepper — cashier-style: identify once, then enter how many */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 14, gap: 14 }}>
+                <TouchableOpacity
+                  onPress={() => adjustQuantity(-1)}
+                  disabled={scanState === 'submitting'}
+                  style={{ width: 44, height: 44, borderWidth: 1, borderColor: B.border, alignItems: 'center', justifyContent: 'center' }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: B.accent }}>−</Text>
+                </TouchableOpacity>
+                <Text style={{ fontSize: 28, fontWeight: '800', color: B.textPri, minWidth: 56, textAlign: 'center' }}>{quantity}</Text>
+                <TouchableOpacity
+                  onPress={() => adjustQuantity(1)}
+                  disabled={scanState === 'submitting'}
+                  style={{ width: 44, height: 44, borderWidth: 1, borderColor: B.border, alignItems: 'center', justifyContent: 'center' }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: B.accent }}>+</Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={s.cardSub}>A manager will review before the stock count is updated.</Text>
             </>
           )}
         </Animated.View>
 
         {/* Success box */}
-        {isSubmitted && uidData && (
+        {isSubmitted && matchedSpecies && (
           <Animated.View style={[s.successBox, { transform: [{ scale: successScale }] }]}>
             <CheckCircle2 size={36} color={B.success} style={{ marginBottom: 10 }} />
-            <Text style={s.successTitle}>INTAKE SUBMITTED</Text>
-            <Text style={s.successSpecies}>{uidData.species}</Text>
-            <Text style={s.successUid}>{uidData.uid}</Text>
+            <Text style={s.successTitle}>STOCK SUBMITTED</Text>
+            <Text style={s.successSpecies}>{matchedSpecies.display}</Text>
             <Text style={s.successSub}>{resultMsg}</Text>
           </Animated.View>
         )}
@@ -341,7 +357,7 @@ export default function PackagingBarcodeScanner({ navigation, route }) {
         {/* Found: submit */}
         {isFound && (
           <TouchableOpacity style={s.actionBtn} onPress={handleSubmit} activeOpacity={0.85}>
-            <Text style={s.actionBtnText}>SUBMIT INTAKE</Text>
+            <Text style={s.actionBtnText}>SUBMIT STOCK</Text>
           </TouchableOpacity>
         )}
 

@@ -8,11 +8,13 @@ import {
   Animated,
   ActivityIndicator,
   RefreshControl,
+  Image,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused, useFocusEffect } from '@react-navigation/native';
-import { getWorkerSession } from '../src/services/workerSession';
-import { fetchWorkerScanBatches, getStageLogsForBatch } from '../src/services/supabaseService';
+import { getWorkerSession, workerLabel } from '../src/services/workerSession';
+import { fetchWorkerScanBatches, getStageLogsForBatch, getWorkerStageLogs } from '../src/services/supabaseService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
@@ -24,7 +26,9 @@ import {
   ChevronUp,
   ChevronRight,
   Calendar,
-  Layers
+  Layers,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 
 // Group a batch's ISO date into a per-day folder, bucketed by LOCAL calendar
@@ -99,14 +103,36 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
   // shared between the focus-triggered load and manual retry/pull-to-refresh calls.
   const activeRef = useRef(true);
 
+  // Flagged-image viewer modal (mirrors StaffAlertsNotifications) -- lets a
+  // worker re-open a rejected/pending batch's QC images even after the
+  // original rejection notification has been dismissed.
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [modalImages, setModalImages] = useState([]);
+  const [modalSpecies, setModalSpecies] = useState(null);
+
+  const openHistoryImage = (log) => {
+    setModalImages(log.qc_images || []);
+    setModalSpecies(log.species || null);
+    setImageModalVisible(true);
+  };
+
+  const closeImageModal = () => {
+    setImageModalVisible(false);
+    setModalImages([]);
+    setModalSpecies(null);
+  };
+
   const loadScanHistory = useCallback(async () => {
     activeRef.current = true;
     setLoadState('loading');
     try {
       const session    = await getWorkerSession();
       const prefix     = session?.employee_id || 'default';
-      const workerName = session?.name || null;
-      const statusMap  = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
+      const workerName = session?.name ? workerLabel(session) : null;
+      // BUG FIX: scrapped scans previously fell through to 'pending'.
+      const statusMap  = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected', scrapped: 'rejected' };
+      // Status map for stage_logs (null/undefined = legacy approved).
+      const stageStatusMap = { pending_approval: 'pending', approved: 'approved', rejected: 'rejected' };
 
       const mapLiveBatches = (liveBatches) => liveBatches.map(b => {
         // The table's timestamp column name isn't guaranteed, so accept
@@ -114,6 +140,7 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
         const createdAt = b.created_at || b.inserted_at || b.submitted_at || b.created || b.scanned_at || null;
         return {
           id:        b.id,
+          kind:      'scan',
           batchId:   b.id.slice(-6).toUpperCase(),
           stage:     b.stage_name || 'Quality Control',
           species:   b.species_display || b.species || 'Unknown',
@@ -122,6 +149,7 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
           flaggedCount: b.flagged_count || 0,
           specimens: Array.isArray(b.specimens) ? b.specimens : [],
           productionBatchId: b.production_batch_id || null,
+          qc_images: Array.isArray(b.qc_images) ? b.qc_images : [],
           createdAt,
           timestamp: createdAt
             ? new Date(createdAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' })
@@ -130,6 +158,58 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
           operator:  b.worker_name || 'Worker',
         };
       });
+
+      // Group a worker's manual stage logs into ONE history card per production
+      // batch (mirrors the dashboard's per-batch grouping). Each batch card
+      // lists its stage entries, each with its own pending/approved/rejected
+      // state; the card's overall badge rolls those up (rejected > pending >
+      // approved -- surfaces whatever the worker needs to act on first).
+      const mapStageLogs = (stageLogs) => {
+        const byBatch = new Map();
+        for (const l of stageLogs) {
+          const rawBatch = l.batch_id || `solo_${l.id}`;
+          if (!byBatch.has(rawBatch)) {
+            byBatch.set(rawBatch, {
+              id:        'slb_' + rawBatch,
+              kind:      'stage',
+              batchId:   (l.batch_id || '').slice(-6).toUpperCase() || '——',
+              entries:   [],
+              scanned: 0, passCount: 0, flaggedCount: 0, specimens: [], qc_images: [],
+              productionBatchId: null, // entries already loaded; skip the lazy fetch
+              createdAt: l.logged_at || null,
+              operator:  l.worker_name || 'Worker',
+            });
+          }
+          const g = byBatch.get(rawBatch);
+          g.entries.push({
+            id:           l.id,
+            stageNumber:  l.stage_number,
+            stageName:    l.stage_name || ('Stage ' + l.stage_number),
+            logText:      l.log_text,
+            note:         l.note || null,
+            status:       stageStatusMap[l.status] || 'approved',
+            rejectReason: l.reject_reason || null,
+          });
+          if (l.logged_at && (!g.createdAt || new Date(l.logged_at) > new Date(g.createdAt))) {
+            g.createdAt = l.logged_at;
+          }
+        }
+        return Array.from(byBatch.values()).map(g => {
+          g.entries.sort((a, b) => (a.stageNumber || 0) - (b.stageNumber || 0));
+          const statuses = g.entries.map(e => e.status);
+          const rollup = statuses.includes('rejected') ? 'rejected'
+                       : statuses.includes('pending')  ? 'pending'
+                       : 'approved';
+          const stageNames = [...new Set(g.entries.map(e => e.stageName))];
+          return {
+            ...g,
+            status:       rollup,
+            stageSummary: stageNames.join(', '),
+            stageCount:   stageNames.length,
+            timestamp:    g.createdAt ? new Date(g.createdAt).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' }) : '--',
+          };
+        });
+      };
 
       const loadFromCache = async () => {
         const raw = await AsyncStorage.getItem(`${prefix}_recent_batches`);
@@ -148,6 +228,7 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
             flaggedCount,
             specimens: Array.isArray(b.specimens) ? b.specimens : [],
             productionBatchId: b.productionBatchId || b.production_batch_id || null,
+            qc_images: [],
             createdAt: b.submittedAt || null,
             timestamp: b.submittedAt ? new Date(b.submittedAt).toLocaleString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '--',
             status:    statusMap[b.status] || 'pending',
@@ -164,16 +245,24 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
         // before trusting an empty result.
         for (let attempt = 0; attempt < 3; attempt++) {
           if (!activeRef.current) return;
-          const liveBatches = await fetchWorkerScanBatches(workerName);
-          if (liveBatches.length > 0) {
+          // Fetch BOTH live sources together: QC scan batches AND manual stage
+          // logs. A worker who only logged manual steps (no QC scans) still has
+          // history -- so we must not gate the stage-log fetch on scans existing.
+          const [liveBatches, rawStageLogs] = await Promise.all([
+            fetchWorkerScanBatches(workerName),
+            getWorkerStageLogs(workerName),
+          ]);
+          if (liveBatches.length > 0 || rawStageLogs.length > 0) {
             const mapped = mapLiveBatches(liveBatches);
-            mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-            if (activeRef.current) { setLogs(mapped); setLoadState('ready'); }
+            const mappedStage = mapStageLogs(rawStageLogs);
+            const combined = [...mapped, ...mappedStage];
+            combined.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            if (activeRef.current) { setLogs(combined); setLoadState('ready'); }
             return;
           }
 
-          // Live fetch came back empty -- check whether the local cache also
-          // looks empty. If so this is likely the cold-start race; retry.
+          // Both live sources came back empty -- check whether the local cache
+          // also looks empty. If so this is likely the cold-start race; retry.
           const cached = await loadFromCache();
           if (!activeRef.current) return;
           if (cached.length > 0) {
@@ -372,7 +461,77 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
 
                     {open && group.logs.map((log) => {
                       const isExpanded = expandedLogId === log.id;
-                      const stageLogs  = log.productionBatchId ? stageLogsByBatch[log.productionBatchId] : null;
+
+                      // ── Stage log card (one per production batch) ──
+                      if (log.kind === 'stage') {
+                        return (
+                          <View key={log.id} style={styles.logCard}>
+                            {/* Top row: batch ID + rolled-up status badge */}
+                            <View style={styles.cardTopRow}>
+                              <View>
+                                <Text style={styles.batchLabel}>[ BATCH ID ]</Text>
+                                <Text style={styles.batchIdText}>#{log.batchId}</Text>
+                              </View>
+                              {getStatusBadge(log.status)}
+                            </View>
+
+                            <View style={styles.divider} />
+
+                            {/* Production-steps summary + expand toggle */}
+                            <TouchableOpacity
+                              style={styles.cardDetailsButton}
+                              onPress={() => toggleExpand(log)}
+                              activeOpacity={0.9}
+                            >
+                              <Text style={styles.stageCardKindLabel}>PRODUCTION STEPS</Text>
+                              <Text style={styles.speciesName} numberOfLines={2}>
+                                {log.stageCount} {log.stageCount === 1 ? 'step' : 'steps'} · {log.stageSummary}
+                              </Text>
+
+                              <View style={styles.expandRow}>
+                                <Clock size={11} color={B.textMuted} style={{ marginRight: 4 }} />
+                                <Text style={styles.timestampText}>{log.timestamp}</Text>
+                                <View style={styles.flexSpacer} />
+                                <Text style={styles.expandText}>{isExpanded ? 'HIDE' : 'DETAILS'}</Text>
+                                {isExpanded
+                                  ? <ChevronUp size={13} color={B.accent} />
+                                  : <ChevronDown size={13} color={B.accent} />}
+                              </View>
+                            </TouchableOpacity>
+
+                            {/* Expanded: each stage entry with its own status + reason */}
+                            {isExpanded && (
+                              <View style={styles.notesContainer}>
+                                {log.entries.map((entry) => (
+                                  <View key={entry.id} style={styles.stageEntryRow}>
+                                    <View style={styles.stageEntryTop}>
+                                      <Text style={styles.stageEntryStage} numberOfLines={1}>{entry.stageName}</Text>
+                                      {getStatusBadge(entry.status)}
+                                    </View>
+                                    <Text style={styles.stageEntryText}>{entry.logText}</Text>
+                                    {!!entry.note && (
+                                      <Text style={styles.stageCardNote} numberOfLines={2}>"{entry.note}"</Text>
+                                    )}
+                                    {entry.status === 'rejected' && !!entry.rejectReason && (
+                                      <Text style={styles.stageCardRejectReason}>
+                                        Reason: {entry.rejectReason} — edit it on the Stages screen to resubmit.
+                                      </Text>
+                                    )}
+                                  </View>
+                                ))}
+                                <View style={styles.auditFooter}>
+                                  <Text style={styles.auditFooterText}>
+                                    By {log.operator}{log.timestamp !== '--' ? ` · ${log.timestamp}` : ''}
+                                  </Text>
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      }
+
+                      // ── Scan batch card (default) ──
+                      const batchStageLogs = log.productionBatchId ? stageLogsByBatch[log.productionBatchId] : null;
                       return (
                         <View key={log.id} style={styles.logCard}>
                           {/* Top row: batch ID + status badge */}
@@ -393,16 +552,6 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
                             activeOpacity={0.9}
                           >
                             <Text style={styles.speciesName} numberOfLines={1}>{log.species}</Text>
-                            <View style={styles.summaryRow}>
-                              <Text style={styles.summaryStrong}>{log.scanned}</Text>
-                              <Text style={styles.summaryMuted}> scanned</Text>
-                              <Text style={styles.summaryDot}>  ·  </Text>
-                              <Text style={[styles.summaryStrong, { color: B.success }]}>{log.passCount}</Text>
-                              <Text style={styles.summaryMuted}> passed</Text>
-                              <Text style={styles.summaryDot}>  ·  </Text>
-                              <Text style={[styles.summaryStrong, { color: log.flaggedCount > 0 ? B.error : B.textMuted }]}>{log.flaggedCount}</Text>
-                              <Text style={styles.summaryMuted}> flagged</Text>
-                            </View>
 
                             <View style={styles.expandRow}>
                               <Clock size={11} color={B.textMuted} style={{ marginRight: 4 }} />
@@ -424,30 +573,48 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
                               </View>
                               {log.specimens.length > 0 ? (
                                 log.specimens.map((s, i) => {
-                                  const passed  = String(s.status || '').toLowerCase() === 'pass';
-                                  const missing = Array.isArray(s.missing_parts) ? s.missing_parts : [];
+                                  // A manager rejection overrides the AI result: never show a
+                                  // green "PASS" on a specimen whose batch was rejected.
+                                  const rejected = log.status === 'rejected';
+                                  const aiPassed = String(s.status || '').toLowerCase() === 'pass';
+                                  const passed   = aiPassed && !rejected;
+                                  const missing  = Array.isArray(s.missing_parts) ? s.missing_parts : [];
+                                  const label    = rejected
+                                    ? 'REJECTED'
+                                    : (aiPassed ? 'PASS' : `FLAG${missing.length > 0 ? ` · missing ${missing.join(', ')}` : ''}`);
                                   return (
                                     <View key={i} style={styles.specimenRow}>
                                       <View style={[styles.specimenDot, { backgroundColor: passed ? B.success : B.error }]} />
                                       <Text style={styles.specimenName} numberOfLines={1}>{s.species || 'Unknown'}</Text>
                                       <View style={styles.flexSpacer} />
                                       <Text style={[styles.specimenStatus, { color: passed ? B.success : B.error }]} numberOfLines={1}>
-                                        {passed ? 'PASS' : `FLAG${missing.length > 0 ? ` · missing ${missing.join(', ')}` : ''}`}
+                                        {label}
                                       </Text>
                                     </View>
                                   );
                                 })
                               ) : (
-                                <Text style={styles.noteText}>{log.scanned} scanned · {log.passCount} passed · {log.flaggedCount} flagged.</Text>
+                                <Text style={styles.noteText}>No specimen-level details recorded.</Text>
                               )}
 
-                              {stageLogs && stageLogs.length > 0 && (
+                              {log.qc_images && log.qc_images.length > 0 && (
+                                <TouchableOpacity
+                                  style={styles.viewImageButton}
+                                  onPress={() => openHistoryImage(log)}
+                                  activeOpacity={0.7}
+                                >
+                                  <ImageIcon size={12} color={B.accent} />
+                                  <Text style={styles.viewImageButtonText}>VIEW FLAGGED IMAGE</Text>
+                                </TouchableOpacity>
+                              )}
+
+                              {batchStageLogs && batchStageLogs.length > 0 && (
                                 <>
                                   <View style={[styles.sectionHeaderRow, { marginTop: 12 }]}>
                                     <Text style={styles.notesSectionTitle}>[ STAGE LOG ]</Text>
                                     <View style={styles.sectionRule} />
                                   </View>
-                                  {stageLogs.map((e, i) => (
+                                  {batchStageLogs.map((e, i) => (
                                     <View key={e.id || i} style={styles.stageLogRow}>
                                       <Text style={styles.stageLogStage}>{e.stage_name || `Stage ${e.stage_number}`}</Text>
                                       <Text style={styles.stageLogText}>{e.log_text}</Text>
@@ -479,6 +646,51 @@ export default function TaskHistoryPendingLogs({ navigation, route }) {
           </ScrollView>
         </View>
       </View>
+
+      <Modal
+        visible={imageModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={closeImageModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { marginTop: insets.top + 24, marginBottom: insets.bottom + 24 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {modalSpecies ? modalSpecies.toUpperCase() : 'FLAGGED SPECIMEN'}
+              </Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={closeImageModal} activeOpacity={0.7}>
+                <X size={16} color={B.textPri} />
+              </TouchableOpacity>
+            </View>
+
+            {modalImages.length > 0 ? (
+              <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+                {modalImages.map((img, idx) => {
+                  if (!img?.image) return null;
+                  const uri = img.image.startsWith('data:')
+                    ? img.image
+                    : 'data:image/jpeg;base64,' + img.image;
+                  return (
+                    <View key={idx} style={styles.modalImageWrapper}>
+                      <Image source={{ uri }} style={styles.modalImage} resizeMode="contain" />
+                      {!!img.species && (
+                        <Text style={styles.modalImageCaption}>
+                          {img.species}{img.confidence ? ` · ${Math.round(img.confidence * 100)}%` : ''}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={styles.modalCenterState}>
+                <Text style={styles.modalCenterStateText}>No image available.</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </Animated.View>
   );
 }
@@ -886,5 +1098,137 @@ const styles = StyleSheet.create({
     color: B.white,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+
+  // ── Flagged image button + viewer modal ─────────────────────
+  viewImageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: B.accent,
+    backgroundColor: B.bgEl,
+  },
+  viewImageButtonText: {
+    color: B.accent,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxHeight: '85%',
+    backgroundColor: B.bgEl,
+    borderWidth: 1,
+    borderColor: B.border,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: B.border,
+  },
+  modalTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: B.textPri,
+    letterSpacing: 1.5,
+    flex: 1,
+    marginRight: 12,
+  },
+  modalCloseButton: {
+    padding: 6,
+    borderWidth: 1,
+    borderColor: B.border,
+    backgroundColor: B.bgEl,
+  },
+  modalScroll: { flexGrow: 0 },
+  modalScrollContent: { padding: 16, gap: 16 },
+  modalImageWrapper: { marginBottom: 16 },
+  modalImage: {
+    width: '100%',
+    height: 240,
+    backgroundColor: B.textPri,
+  },
+  modalImageCaption: {
+    marginTop: 8,
+    fontSize: 12,
+    color: B.textMuted,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  modalCenterState: {
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCenterStateText: {
+    color: B.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // ── Stage log history cards ──────────────────────────────────
+  stageCardKindLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: B.accentDim,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  stageCardNote: {
+    fontSize: 13,
+    color: B.textMuted,
+    fontStyle: 'italic',
+    marginBottom: 6,
+  },
+  stageCardRejectReason: {
+    fontSize: 13,
+    color: B.error,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+
+  // ── Per-batch stage entry rows (history expanded view) ──────
+  stageEntryRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: B.border,
+  },
+  stageEntryTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    gap: 8,
+  },
+  stageEntryStage: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '700',
+    color: B.accentDim,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  stageEntryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: B.textPri,
+    marginBottom: 2,
   },
 });

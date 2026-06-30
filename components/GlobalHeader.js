@@ -1,10 +1,10 @@
 ﻿import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { LogOut, Bell } from 'lucide-react-native';
+import { Bell, UserCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../theme';
 
-export default function GlobalHeader({ title, onLogout, onBell, onBrandPress, hasUnread }) {
+export default function GlobalHeader({ title, onBell, onProfile, onBrandPress, hasUnread }) {
   const insets = useSafeAreaInsets();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -21,28 +21,30 @@ export default function GlobalHeader({ title, onLogout, onBell, onBrandPress, ha
 
   return (
     <View style={[styles.headerContainer, { paddingTop: insets.top + 10 }]}>
-      {/* Left: wisp-flow brand logo (retained) */}
-      <TouchableOpacity onPress={handlePress} style={styles.leftSection} activeOpacity={0.7}>
-        <Animated.View style={[styles.brandWrapper, { transform: [{ scale: scaleAnim }] }]}>
-          <View style={styles.brandTextGroup}>
-            <Text style={styles.brandText}>wisp</Text>
-            <Text style={styles.brandDash}>-</Text>
-            <Text style={styles.brandSubtext}>flow</Text>
-          </View>
-        </Animated.View>
-      </TouchableOpacity>
+      {/* Left: profile button + brand */}
+      <View style={styles.leftSection}>
+        {onProfile && (
+          <TouchableOpacity onPress={onProfile} style={styles.iconButton} activeOpacity={0.7}>
+            <UserCircle size={17} color={COLORS.textOnDark} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity onPress={handlePress} activeOpacity={0.7}>
+          <Animated.View style={[styles.brandWrapper, { transform: [{ scale: scaleAnim }] }]}>
+            <View style={styles.brandTextGroup}>
+              <Text style={styles.brandText}>wisp</Text>
+              <Text style={styles.brandDash}>-</Text>
+              <Text style={styles.brandSubtext}>flow</Text>
+            </View>
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
 
-      {/* Right: Bell + Logout — same pattern as ICPI "Logout" top-right */}
+      {/* Right: notification bell only */}
       <View style={styles.rightSection}>
         {onBell && (
           <TouchableOpacity onPress={onBell} style={styles.iconButton} activeOpacity={0.7}>
             <Bell size={17} color={COLORS.textOnDark} />
             {hasUnread && <View style={styles.unreadDot} />}
-          </TouchableOpacity>
-        )}
-        {onLogout && (
-          <TouchableOpacity onPress={onLogout} style={[styles.iconButton, { marginLeft: 8 }]} activeOpacity={0.7}>
-            <LogOut size={17} color={COLORS.textLight} />
           </TouchableOpacity>
         )}
       </View>
@@ -69,6 +71,7 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
   brandWrapper: {
     flexDirection: 'row',
@@ -99,6 +102,7 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   iconButton: {
     position: 'relative',

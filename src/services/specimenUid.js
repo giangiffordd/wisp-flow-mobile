@@ -31,9 +31,9 @@ export const PREFIX_SPECIES = {
   HBU: { genus: 'Heliocopris', species: 'bucephalus',     display: 'Heliocopris bucephalus' },
   HDI: { genus: 'Heteropteryx', species: 'dilatata',      display: 'Heteropteryx dilatata' },
   HMA: { genus: 'Hexarthrius', species: 'mandibularis',   display: 'Hexarthrius mandibularis' },
-  OSI: { genus: 'Odonyolabis', species: 'siva',           display: 'Odonyolabis siva' },
+  OSI: { genus: 'Odontolabis', species: 'siva',           display: 'Odontolabis siva' },
   PGR: { genus: 'Phryna',   species: 'grosseitaitai',     display: 'Phryna grosseitaitai' },
-  LAD: { genus: 'Lamprima', species: 'adolphine',         display: 'Lamprima adolphine' },
+  LAD: { genus: 'Lamprima', species: 'adolphinae',        display: 'Lamprima adolphinae' },
   PSA: { genus: 'Prosopocoilus', species: 'savagei',      display: 'Prosopocoilus savagei' },
 };
 
@@ -69,4 +69,26 @@ export function speciesForUid(uid) {
   if (!parsed) return null;
   const entry = PREFIX_SPECIES[parsed.prefix];
   return entry ? entry.display : null;
+}
+
+/**
+ * @function speciesForPrefix
+ * @description Look up a species by its bare 3-letter prefix -- the new
+ *   universal per-species QR format (no year/sequence, same code forever
+ *   for every physical unit of that species). Tolerant of surrounding
+ *   whitespace/case; matches any 3+ letter token containing a known prefix.
+ * @param {string} scanned - raw text decoded from the QR
+ * @returns {{ prefix: string, genus: string, species: string, display: string }|null}
+ */
+export function speciesForPrefix(scanned) {
+  if (!scanned || typeof scanned !== 'string') return null;
+  const cleaned = scanned.trim().toUpperCase();
+  // Accept either a bare prefix ("PUL") or any text containing one as a
+  // standalone 3-letter alphabetic token (tolerant of a URL wrapper, same
+  // spirit as the old parseUid, but no numbers/hyphens required now).
+  const match = /\b([A-Z]{3})\b/.exec(cleaned);
+  const prefix = match ? match[1] : cleaned;
+  const entry = PREFIX_SPECIES[prefix];
+  if (!entry) return null;
+  return { prefix, genus: entry.genus, species: entry.species, display: entry.display };
 }
